@@ -12,9 +12,9 @@ from typing import Dict, Tuple, Optional, List, Any
 
 import orjson
 import typer
-from fiber.infra.mcp.connector import MCPServerConnector
-from fiber.infra.mcp.guard.preflight import PreflightGuard
-from fiber.infra.mcp.mapper.config import McpConfigMapper, MappedMcpEntry
+from fiber.plane.mcp.connector import MCPServerConnector
+from fiber.plane.mcp.guard.preflight import PreflightGuard
+from fiber.plane.mcp.mapper.config import McpConfigMapper, MappedMcpEntry
 
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.node.space.tunnel.factory import TunnelFactory
@@ -26,7 +26,7 @@ ACTIVE_TARGETS_TUNNEL_KEY = "mcp:registry:active_targets"
 
 ANCHOR_ROOT = resolve_path("anchor")
 ANCHOR_MCP_PATH = ANCHOR_ROOT / "mcp.json"
-DEFAULT_WORKER_PACKAGE = "fiber.infra.mcp.worker"
+DEFAULT_WORKER_PACKAGE = "fiber.plane.mcp.worker"
 
 @dataclass(frozen=True)
 class ResolvedTarget:

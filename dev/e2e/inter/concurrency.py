@@ -21,12 +21,12 @@ from fiber.dev.base.workflow.profile.metrics import PipelineLoadProfiler, LoadSL
 
 from fiber.llm.entry import acompletion
 from fiber.gateway.llm.state.traverser import StateTraverser
-from fiber.infra.vcr.manager import (
+from fiber.plane.vcr.manager import (
     VCRPlaybackConfig,
     VCRIdentityRule,
     add_vcr_arguments
 )
-from fiber.infra.vcr.injector import VCRInjector
+from fiber.plane.vcr.injector import VCRInjector
 from fiber.dev.base.workflow.builder import create_e2e_parser, build_e2e_context
 
 from xphi.arch.contract.event.next import next_trace_id

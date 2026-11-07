@@ -16,8 +16,8 @@ from typing import Dict, Any, Optional, List
 
 from fiber.llm.pipeline.tracer import DebugTracer
 from fiber.llm.pipeline.interceptor.router import OnnxSemanticRouter
-from fiber.infra.vcr.manager import VCRPlaybackConfig
-from fiber.infra.vcr.injector import VCRInjector
+from fiber.plane.vcr.manager import VCRPlaybackConfig
+from fiber.plane.vcr.injector import VCRInjector
 from fiber.gateway.llm.state.traverser import StateTraverser
 from fiber.llm.entry import acompletion
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from nicegui import ui
 
-from fiber.infra.ops.account.state import state, refs
+from fiber.plane.infra.account.state import state, refs
 from fiber.dev.console.bridge.pipeline import pipeline
 from fiber.llm.compat.secret.registry import (
     BASE_SECRET_KEYS,

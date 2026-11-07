@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from nicegui import ui
 
-from fiber.infra.ops.account.state import state, refs
+from fiber.plane.infra.account.state import state, refs
 from fiber.gateway.bridge.console import run_fiber_cli
 import fiber.dev.console.ui.kit as kit
 from fiber.dev.console.ui.kit import StudioTab

@@ -11,7 +11,7 @@ import time
 from typing import Tuple
 from nicegui import ui
 
-from fiber.infra.ops.account.state import state, refs
+from fiber.plane.infra.account.state import state, refs
 from fiber.llm.compat.secret.redact import redact_string, FastRegexRedactionEngine
 
 

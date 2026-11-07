@@ -2,7 +2,7 @@
 ## @lineage: fiber.llm.provider.adapter.openrouter
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
-from fiber.infra.ops.finops.cost.schema import ModelCostSchema
+from fiber.plane.infra.finops.cost.schema import ModelCostSchema
 from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("provider.adapter.openrouter")

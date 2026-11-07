@@ -23,14 +23,14 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from fiber.dev.base.workflow.builder import build_e2e_context, create_e2e_parser
 from fiber.dev.base.workflow.pipeline import log
 from fiber.gateway.llm.state.traverser import StateTraverser
-from fiber.infra.ops.account.registry import DEFAULT_TENANT_ID
-from fiber.infra.vcr.injector import VCRInjector
-from fiber.infra.vcr.manager import (
+from fiber.plane.infra.account.registry import DEFAULT_TENANT_ID
+from fiber.plane.vcr.injector import VCRInjector
+from fiber.plane.vcr.manager import (
     VCRIdentityRule,
     VCRPlaybackConfig,
     add_vcr_arguments,
 )
-from fiber.infra.ops.finops.watcher import default_finops_watcher, default_tenant_eco
+from fiber.plane.infra.finops.watcher import default_finops_watcher, default_tenant_eco
 from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver
