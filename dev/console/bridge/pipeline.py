@@ -48,10 +48,6 @@ def evaluate_guardrail_payload(
 
 
 def _load_vcr_fixture_stats(model_id: str) -> Tuple[str, int, int]:
-    """
-    현재 선택된 compat_model에 대응하는 fiber-compats 픽스처를 찾아
-    (표시 라벨, 청크 개수, 토큰 수)를 반환합니다.
-    """
     try:
         from fiber.dev.console.tab.vcr import _discover_compat_models_and_dirs
 
@@ -69,7 +65,6 @@ def _load_vcr_fixture_stats(model_id: str) -> Tuple[str, int, int]:
     except Exception:
         pass
     return f"{model_id} (built-in seed)", 14, 56
-
 
 class PipelineActionBridge:
     async def run_pipeline_xray(self, prompt: str) -> None:
@@ -197,7 +192,7 @@ class PipelineActionBridge:
     run_xray = run_pipeline_xray
 
     async def run_guardrail_e2e_suite(self) -> None:
-        refs.push_cli("$ python -m fiber.dev.e2e.llm.guardrail")
+        refs.push_cli("$ fiber e2e llm.guardrail")
         try:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -220,7 +215,7 @@ class PipelineActionBridge:
 
     async def run_gateway_vcr_suite(self) -> None:
         p = state.pipeline
-        refs.push_cli("$ python -m fiber.dev.gateway.tester")
+        refs.push_cli("$ fiber ops gateway.tester")
         t0 = time.perf_counter()
         live_ms: float | None = None
         replay_ms: float | None = None
@@ -229,7 +224,7 @@ class PipelineActionBridge:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "fiber.dev.ex.tester.gateway",
+                "fiber.plane.ops.tester.gateway",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env={**os.environ, "FIBER_CONSOLE_ACTIVE": "1"},

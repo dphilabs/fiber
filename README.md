@@ -2,7 +2,7 @@
 **Agent Runtime Harness**
 
 Fiber is a local runtime harness that sits between AI agents and everything they call—tools and models alike. A single loopback daemon (`127.0.0.1:8356`) fronts your MCP servers as a **Local MCP Gateway** with idempotent execution and pre-flight human approval (**1**), unified under a zero-boilerplate CLI for config sync and quota governance (**3.1**). 
-As the counterpart on the model path, the same control plane governs LLM calls—via an OpenAI-compatible endpoint or in-process Python harness—enforcing two-track DLP guardrails and mid-stream kill-switches (**2.1**), capturing live streams into content-addressed fixtures for deterministic VCR replay (**2.2**), and normalizing heterogeneous schemas declaratively (**2.3**) without changing your agent configs or business logic.
+As the counterpart on the model path, the same engine normalizes heterogeneous provider schemas declaratively (2.3)—via an OpenAI-compatible endpoint or in-process Python harness—to govern live traffic with two-track DLP guardrails and mid-stream kill-switches (2.1) while accelerating offline testing (pytest) via zero-cost, 3ms deterministic VCR replay (2.2), all without changing your agent configs or business logic.
 
 | Section | Target Focus & Key Capabilities | Quick Jump |
 | :--- | :--- | :--- |
@@ -45,8 +45,8 @@ Because `fiber connect` never overwrites your client files, explicitly point you
 // apiBase: "http://127.0.0.1:8356/v1"  |  model: "cerebras/qwen-3.8-27b"
 ```
 
-**3. Or Embed the In-Process Python Harness (Guardrails & VCR)**
-When building custom Python agents or offline `pytest` suites, run the exact same DLP guardrails, stream kill-switches, and deterministic VCR directly inside your process without a daemon:
+**3. Or Embed the In-Process Python Harness (In-Flight Guardrails & Zero-Cost `pytest` VCR)**
+When building custom Python agents or CI/CD pytest suites, run the exact same DLP guardrails, stream kill-switches, and 3ms deterministic VCR replay directly in-process without a daemon:
 
 ```python
 import asyncio
@@ -151,7 +151,7 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
-> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./dev/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./dev/abc/spec/gateway/hitl.slack.md)**
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./dev/abc/spec/infra/mcp.connector.md)** · **[Slack HITL Spec](./dev/abc/spec/gateway/hitl.slack.md)**
 
 ---
 
@@ -159,7 +159,7 @@ $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /
 
 ### 2.1. LLM Guardrails
 
-While the Local MCP Gateway (**1**) governs tool execution, Fiber's duplex LLM pipeline acts as its counterpart on the model path—enforcing two-track in-flight guardrails across both the local daemon (`/v1/chat/completions`) and the OpenAI/LiteLLM-compatible Python entrypoint (`acompletion`). It scrubs soft PII and sensitive headers in-place (`PRE_TRANSLATE`), strictly blocks leaked credentials (`POST_TRANSLATE`), and severs rogue or over-budget streams mid-flight via `StreamBreaker` without altering your agent logic. Because the core pipeline is decoupled from provider parsing, new or proprietary models plug in seamlessly via the Schema Traverser (**[2.3](#23-schema-traverser--compat-registry)**).
+While the Local MCP Gateway (**1**) governs tool execution, Fiber's duplex LLM pipeline acts as its counterpart on the model path—intercepting and mutating streams in-flight across both the local daemon (`/v1/chat/completions`) and the drop-in Python SDK (`acompletion`). It scrubs soft PII and sensitive headers in-place (`PRE_TRANSLATE`), strictly blocks leaked credentials (`POST_TRANSLATE`), and severs rogue or over-budget streams mid-flight via `StreamBreaker` without altering your agent logic. Because the core pipeline is decoupled from provider parsing, new or proprietary models plug in seamlessly via the Schema Traverser (**[2.3](#23-schema-traverser--compat-registry)**).
 
 > **Unlike passive callbacks, this event-driven pipeline empowers interceptors to actively mutate payloads in-place, short-circuit physical I/O, and abort unauthorized streams in sub-millisecond time.**
 
@@ -279,15 +279,15 @@ To add custom credential patterns, override existing rules, or disable specific 
 
 > **Note:** Out of the box, Fiber ships with **33 built-in credential regex rules** (`BASE_SECRET_RULES`) and **14 sensitive key/URL tokens** that already cover standard cloud providers (`AKIA...`, `AIza...`), auth headers (`Bearer`, `JWT`, `PEM`), and major LLM/SaaS vendor keys (`sk-...`, `ghp_...`, `xoxb-...`) with zero configuration.
 > For most deployments, mounting `ActiveBlockingGuardrail()` and `PayloadSanitizationGuardrail()` as-is provides complete baseline protection without maintaining a custom registry file.
-> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./dev/abc/dev/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
+> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./dev/abc/spec/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
 
-> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./dev/abc/dev/llm/entry.md)** · **[Interceptor Spec](./dev/abc/dev/llm/interceptor.md)** · **[Token Counter Spec](./dev/abc/dev/llm/token.counter.md)**
+> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./dev/abc/spec/llm/entry.md)** · **[Interceptor Spec](./dev/abc/spec/llm/interceptor.md)** · **[Token Counter Spec](./dev/abc/spec/llm/token.counter.md)**
 
 ---
 
 ### 2.2. Deterministic Replay (LLM VCR & Fixtures)
 
-Fiber's Application-Layer VCR serializes LLM and tool network traffic (requests, stream chunks, and exceptions) into local JSON fixtures. This enables zero-cost deterministic replay, state recovery, and historical latency emulation without altering business logic.
+The exact same pipeline that guards live streams also powers offline test acceleration: Fiber's Application-Layer VCR freezes live LLM and tool traffic (requests, stream chunks, and mid-stream exceptions) into local JSON fixtures—enabling zero-cost, ~3ms deterministic `pytest` replay, chaos jitter injection, and latency emulation without altering business logic.
 
 > **Why Fiber VCR?**
 > Standard HTTP mockers (like `vcrpy`) capture raw network bytes, breaking stream timing and bloating memory. Fiber VCR operates at the LLM schema layer—coalescing SSE micro-chunks across configurable time windows (`record_tick_ms=100.0`) while preserving stream semantics.

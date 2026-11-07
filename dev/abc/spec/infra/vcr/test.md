@@ -118,5 +118,5 @@ $ pytest -v -s fiber/llm/pipeline/interceptor/tests/router.py
 $ VCR_SPEED=real VCR_CHAOS=500.0 pytest -v -s fiber/llm/pipeline/interceptor/tests/router.py
 
 # 4. HTTP Gateway Roundtrip Verification (Unary, SSE Stream, Record -> Replay)
-$ python -m fiber.dev.tester.gateway
+$ fiber ops tester.gateway
 ```

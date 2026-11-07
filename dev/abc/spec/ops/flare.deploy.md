@@ -1,4 +1,4 @@
-# fiber.dev.abc.spec.dev.ops.flare.deploy
+# fiber.dev.abc.spec.ops.flare.deploy
 @desc: Cloudflare Edge V8 Isolate Architecture & Provisioning Specification
 
 ---
@@ -72,9 +72,9 @@ Because the upstream Gateway declares a strict Service Binding dependency (`PYTH
 1. **Workers Subdomain**: An active account-specific subdomain (`*.<subdomain>.workers.dev`) registered in the Cloudflare Dashboard.
 2. **Authentication**: Active Wrangler session (`npx wrangler login`) or `CLOUDFLARE_API_TOKEN` with Worker edit permissions.
 
-### 4.2. Provisioning & Live Smoke Verification (`fiber.plane.ops.flare.deploy`)
+### 4.2. Provisioning & Live Smoke Verification
 
-Remote deployment and live edge readiness are orchestrated through the dedicated deployment verifier (`fiber.plane.ops.flare.deploy`), which executes the following sequence:
+Remote deployment and live edge readiness are orchestrated through the dedicated deployment verifier (`fiber ops flare.deploy`), which executes the following sequence:
 
 1. **Session & Fast-Path Check**: Verifies Wrangler authentication (`wrangler whoami` or `CLOUDFLARE_API_TOKEN`). If `XPHI_WASM_PLANE` already specifies a remote HTTPS endpoint (`flare:https://...`), automated deployment is bypassed and the verifier binds directly to the target URL.
 2. **Downstream Registration**: Deploys `xphi-python-node` first so the target service exists in the Cloudflare account registry.
@@ -111,10 +111,10 @@ Fiber intentionally leaves Edge-native state persistence unimplemented in core m
 
 ```bash
 # Live Cloudflare Edge Provisioning & 3-Stage Smoke Verification (Deploys Dual Workers)
-$ python -m fiber.plane.ops.flare.deploy
+$ fiber ops flare.deploy
 
 # Zero-Deploy Smoke Verification against an existing Self-Hosted (BYOC) Endpoint
-$ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev python -m fiber.dev.tester.flare.deploy
+$ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev python -m fiber ops flare.deploy
 
 # Full Local Dual-Isolate E2E Suite (23 Scenarios: Bridge + 6-Domain Security & PTA Rollup)
 $ fiber e2e infra.plane.flare --mode dev

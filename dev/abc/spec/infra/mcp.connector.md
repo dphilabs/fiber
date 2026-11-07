@@ -113,5 +113,5 @@ Agents capable of collecting credentials directly can resume a parked transactio
 
 ```bash
 # Validates HTTP Multiplexing, SSE framing, 401/502 translation, In-Band TOTP Resume & Sentinel Reaper rollback:
-$ python -m fiber.dev.e2e.gateway.worker.protocol
+$ fiber e2e gateway.worker.protocol
 ```
