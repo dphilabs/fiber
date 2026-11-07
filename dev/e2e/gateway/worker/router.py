@@ -15,18 +15,18 @@ import httpx
 
 from fiber.dev.base.workflow.config import Phase, E2EConfig, TestResult, get_free_port
 from fiber.dev.base.workflow.pipeline import MockPipeline, log
-from fiber.infra.mcp.connector import MCPServerConnector
-from fiber.infra.mcp.mapper.config import McpConfigMapper
+from fiber.plane.mcp.connector import MCPServerConnector
+from fiber.plane.mcp.mapper.config import McpConfigMapper
 from fiber.gateway.bridge.action.connect import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     ResolvedTarget,
     _specs_from_mapped_entries,
     run_connect_copy,
 )
-import fiber.infra.mcp.worker.price.token as worker_price_token
-import fiber.infra.mcp.worker.eco.finlib as worker_finlib
-import fiber.infra.mcp.worker.eco.margin as worker_margin
-import fiber.infra.mcp.worker.search.archive as worker_search
+import fiber.plane.mcp.worker.price.token as worker_price_token
+import fiber.plane.mcp.worker.eco.finlib as worker_finlib
+import fiber.plane.mcp.worker.eco.margin as worker_margin
+import fiber.plane.mcp.worker.search.archive as worker_search
 
 from xphi.node.ops.daemon.eco.pricing import DynamicPricingDaemon
 from xphi.node.space.bind.resolver import resolve_path

@@ -12,14 +12,14 @@ from typing import Optional, Sequence
 import webbrowser
 from nicegui import app, ui
 
-from fiber.infra.ops.account.state import (
+from fiber.plane.infra.account.state import (
     STATE_FILE_PATH,
     load_or_init_state,
     refs,
     save_state_to_disk,
     state,
 )
-from fiber.infra.ops.finops.console import finops_manager
+from fiber.plane.infra.finops.console import finops_manager
 from fiber.dev.console.bridge.sign import oob
 from fiber.dev.console.bridge.mcp import mcp
 
@@ -116,7 +116,7 @@ def _ensure_local_daemon(env_file: Optional[str] = None) -> None:
         log_dir = Path(str(resolve_path("log")))
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "daemon.log"
-        cmd = [sys.executable, "-m", "fiber.phase.cli", "daemon", "-s", "all"]
+        cmd = [sys.executable, "-m", "fiber.dev.cli", "daemon", "-s", "all"]
         if env_file:
             cmd.extend(["-f", env_file])
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional
 from nicegui import ui
 
-from fiber.infra.ops.account.state import refs
+from fiber.plane.infra.account.state import refs
 from fiber.dev.console.ui.kit import ModalTemplate
 
 LLM_GATEWAY_YAML = """models:
@@ -55,7 +55,7 @@ export FIBER_SLACK_APP_TOKEN="xapp-your-socket-token"
 export FIBER_SLACK_CHANNEL_ID="C0123456789"
 
 # Optional: Run standalone E2E Slack channel tester (auto-discovers channels)
-$ python -m fiber.dev.tester.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." """
+$ python -m fiber.plane.ops.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." """
 
 GUARDRAIL_RULES_JSON = """{
   "patterns": {
@@ -103,7 +103,7 @@ class GuideModal(ModalTemplate):
     persistent = False
 
     def compose(self, dialog: ui.dialog) -> None:
-        from fiber.dev.tester.channel.slack import (
+        from fiber.plane.ops.channel.slack import (
             build_slack_manifest_url,
             get_local_spiffe_id,
         )

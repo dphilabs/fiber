@@ -7,13 +7,13 @@ from typing import Dict, List
 from nicegui import ui
 import orjson
 
-from fiber.infra.ops.account.state import state, refs
+from fiber.plane.infra.account.state import state, refs
 from fiber.dev.console.bridge.sign import oob
 from fiber.dev.console.env import get_slack_status
 from fiber.dev.console.ui.guide import open_guide_modal
 from fiber.dev.console.ui.sim import HitlSimulatorModal, open_hitl_simulator_modal
-from fiber.infra.mcp.guard.preflight import PreflightGuard
-from fiber.infra.mcp.guard.preset import RAW_BUILTIN_PRESETS, PreflightPresetRegistry
+from fiber.plane.mcp.guard.preflight import PreflightGuard
+from fiber.plane.mcp.guard.preset import RAW_BUILTIN_PRESETS, PreflightPresetRegistry
 import fiber.dev.console.ui.kit as kit
 from fiber.dev.console.ui.kit import StudioTab, ModalTemplate
 from xphi.node.space.bind.resolver import resolve_path
@@ -110,9 +110,9 @@ class ModelCatalogModal(ModalTemplate):
 
     def compose(self, dialog: ui.dialog) -> None:
         setattr(refs, "model_catalog_dialog", dialog)
-        from fiber.infra.ops.finops.exchange import default_exchange
-        from fiber.infra.ops.finops.model.filter import CORE_KEYWORDS
-        from fiber.infra.ops.finops.cost.registry import (
+        from fiber.plane.infra.finops.exchange import default_exchange
+        from fiber.plane.infra.finops.model.filter import CORE_KEYWORDS
+        from fiber.plane.infra.finops.cost.registry import (
             ModelCostRegistry,
             REGISTRY_ROOT,
             DEFAULT_REGISTRY_FILENAME,
@@ -159,7 +159,7 @@ def open_model_catalog_modal() -> None:
 
 class HitlNSettingTab(StudioTab):
     title = "HITL & Setting"
-    left_header = "MCP Pre-Flight Guard"
+    left_header = "MCP Guard - Pre-Flight"
     right_header = "Slack HITL & Admin Identity"
     ratio = 52
 
@@ -302,12 +302,9 @@ class HitlNSettingTab(StudioTab):
         self._workers_box = ui.column().classes("w-full gap-1.5 flex-grow max-h-80 overflow-y-auto pr-1")
         self._render_worker_guard_list()
 
-        # with kit.footer():
-        #     kit.button("Slack Setup Guide", _open_hitl_guide, color="slate-4", outline=True, flex=True)
-
     def compose_right(self) -> None:
         s = state.security
-        from fiber.infra.ops.finops.cost.registry import ModelCostRegistry, REGISTRY_ROOT, DEFAULT_REGISTRY_FILENAME
+        from fiber.plane.infra.finops.cost.registry import ModelCostRegistry, REGISTRY_ROOT, DEFAULT_REGISTRY_FILENAME
 
         slk = get_slack_status()
         if slk["channel"]:
@@ -330,21 +327,19 @@ class HitlNSettingTab(StudioTab):
 
         ui.label("Admin Identity & TOTP Keychain").classes("text-xs font-bold text-cyan-400 mt-1")
         with ui.column().classes("w-full p-2.5 rounded border border-slate-800 bg-slate-950/80 gap-2"):
-            kit.text("Mapped Admin SPIFFE ID ('*' Wildcard)", s, "admin_user", width="w-full")
+            kit.text("Mapped SPIFFE ID", s, "admin_user", width="w-full")
             with kit.row():
                 kit.button("Key Init", oob.init_node_keys, color="slate-4", outline=True)
-                kit.button("Enroll TOTP(QR)", oob.enroll_admin_totp, color="cyan", flex=True)
+                kit.button("Enroll TOTP", oob.enroll_admin_totp, color="cyan", flex=True)
                 kit.button("Verify TOTP", oob.verify_admin_totp, color="emerald", outline=True, flex=True)
                 kit.button("Revoke", oob.revoke_admin_totp, color="red", outline=True)
 
-        # 3. FinOps Model Catalog
         total_mapped = len(getattr(ModelCostRegistry, "_model_cost", {}) or {})
         with kit.bar():
             with ui.row().classes("items-center gap-1.5"):
-                ui.label("FinOps Model Catalog").classes("text-xs font-mono text-slate-300")
+                ui.label("LLM Model Catalog").classes("text-xs font-mono text-slate-300")
                 ui.badge(f"{total_mapped:,} Models").props("color=slate-8 text-color=cyan-3").classes("text-[10px] font-mono")
             with ui.row().classes("items-center gap-1.5"):
-                kit.file_link(REGISTRY_ROOT / DEFAULT_REGISTRY_FILENAME, label="JSON", create_if_missing=True)
                 kit.button("Pricing Table", open_model_catalog_modal, color="cyan", outline=True)
 
         with kit.footer():

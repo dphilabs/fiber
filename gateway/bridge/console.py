@@ -9,7 +9,7 @@ from nicegui import ui
 
 from fiber.dev.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
 import fiber.dev.console.observer.plane as plane
-from fiber.infra.ops.account.state import state, refs
+from fiber.plane.infra.account.state import state, refs
 
 
 def _extract_json_payload(raw_out: str) -> dict | None:
@@ -32,7 +32,7 @@ async def run_fiber_cli(*args: str) -> None:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "fiber.phase.cli",
+            "fiber.dev.cli",
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
@@ -65,7 +65,7 @@ async def _sync_after_cli_success(raw_out: str, args: tuple[str, ...]) -> None:
 
     from fiber.dev.console.bridge.sign import oob
     from fiber.dev.console.bridge.mcp import mcp
-    from fiber.infra.ops.finops.console import finops_manager
+    from fiber.plane.infra.finops.console import finops_manager
 
     domain_cmd = args[0]
     if domain_cmd == "connect":

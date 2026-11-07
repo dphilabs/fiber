@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
-from fiber.infra.ops.account.state import state
+from fiber.plane.infra.account.state import state
 
 
 def get_slack_status() -> Dict[str, Any]:

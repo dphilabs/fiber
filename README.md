@@ -151,6 +151,8 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./dev/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./dev/abc/spec/gateway/hitl.slack.md)**
+
 ---
 
 ## 2. LLM Guardrails & Replay
@@ -277,9 +279,9 @@ To add custom credential patterns, override existing rules, or disable specific 
 
 > **Note:** Out of the box, Fiber ships with **33 built-in credential regex rules** (`BASE_SECRET_RULES`) and **14 sensitive key/URL tokens** that already cover standard cloud providers (`AKIA...`, `AIza...`), auth headers (`Bearer`, `JWT`, `PEM`), and major LLM/SaaS vendor keys (`sk-...`, `ghp_...`, `xoxb-...`) with zero configuration.
 > For most deployments, mounting `ActiveBlockingGuardrail()` and `PayloadSanitizationGuardrail()` as-is provides complete baseline protection without maintaining a custom registry file.
-> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./phase/abc/dev/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
+> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./dev/abc/dev/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
 
-> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./phase/abc/dev/llm/entry.md)** · **[Interceptor Spec](./phase/abc/dev/llm/interceptor.md)** · **[Token Counter Spec](./phase/abc/dev/llm/token.counter.md)**
+> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./dev/abc/dev/llm/entry.md)** · **[Interceptor Spec](./dev/abc/dev/llm/interceptor.md)** · **[Token Counter Spec](./dev/abc/dev/llm/token.counter.md)**
 
 ---
 
@@ -314,7 +316,7 @@ $ curl -X POST http://127.0.0.1:8356/v1/chat/completions -H "Content-Type: appli
   }'
 
 # Verify live HTTP Gateway roundtrip (Unary, SSE Stream, and Dynamic Record -> Replay)
-$ python -m fiber.dev.tester.gateway
+$ fiber ops tester.gateway
 ```
 
 **VCR Control Parameters**
@@ -327,7 +329,7 @@ The runtime resolves options per request (via JSON payload or `metadata`), envir
 | **`vcr_speed` / `VCR_SPEED`** | `"max"` \| `"real"` | Immediate execution (`~0ms`) or emulated historical latency pacing (`ttfb_ms`, `delta_ms`). |
 | **`vcr_chaos` / `vcr_tick`** | Float | Injects synthetic replay jitter (ms) or sets the SSE chunk coalescing window (default `100.0` ms). |
 
-> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./phase/abc/spec/vcr.test.md)** · **[Fixture Format Spec](./phase/abc/spec/vcr.fixture.format.md)**
+> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./dev/abc/spec/infra/vcr.test.md)** · **[Fixture Format Spec](./dev/abc/spec/infra/vcr.fixture.format.md)**
 
 ---
 
@@ -386,6 +388,7 @@ Fiber loads this registry exactly once at boot-time. It performs strict Pydantic
 | Command | Role | Function & Lifecycle | Example |
 | --- | --- | --- | --- |
 | **`init`** | **[Bootstrap]** | Initializes workspace topology (`~/.anchor/bound.json`) and local node keys. | `fiber init` |
+| **`ops`** | **[Plane & Ops]** | Runs operational provisioning, channel setup, and gateway verification suites (`flare.deploy`, `channel.slack`, `tester.gateway`, `brew.verify`). | `fiber ops flare.deploy`, `fiber ops channel.slack guide --open` |
 | **`console`** | **[Web Studio]** | Launches the Console Studio web UI (`MCP Gateway`, `Guardrail`, `Metering`, `VCR`, `Setting`) for HITL approvals and live telemetry. | `fiber console` |
 | **`sign`** | **[Identity & TOTP]** | Inspects local node key status and manages AES-GCM encrypted Admin TOTP secrets in SQLite. | `fiber sign enroll -u fiber` |
 | **`connect`** | **[Config Sync]** | Explicitly scans and registers IDE configs (`fiber connect claude`, `fiber connect all`) or third-party servers into `~/.anchor/mcp.json`. | `fiber connect all`, `fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:DELETE"` |
@@ -438,7 +441,7 @@ $ fiber account --tenant accounting_dept kill --ver 99
 ```
 
 **Console Studio**
-Console Studio is a unified web console for the local daemon featuring **MCP Gateway, Guardrail, Metering, VCR, and Setting** tabs—allowing you to approve parked HITL transactions, toggle gateway `PRE_TRANSLATE` masking and `POST_TRANSLATE` blocking slots On/Off (`state.json`) alongside custom secret rules (`redact_rules.json`), monitor real-time token velocity and fuel budgets, and inspect VCR fixtures. Launch with `fiber console` (or `python -m fiber.dev.console.app`).
+Console Studio is a unified web console for the local daemon featuring **MCP Gateway, Guardrail, Metering, VCR, and Setting** tabs—allowing you to approve parked HITL transactions, toggle gateway `PRE_TRANSLATE` masking and `POST_TRANSLATE` blocking slots On/Off (`state.json`) alongside custom secret rules (`redact_rules.json`), monitor real-time token velocity and fuel budgets, and inspect VCR fixtures. Launch with `fiber console`.
 
 ---
 
@@ -482,7 +485,7 @@ brew services start redis
 brew services start dphilabs/fiber/fiber
 
 ## Verify install, bootstrap, and gateway
-python -m fiber.dev.tester.brew.verify
+fiber ops brew.verify
 ```
 
 ## 4. Execution Planes & Pipeline Benchmarks
@@ -509,10 +512,10 @@ While the core runtime retains final state Merkle rollups, fuel metering, and po
 
 ```bash
 # Live Edge Provisioning & 3-Stage Smoke Verification (Deploys Dual Workers to Cloudflare)
-$ python -m fiber.phase.ops.flare.deploy
+$ fiber ops flare.deploy
 
 # Verify, Inspect, or Teardown Remote Edge Workers (Reverse Dependency Order)
-$ python -m fiber.phase.ops.flare.deploy teardown  # or `verify --url https://...`, `status`
+$ fiber ops flare.deploy teardown  # or `verify --url https://...`, `status`
 
 # Full Local Dual-Isolate E2E Suite (23 Scenarios: Bridge Routing, Isolation & State Rollup)
 $ fiber e2e infra.plane.flare --mode dev
@@ -550,8 +553,7 @@ fiber e2e inter.concurrency --vcr replay --concurrency 200
 
 Fiber enforces execution determinism and runtime safety through automated CI gates (on every PR and release tag) alongside targeted end-to-end validation suites across each subsystem:
 
-- **[mcp.guard.log](./phase/abc/log/gateway/worker/guard.20261104.log):** Validates zero-code HITL governance for MCP servers, confirming that safe tool calls pass through instantly while high-risk payloads pause for Slack approval (via 6-digit TOTP or 1-Click buttons)—spawning third-party stdio sandboxes only after human verification.
-- **[fsm.contract.log](./phase/abc/log/fsm/contract.20261102.log):** Validates the declarative agent state machine and polyglot execution bridge, confirming 10-scheme URI routing (`llm://`, `mcp://`, `fn://`, `py://`, `https://`, `exec://`), <=2KB content-addressed state projection slicing, asymmetric M:N fuel conservation, and zero-spend 202 HITL parking with $O(1)$ mid-flow resumption across heterogeneous DAGs.
-- **[llm.guardrail.log](./phase/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection (DIP), and chained `[Mask -> Block]` defense with fallback shielding.
-- **[llm.vcr.log](./phase/abc/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
-- **[infra.plane.flare.log](./phase/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming `PHASE`/Pyodide Service Binding parity, zero-leakage host isolation, bit-exact compute determinism, and `X-XPHI-Canonical-Hash` sealing into local state Merkle roots.
+- **[hitl.slack.log](./dev/abc/log/gateway/hitl/slack.20261107.log):** Validates zero-code pre-flight HITL governance over live Slack Socket Mode, confirming instant safe-call passthrough, pre-I/O `HTTP 202` parking with 6-digit TOTP attestation on multiplexed network streams (`Context7`), and strict Zero-Spawn 1-Click button resumption on ephemeral `npx` stdio sandboxes.
+- **[llm.guardrail.log](./dev/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection (DIP), and chained `[Mask -> Block]` defense with fallback shielding.
+- **[llm.vcr.log](./dev/abc/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
+- **[infra.plane.flare.log](./dev/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming `PHASE`/Pyodide Service Binding parity, zero-leakage host isolation, bit-exact compute determinism, and `X-XPHI-Canonical-Hash` sealing into local state Merkle roots.

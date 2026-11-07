@@ -10,13 +10,13 @@ from typing import Any, List, Optional
 import fiber.llm.entry as llm_entry
 from fiber.gateway.llm.state.traverser import StateMapper
 from fiber.gateway.llm.stream.parser.chunk import StreamChunkParser
-from fiber.infra.vcr.fixture.schema import (
+from fiber.plane.vcr.fixture.schema import (
     DEFAULT_SYNTH_TOOLS,
     SynthContext,
     VCRTargetInfo,
 )
-from fiber.infra.vcr.injector import VCRInjector
-from fiber.infra.vcr.manager import VCRPlaybackConfig
+from fiber.plane.vcr.injector import VCRInjector
+from fiber.plane.vcr.manager import VCRPlaybackConfig
 from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("action.compat")

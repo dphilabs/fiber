@@ -20,8 +20,8 @@ from fiber.gateway.contract.origin import OriginRegistry
 from fiber.gateway.contract.server import SecureMCPServer, SentinelFirewallMiddleware
 from fiber.gateway.contract.server import AttestationMiddleware, LocalMiddleware, WasTelemetry
 
-from fiber.infra.vcr.manager import VCRPlaybackConfig
-from fiber.infra.vcr.injector import VCRInjector
+from fiber.plane.vcr.manager import VCRPlaybackConfig
+from fiber.plane.vcr.injector import VCRInjector
 
 from xphi.arch.xor.parser.ruleset.otlp import OtlpRulesetParser, default_otlp_ruleset
 from xphi.node.space.bind.resolver import resolve_path

@@ -16,8 +16,8 @@ from fiber.llm.pipeline.interceptor.guardrail import (
 from fiber.gateway.llm.stream.wrapper import StreamWrapper
 from fiber.gateway.security import NodeAuthenticator, NodeAuthPayload
 from fiber.gateway.contract.router import ContractRouter
-from fiber.infra.vcr.manager import VCRIdentityRule
-from fiber.infra.ops.account.state import state, STATE_FILE_PATH, load_or_init_state
+from fiber.plane.vcr.manager import VCRIdentityRule
+from fiber.plane.infra.account.state import state, STATE_FILE_PATH, load_or_init_state
 
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.arch.model.auth import BrokerKey, BrokerAction

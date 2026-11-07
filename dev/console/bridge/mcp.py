@@ -15,7 +15,7 @@ from fiber.gateway.bridge.action.schema import (
     McpTopologyScanResult,
     McpWorkerInfo,
 )
-from fiber.infra.ops.account.state import state
+from fiber.plane.infra.account.state import state
 import fiber.dev.console.ui.diag as diag
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -73,7 +73,7 @@ def _inspect_and_sanitize_config_candidates(
 async def scan_mcp_topology_and_health(gateway_url: str, *, force_parse: bool = False) -> McpTopologyScanResult:
     global _last_config_stat_sig, _cached_mapped_entries
     import httpx
-    from fiber.infra.mcp.mapper.config import McpConfigMapper
+    from fiber.plane.mcp.mapper.config import McpConfigMapper
     from fiber.gateway.bridge.action.connect import discover_builtin_workers, resolve_connector_spec
     from xphi.node.space.tunnel.factory import TunnelFactory
 

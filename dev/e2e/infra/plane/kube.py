@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, List, Dict
 
 from fiber.dev.base.client import GatewayClient, StrictPayloadFactory, Endpoints
-from fiber.infra.ops.plane.kube.context import KubeOrchestrator, KubeContext
+from fiber.plane.infra.kube.context import KubeOrchestrator, KubeContext
 
 from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT
 from fiber.dev.base.workflow.chaos import ChaosPayloadLibrary

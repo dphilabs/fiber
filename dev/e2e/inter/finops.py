@@ -25,17 +25,17 @@ from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver
 from fiber.gateway.security import TokenTranslator
 from fiber.gateway.contract.token.gen import FinOpsTokenGenerator
-from fiber.infra.mcp.connector import MCPServerConnector
+from fiber.plane.mcp.connector import MCPServerConnector
 
-from fiber.infra.vcr.manager import (
+from fiber.plane.vcr.manager import (
     VCRPlaybackConfig,
     VCRIdentityRule,
     add_vcr_arguments,
 )
-from fiber.infra.vcr.injector import VCRInjector
+from fiber.plane.vcr.injector import VCRInjector
 from fiber.dev.base.workflow.builder import create_e2e_parser, build_e2e_context
-import fiber.infra.mcp.worker.finops as worker_finops
-from fiber.infra.ops.finops.watcher import default_finops_watcher, default_tenant_eco
+import fiber.plane.mcp.worker.finops as worker_finops
+from fiber.plane.infra.finops.watcher import default_finops_watcher, default_tenant_eco
 
 from xphi.arch.model.auth import NodeAuthPayload
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator

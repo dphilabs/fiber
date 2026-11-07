@@ -10,8 +10,8 @@ from fiber.llm.entry import acompletion
 from fiber.gateway.llm.state.traverser import StateTraverser
 
 from fiber.llm.pipeline.tracer import DebugTracer
-from fiber.infra.vcr.manager import VCRPlaybackConfig, VCRIdentityRule
-from fiber.infra.vcr.injector import VCRInjector
+from fiber.plane.vcr.manager import VCRPlaybackConfig, VCRIdentityRule
+from fiber.plane.vcr.injector import VCRInjector
 from fiber.dev.base.workflow.builder import (
     E2EBaseWorkflow, 
     E2EBaseApplication, 

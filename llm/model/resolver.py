@@ -5,7 +5,7 @@ import re
 from urllib.parse import urlparse
 from typing import Tuple, Optional, Union, Dict, List
 
-from fiber.infra.ops.finops.cost.registry import ModelCostRegistry
+from fiber.plane.infra.finops.cost.registry import ModelCostRegistry
 from xphi.arch.contract.config.constants import REPLICATE_MODEL_NAME_WITH_ID_LENGTH
 from fiber.llm.model.types.param.legacy import LegacyParams
 from fiber.llm.model.secret import get_secret_str, get_secret
