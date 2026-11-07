@@ -55,7 +55,7 @@ export FIBER_SLACK_APP_TOKEN="xapp-your-socket-token"
 export FIBER_SLACK_CHANNEL_ID="C0123456789"
 
 # Optional: Run standalone E2E Slack channel tester (auto-discovers channels)
-$ python -m fiber.plane.ops.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." """
+$ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." """
 
 GUARDRAIL_RULES_JSON = """{
   "patterns": {

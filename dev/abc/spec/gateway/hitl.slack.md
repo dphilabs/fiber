@@ -61,7 +61,7 @@ Instead of configuring Socket Mode, Interactivity, and OAuth scopes manually, us
 
 ```bash
 # Print 3-step setup guide & open pre-populated Slack App Manifest URL in browser (or `json` for raw manifest)
-$ python -m fiber.plane.ops.channel.slack guide --open
+$ fiber ops channel.slack guide --open
 ```
 
 1. **Create App:** Select your workspace in the opened browser tab and click **Create**.
@@ -88,10 +88,10 @@ Verifies Slack Socket Mode connectivity, auto-corrects swapped `xoxb`/`xapp` tok
 
 ```bash
 # Interactive 1-Click Button round-trip test (auto-discovers & joins channel if --channel is omitted)
-$ python -m fiber.plane.ops.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..."
+$ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..."
 
 # Interactive 6-Digit TOTP verification round-trip test
-$ python -m fiber.plane.ops.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." --totp
+$ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." --totp
 
 ```
 
@@ -101,5 +101,5 @@ Validates the complete MCP Gateway pipeline across both **Live Slack Socket Mode
 
 ```bash
 # Phase 1 (Dual Guard Arming) -> Phase 2 (Safe 200 OK) -> Phase 3 (Network TOTP) -> Phase 4 (Stdio Zero-Spawn 1-Click)
-$ python -m fiber.dev.e2e.gateway.hitl.slack
+$ fiber e2e gateway.hitl.slack
 ```

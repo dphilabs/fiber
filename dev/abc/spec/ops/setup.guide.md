@@ -1,4 +1,5 @@
-# fiber.dev.abc.spec.dev.setup.guide
+# fiber.dev.abc.spec.ops.setup.guide
+@lineage: fiber.dev.abc.spec.setup.guide
 @desc: fiber install & dev guide
 
 ## 1. Directory Structure & Execution Modes
@@ -51,7 +52,7 @@ pyenv local self
 
 ## 3. Register Zsh Alias (Prevents binary shadowing against USER/Homebrew installations)
 ## Recommended in ~/.zprofile to strictly separate DEV entrypoint from global 'fiber' CLI
-alias fiber-dev="python -m fiber.plane.ops.cli"
+alias fiber-dev="python -m fiber.dev.cli"
 
 ## 4. Trigger self-replication & topology binding (around.py injects xphi.pth & anchor/bound.json)
 fiber-dev --help

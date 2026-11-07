@@ -46,8 +46,8 @@ timeout 30 bash -c 'while ! curl -s http://127.0.0.1:8356/v1/exchange/keys > /de
 echo "Kernel is fully up and running!"
 
 echo "[CI-SYNC] Executing E2E Gateway Client..."
-python -m fiber.dev.e2e.gateway.compliance
-python -m fiber.dev.e2e.gateway.security
+fiber e2e gateway.compliance
+fiber e2e gateway.security
 
 echo "[CI-SYNC] Executing FinOps, WASM & Flare E2E Suites..."
 fiber e2e gateway.inter.finops --vcr replay

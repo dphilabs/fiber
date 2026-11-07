@@ -9,14 +9,14 @@ Quick Flow:
 
 Usage Examples:
   # Print Slack App Manifest setup guide & open creation link in browser
-  $ python -m fiber.plane.ops.channel.slack guide --open
+  $ fiber ops channel.slack guide --open
 
   # Print raw Slack App Manifest JSON
-  $ python -m fiber.plane.ops.channel.slack json
+  $ fiber ops channel.slack json
 
   # Run Slack HITL E2E test (1-Click or --totp)
-  $ python -m fiber.plane.ops.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..."
-  $ python -m fiber.plane.ops.channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." --totp
+  $ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..."
+  $ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." --totp
 """
 from __future__ import annotations
 
@@ -279,7 +279,7 @@ async def run_slack_hitl_test(
 
 async def _async_main() -> None:
     parser = argparse.ArgumentParser(
-        prog="python -m fiber.plane.ops.channel.slack",
+        prog="fiber ops channel.slack",
         description="Isolated Slack App-Manifest & Auto-Discovery HITL Tester",
     )
     parser.add_argument(
