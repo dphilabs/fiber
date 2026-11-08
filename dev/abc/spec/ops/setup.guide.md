@@ -1,5 +1,4 @@
 # fiber.dev.abc.spec.ops.setup.guide
-@lineage: fiber.dev.abc.spec.setup.guide
 @desc: fiber install & dev guide
 
 ## 1. Directory Structure & Execution Modes
@@ -85,7 +84,7 @@ pyenv local fiber-user
 
   ## [Scenario 3: Direct Remote Release] Clean installation from GitHub release tag
   ## (Downloads both fiber and xphi from remote repository without local source dependencies)
-  uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.10
+  uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.11
 
   ## [Scenario 4: Mismatch & Ref Locking] Forced cross-version compatibility testing
   ## (Locks xphi to a specific remote tag or local commit against latest local fiber)

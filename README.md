@@ -17,7 +17,7 @@ As the counterpart on the model path, the same engine normalizes heterogeneous p
 ## 0. Quick Start
 
 ```bash
-uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.10
+uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.11
 ```
 
 **1. Boot the Local Control Plane**
@@ -459,7 +459,7 @@ Best suited for full-stack integration—including the in-process Python harness
 mkdir -p ~/fiber-user && cd ~/fiber-user
 pyenv local fiber-user
 
-uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.10
+uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.11
 # OR: uv pip install -e /path/to/local/self/fiber
 
 ## Bootstrap workspace & Provision node identity
