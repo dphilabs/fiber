@@ -1,5 +1,4 @@
 # fiber.plane.mcp.fsm
-## @lineage: fiber.gateway.bridge.fsm.mcp
 from enum import Enum, auto
 from typing import Dict, Any, Optional
 

@@ -44,7 +44,6 @@ class _MockStateRecord:
         self.metadata = metadata
         self.payload = payload
 
-
 class MockAnchorStore:
     def __init__(self):
         self.states: Dict[str, _MockStateRecord] = {}
@@ -112,10 +111,8 @@ class MockAnchorStore:
         self.states[handle_id] = _MockStateRecord(action=new_action, metadata=merged_meta, payload={})
         self.yield_timestamps.pop(handle_id, None)
 
-
 class BasePipeline(PipelineRunner):
     """
-    Unified E2E Pipeline Engine.
     Manages the full lifecycle (Custom Context -> RPC Bus -> REST Edge -> Connectors -> Phases -> Teardown)
     and provides built-in connector & Pub/Sub synchronization primitives.
     """

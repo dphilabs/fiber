@@ -42,7 +42,6 @@ BUILTIN_ALIASES: Dict[str, str] = {
     "reaper": "worker.reaper",
     "eco.margin": "worker.eco.margin",
     "eco.finlib": "worker.eco.finlib",
-    "price.token": "worker.price.token",
     "price.model": "worker.price.model",
     "search.archive": "worker.search.archive",
 }
