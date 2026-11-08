@@ -5,36 +5,20 @@ $ XPHI_WORKERS=1 python -m xphi.node.ops.boot
 """
 import asyncio
 import json
-import sys
 import time
 import uuid
 from typing import Any, Dict, List
 
 import httpx
 
+from fiber.dev.base.mcp.worker import E2EWorkerManager
 from fiber.dev.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
 from fiber.dev.base.workflow.pipeline import BasePipeline, log
-from fiber.gateway.bridge.action.connect import (
-    ACTIVE_TARGETS_TUNNEL_KEY,
-    ResolvedTarget,
-    _specs_from_mapped_entries,
-    run_connect_copy,
-)
-from fiber.plane.mcp.connector import MCPServerConnector
-from fiber.plane.mcp.mapper.config import McpConfigMapper
-import fiber.plane.mcp.worker.eco.finlib as worker_finlib
-import fiber.plane.mcp.worker.eco.margin as worker_margin
-import fiber.plane.mcp.worker.price.model as worker_price_model
-import fiber.plane.mcp.worker.search.archive as worker_search
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 from xphi.arch.bound.client.rpc import InternalRpcClient
 from xphi.node.ops.daemon.eco.pricing import DynamicPricingDaemon
-from xphi.node.space.bind.resolver import resolve_path
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.phase.reactor import PhaseReactor
-
-ANCHOR_ROOT = resolve_path("anchor")
-ANCHOR_MCP_JSON = ANCHOR_ROOT / "mcp.json"
 
 class MCPRouterPipeline(BasePipeline):
     def __init__(self, config: E2EConfig):
@@ -87,7 +71,7 @@ class MCPRouterPipeline(BasePipeline):
             return await client.post(url, json=payload, headers=headers)
 
     # Lifecycle Overrides
-    async def setup_custom_context(self):
+    async def setup_custom_context(self) -> None:
         class MockPricingCtx:
             pass
 
@@ -100,73 +84,28 @@ class MCPRouterPipeline(BasePipeline):
         self._pricing_task = asyncio.create_task(self.pricing_daemon.run())
         log.info("[E2E Pipeline] DynamicPricingDaemon successfully injected into test lifecycle.")
 
-    async def teardown_custom(self):
+    async def teardown_custom(self) -> None:
         if hasattr(self, "pricing_daemon"):
             self.pricing_daemon.running = False
         if hasattr(self, "_pricing_task"):
             self._pricing_task.cancel()
+            await asyncio.gather(self._pricing_task, return_exceptions=True)
 
-    def _load_specs_from_anchor_root(self) -> Dict[str, ResolvedTarget]:
-        if not ANCHOR_MCP_JSON.is_file():
-            log.info(f"[E2E Router] {ANCHOR_MCP_JSON} not found. Bootstrapping via connect copy...")
-            try:
-                run_connect_copy(exec_cmd="builtin")
-            except BaseException as e:
-                log.warning(f"[E2E Router] Auto-bootstrap warning: {e}")
-
-        if ANCHOR_MCP_JSON.is_file():
-            entries = McpConfigMapper.parse_file(ANCHOR_MCP_JSON, agent_hint="fiber")
-            specs = _specs_from_mapped_entries(entries)
-            return {s.target_id: s for s in specs}
-        return {}
-
-    async def setup_workers(self):
-        active_daemon_ids = set()
-        try:
-            tunnel = await TunnelFactory.get_default()
-            raw = await tunnel.get(ACTIVE_TARGETS_TUNNEL_KEY)
-            if raw:
-                active_daemon_ids = set(json.loads(raw))
-        except Exception:
-            pass
-
-        anchor_specs = self._load_specs_from_anchor_root()
-        fallback_defaults = {
-            self.oracle_id: (f"{sys.executable} -m {worker_price_model.__name__}", "multiplex"),
-            self.finlib_id: (f"{sys.executable} -m {worker_finlib.__name__}", "linear"),
-            self.margin_id: (f"{sys.executable} -m {worker_margin.__name__}", "multiplex"),
-            self.search_id: (f"{sys.executable} -m {worker_search.__name__}", "multiplex"),
-        }
-
-        for tid in (self.oracle_id, self.finlib_id, self.margin_id, self.search_id):
-            if tid in active_daemon_ids:
-                log.info(f"[E2E Router] Attached to live McpWorkerDaemon target: [{tid}] (Zero duplicate spawn)")
-                continue
-
-            if tid in anchor_specs:
-                spec = anchor_specs[tid]
-                log.info(f"[E2E Router] Spawning connector [{tid}] from {ANCHOR_MCP_JSON} (Mode: {spec.mode.upper()})")
-                self.connectors.append(
-                    MCPServerConnector(
-                        target_id=spec.target_id,
-                        execution_target=spec.exec_cmd,
-                        mode=spec.mode,
-                        transport_type=spec.transport,
-                        preflight_pattern=spec.preflight,
-                    )
-                )
-            else:
-                cmd, mode = fallback_defaults[tid]
-                log.info(f"[E2E Router] Spawning fallback connector [{tid}] (Mode: {mode.upper()})")
-                self.connectors.append(MCPServerConnector(target_id=tid, execution_target=cmd, mode=mode))
+    async def setup_workers(self) -> None:
+        await E2EWorkerManager.mount_workers(
+            self,
+            [self.oracle_id, self.finlib_id, self.margin_id, self.search_id],
+            auto_bootstrap=True,
+            tag="E2E Router",
+        )
 
     # Test Phases (1 ~ 8)
-    async def phase_zero_latency(self):
+    async def phase_zero_latency(self) -> None:
         res = await self._invoke_gateway(self.finlib_id, "eval_math", {"expression": "100 * 50"}, req_id=1)
         if res.status_code != 200:
             raise RuntimeError(f"Expected 200, got {res.status_code}")
 
-    async def phase_finlib_linear_queue(self):
+    async def phase_finlib_linear_queue(self) -> None:
         req_count = 10
         results = await asyncio.gather(*[
             self._invoke_gateway(
@@ -180,7 +119,7 @@ class MCPRouterPipeline(BasePipeline):
         if any(res.status_code != 200 for res in results):
             raise RuntimeError("Linear Queueing failed")
 
-    async def phase_oracle_multiplexing(self):
+    async def phase_oracle_multiplexing(self) -> None:
         models = ["gpt-4o", "claude", "gemini"]
         start_time = time.time()
 
@@ -200,7 +139,7 @@ class MCPRouterPipeline(BasePipeline):
         if any(res.status_code != 200 for res in results):
             raise RuntimeError("Model Price Multiplexing failed. One or more API calls returned error.")
 
-    async def phase_margin_simulation(self):
+    async def phase_margin_simulation(self) -> None:
         now_ts = int(time.time())
         args = {
             "symbol": "BTC-USDT",
@@ -221,7 +160,7 @@ class MCPRouterPipeline(BasePipeline):
         if res.status_code != 200:
             raise RuntimeError(f"Margin Sim Failed: Expected 200, got {res.status_code} ({res.text})")
 
-    async def phase_billing_rejection(self):
+    async def phase_billing_rejection(self) -> None:
         tunnel = await TunnelFactory.get_default()
         redis_key = f"config:fuel:{self.finlib_id}"
 
@@ -235,14 +174,14 @@ class MCPRouterPipeline(BasePipeline):
         finally:
             await tunnel.delete(redis_key)
 
-    async def phase_error_routing(self):
+    async def phase_error_routing(self) -> None:
         res = await self._invoke_gateway(
             self.finlib_id, "calc_indicators_batch", {"prices_matrix": "BAD_DATA"}, req_id=99
         )
         if res.status_code != 502:
             raise RuntimeError("Expected HTTP 502")
 
-    async def phase_duckdb_search_worker(self):
+    async def phase_duckdb_search_worker(self) -> None:
         start_time = time.time()
         res = await self._invoke_gateway(
             self.search_id,
@@ -271,7 +210,7 @@ class MCPRouterPipeline(BasePipeline):
         except Exception as e:
             raise RuntimeError(f"Search response parsing failed: {e}")
 
-    async def phase_dynamic_pricing_alignment(self):
+    async def phase_dynamic_pricing_alignment(self) -> None:
         tunnel = await TunnelFactory.get_default()
         redis_key = f"config:fuel:{self.search_id}"
 
@@ -322,12 +261,12 @@ class CoreSuiteRunner:
         self.log = log
         self.results: List[TestResult] = []
 
-    async def execute(self):
+    async def execute(self) -> None:
         net_config = E2EConfig(host="127.0.0.1", port=get_free_port(8355), protocol="http")
         self.results.extend(await MCPRouterPipeline(config=net_config).run_pipeline())
         self._print_report()
 
-    def _print_report(self):
+    def _print_report(self) -> None:
         all_passed = all(r.passed for r in self.results)
         report_buffer = [
             "\n" + "=" * 80,
@@ -358,7 +297,7 @@ class CoreSuiteRunner:
             self.log.critical(aggregated_report)
 
 
-def main(args_list: list[str] = None):
+def main(args_list: list[str] = None) -> None:
     app = CoreSuiteRunner()
     PhaseReactor.ignite(main_coro_func=app.execute)
 

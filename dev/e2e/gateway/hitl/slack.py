@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from fiber.dev.base.mcp.payload import McpPayloadBuilder
 from fiber.dev.base.workflow.audit.context import AuditContext, MCPGatewayTestClient
 from fiber.dev.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
-from fiber.dev.base.workflow.mcp import MockMcpServer
+from fiber.dev.base.mcp.server import MockMcpServer
 from fiber.dev.base.workflow.pipeline import MockPipeline, log
 from fiber.gateway.bridge.channel.slack import SlackHitlBridge
 

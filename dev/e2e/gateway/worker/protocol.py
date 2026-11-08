@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import time
 import uuid
 from typing import Any, List, Optional
@@ -19,13 +18,11 @@ from typing import Any, List, Optional
 import httpx
 
 from fiber.dev.base.mcp.payload import McpPayloadBuilder
+from fiber.dev.base.mcp.server import MockMcpServer
+from fiber.dev.base.mcp.worker import E2EWorkerManager
 from fiber.dev.base.workflow.audit.context import AuditContext, MCPGatewayTestClient
 from fiber.dev.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
-from fiber.dev.base.workflow.mcp import MockMcpServer
 from fiber.dev.base.workflow.pipeline import MockPipeline, log
-import fiber.plane.mcp.worker.deployer as worker_deployer
-import fiber.plane.mcp.worker.reaper as worker_reaper
-
 from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT
 from xphi.state.phase.reactor import PhaseReactor
 
@@ -58,9 +55,6 @@ class MCPProtocolPipeline(MockPipeline):
         )
         self.active_context7_url = os.environ.get("CONTEXT7_MCP_URL", "").strip() or self.mock_mcp.context7_url
 
-        self.sentinel: Optional[worker_reaper.WorkerReaper] = None
-        self._sentinel_task: Optional[asyncio.Task] = None
-
         self.set_phases([
             Phase("Phase 1: HTTP Multiplex Concurrency & Mcp-Session-Id Persistence", self.phase_http_session_and_multiplex),
             Phase("Phase 2: Streamable HTTP (SSE text/event-stream) Frame Resolution", self.phase_sse_stream_transport),
@@ -79,27 +73,21 @@ class MCPProtocolPipeline(MockPipeline):
         )
 
     async def setup_workers(self) -> None:
-        self.add_connector(self.http_target_id, self.mock_mcp.mcp_url)
-        self.add_connector(self.sse_target_id, self.mock_mcp.sse_url)
-        self.add_connector(self.remote_ctx7_id, self.active_context7_url)
-        self.add_connector(
-            self.deploy_target_id,
-            f"{sys.executable} -m {worker_deployer.__name__}",
-            mode="ephemeral",
+        E2EWorkerManager.mount_custom_targets(
+            self,
+            {
+                self.http_target_id: self.mock_mcp.mcp_url,
+                self.sse_target_id: self.mock_mcp.sse_url,
+                self.remote_ctx7_id: self.active_context7_url,
+                self.deploy_target_id: None,
+            },
+            tag="ProtocolPipeline",
         )
-
-        self.sentinel = worker_reaper.WorkerReaper(
-            anchor_store=self.mock_store, rpc_client=self.rpc, sweep_interval=1.0
-        )
-        self._sentinel_task = asyncio.create_task(self.sentinel.ignite())
+        E2EWorkerManager.start_sentinel(self, sweep_interval=1.0)
         log.info("[ProtocolPipeline] 4 Scoped Connectors & Sentinel Reaper Daemon Ignited.")
 
     async def teardown_custom(self) -> None:
-        if self.sentinel:
-            self.sentinel.running = False
-        if self._sentinel_task and not self._sentinel_task.done():
-            self._sentinel_task.cancel()
-            await asyncio.gather(self._sentinel_task, return_exceptions=True)
+        await E2EWorkerManager.stop_sentinel(self)
 
         if self._injected_temp_env:
             os.environ.pop(self.env_key_name, None)
@@ -230,10 +218,6 @@ class MCPProtocolPipeline(MockPipeline):
     # Phase 5: Sentinel (WorkerReaper) Autonomous Orphan Stream Reconciliation
     # =========================================================================
     async def phase_sentinel_reconciliation(self) -> None:
-        self.mock_store.stale_timeout = 1.0
-        if self.sentinel:
-            self.sentinel.ttl_thresholds["transition.pending"] = 1.0
-
         idem_key = uuid.uuid4().hex
         payload = self.gw_client.build_migration_payload(
             req_id=888, service_name="billing", sql_script="DROP TABLE"
@@ -244,17 +228,8 @@ class MCPProtocolPipeline(MockPipeline):
             raise RuntimeError(f"Expected 202 on sentinel trigger, got {res.status_code}")
 
         handle_id = self.gw_client.extract_handle_id(res, fallback=self.captured_handle_ids.get("latest"))
-
-        final_state = None
-        for _ in range(20):
-            final_state = await self.mock_store.query_state(handle_id)
-            if final_state and final_state.metadata.get("status") == "FAULTED":
-                log.info(f"  └─ Sentinel Autonomous Reconciliation Verified (Orphan {handle_id} -> FAULTED).")
-                return
-            await asyncio.sleep(0.5)
-
-        current_status = final_state.metadata.get("status") if final_state else "None"
-        raise RuntimeError(f"Sentinel failed to rollback within 10.0s. Current status: {current_status}")
+        await E2EWorkerManager.wait_for_sentinel_rollback(self, handle_id, stale_timeout=1.0)
+        log.info(f"  └─ Sentinel Autonomous Reconciliation Verified (Orphan {handle_id} -> FAULTED).")
 
 
 async def run_suite() -> None:
