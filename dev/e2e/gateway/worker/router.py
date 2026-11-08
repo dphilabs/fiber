@@ -3,50 +3,47 @@
 @requirements: fiber daemon 
 $ XPHI_WORKERS=1 python -m xphi.node.ops.boot
 """
+import asyncio
+import json
 import sys
 import time
 import uuid
-import json
-import asyncio
-from pathlib import Path
-from typing import List, Dict
+from typing import Any, Dict, List
 
 import httpx
 
-from fiber.dev.base.workflow.config import Phase, E2EConfig, TestResult, get_free_port
-from fiber.dev.base.workflow.pipeline import MockPipeline, log
-from fiber.plane.mcp.connector import MCPServerConnector
-from fiber.plane.mcp.mapper.config import McpConfigMapper
+from fiber.dev.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
+from fiber.dev.base.workflow.pipeline import BasePipeline, log
 from fiber.gateway.bridge.action.connect import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     ResolvedTarget,
     _specs_from_mapped_entries,
     run_connect_copy,
 )
-import fiber.plane.mcp.worker.price.token as worker_price_token
+from fiber.plane.mcp.connector import MCPServerConnector
+from fiber.plane.mcp.mapper.config import McpConfigMapper
 import fiber.plane.mcp.worker.eco.finlib as worker_finlib
 import fiber.plane.mcp.worker.eco.margin as worker_margin
+import fiber.plane.mcp.worker.price.model as worker_price_model
 import fiber.plane.mcp.worker.search.archive as worker_search
-
+from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
+from xphi.arch.bound.client.rpc import InternalRpcClient
 from xphi.node.ops.daemon.eco.pricing import DynamicPricingDaemon
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.arch.bound.client.rpc import InternalRpcClient
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.phase.reactor import PhaseReactor
-from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 
 ANCHOR_ROOT = resolve_path("anchor")
 ANCHOR_MCP_JSON = ANCHOR_ROOT / "mcp.json"
 
-
-class MCPRouterPipeline(MockPipeline):
+class MCPRouterPipeline(BasePipeline):
     def __init__(self, config: E2EConfig):
         super().__init__(
             config=config,
             name="Core Routing & Performance Suite",
             scope_name="MCP_ROUTER_SUITE",
         )
-        self.oracle_id = "worker.price.token"
+        self.oracle_id = "worker.price.model"
         self.finlib_id = "worker.eco.finlib"
         self.margin_id = "worker.eco.margin"
         self.search_id = "worker.search.archive"
@@ -55,13 +52,39 @@ class MCPRouterPipeline(MockPipeline):
         self.set_phases([
             Phase("Phase 1: Event-Driven Zero-Latency Proof", self.phase_zero_latency),
             Phase("Phase 2: High-Throughput Linear Queue Stress (FinLib)", self.phase_finlib_linear_queue),
-            Phase("Phase 3: Native Async Multiplexing Concurrency (Oracle)", self.phase_oracle_multiplexing),
+            Phase("Phase 3: Native Async Multiplexing Concurrency (Model Price)", self.phase_oracle_multiplexing),
             Phase("Phase 4: Unit Economics Vectorization (Margin BI)", self.phase_margin_simulation),
             Phase("Phase 5: Billing Rejection (Free-Rider Defense)", self.phase_billing_rejection),
             Phase("Phase 6: Precise Error Routing (Invalid Params)", self.phase_error_routing),
             Phase("Phase 7: Data-Intensive Async Multiplexing (DuckDB Search)", self.phase_duckdb_search_worker),
             Phase("Phase 8: Autonomic Dynamic Pricing Alignment", self.phase_dynamic_pricing_alignment),
         ])
+
+    async def _invoke_gateway(
+        self,
+        target_id: str,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        req_id: int = 1,
+        receipt: str = "valid_receipt",
+        timeout: float = 10.0,
+    ) -> httpx.Response:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        }
+        nonce = uuid.uuid4().hex
+        url = f"{self.local_url}/v1/mcp-gateway/{target_id}/invoke"
+        headers = {
+            "x-idempotency-key": uuid.uuid4().hex,
+            "x-nonce": nonce,
+            "X-Fiber-Fuel-Receipt": receipt,
+            "DPoP": self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce),
+        }
+        async with httpx.AsyncClient(base_url=self.local_url, timeout=timeout) as client:
+            return await client.post(url, json=payload, headers=headers)
 
     # Lifecycle Overrides
     async def setup_custom_context(self):
@@ -84,7 +107,6 @@ class MCPRouterPipeline(MockPipeline):
             self._pricing_task.cancel()
 
     def _load_specs_from_anchor_root(self) -> Dict[str, ResolvedTarget]:
-        """ANCHOR_ROOT/mcp.json에서 정규화된 워커 스펙을 로드 (파일이 없으면 자동 부트스트랩)"""
         if not ANCHOR_MCP_JSON.is_file():
             log.info(f"[E2E Router] {ANCHOR_MCP_JSON} not found. Bootstrapping via connect copy...")
             try:
@@ -99,7 +121,6 @@ class MCPRouterPipeline(MockPipeline):
         return {}
 
     async def setup_workers(self):
-        # 1. 외부 McpWorkerDaemon이 이미 띄워놓은 활성 타겟 목록 조회
         active_daemon_ids = set()
         try:
             tunnel = await TunnelFactory.get_default()
@@ -109,30 +130,22 @@ class MCPRouterPipeline(MockPipeline):
         except Exception:
             pass
 
-        # 2. ANCHOR_ROOT/mcp.json 에서 스펙 로드 (폴백용 기본 스펙 준비)
         anchor_specs = self._load_specs_from_anchor_root()
-
         fallback_defaults = {
-            self.oracle_id: (f"{sys.executable} -m {worker_price_token.__name__}", "multiplex"),
+            self.oracle_id: (f"{sys.executable} -m {worker_price_model.__name__}", "multiplex"),
             self.finlib_id: (f"{sys.executable} -m {worker_finlib.__name__}", "linear"),
             self.margin_id: (f"{sys.executable} -m {worker_margin.__name__}", "multiplex"),
             self.search_id: (f"{sys.executable} -m {worker_search.__name__}", "multiplex"),
         }
 
-        required_target_ids = [self.oracle_id, self.finlib_id, self.margin_id, self.search_id]
-
-        for tid in required_target_ids:
+        for tid in (self.oracle_id, self.finlib_id, self.margin_id, self.search_id):
             if tid in active_daemon_ids:
-                log.info(
-                    f"[E2E Router] Attached to live McpWorkerDaemon target: [{tid}] (Zero duplicate spawn)"
-                )
+                log.info(f"[E2E Router] Attached to live McpWorkerDaemon target: [{tid}] (Zero duplicate spawn)")
                 continue
 
             if tid in anchor_specs:
                 spec = anchor_specs[tid]
-                log.info(
-                    f"[E2E Router] Spawning connector [{tid}] from {ANCHOR_MCP_JSON} (Mode: {spec.mode.upper()})"
-                )
+                log.info(f"[E2E Router] Spawning connector [{tid}] from {ANCHOR_MCP_JSON} (Mode: {spec.mode.upper()})")
                 self.connectors.append(
                     MCPServerConnector(
                         target_id=spec.target_id,
@@ -145,134 +158,68 @@ class MCPRouterPipeline(MockPipeline):
             else:
                 cmd, mode = fallback_defaults[tid]
                 log.info(f"[E2E Router] Spawning fallback connector [{tid}] (Mode: {mode.upper()})")
-                self.connectors.append(
-                    MCPServerConnector(target_id=tid, execution_target=cmd, mode=mode)
-                )
+                self.connectors.append(MCPServerConnector(target_id=tid, execution_target=cmd, mode=mode))
 
     # Test Phases (1 ~ 8)
     async def phase_zero_latency(self):
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": "eval_math", "arguments": {"expression": "100 * 50"}},
-        }
-        nonce = uuid.uuid4().hex
-        url = f"{self.local_url}/v1/mcp-gateway/{self.finlib_id}/invoke"
-        dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-        headers = {
-            "x-idempotency-key": uuid.uuid4().hex,
-            "x-nonce": nonce,
-            "X-Fiber-Fuel-Receipt": "valid_receipt",
-            "DPoP": dpop_proof,
-        }
-
-        async with httpx.AsyncClient(base_url=self.local_url) as client:
-            res = await client.post(url, json=payload, headers=headers)
+        res = await self._invoke_gateway(self.finlib_id, "eval_math", {"expression": "100 * 50"}, req_id=1)
         if res.status_code != 200:
             raise RuntimeError(f"Expected 200, got {res.status_code}")
 
     async def phase_finlib_linear_queue(self):
-        async def send_compute(idx: int):
-            payload = {
-                "jsonrpc": "2.0",
-                "id": idx,
-                "method": "tools/call",
-                "params": {
-                    "name": "resolve_dates",
-                    "arguments": {"base_date": "2026-09-04", "offset_business_days": idx},
-                },
-            }
-
-            nonce = uuid.uuid4().hex
-            url = f"{self.local_url}/v1/mcp-gateway/{self.finlib_id}/invoke"
-            dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-            headers = {
-                "x-idempotency-key": uuid.uuid4().hex,
-                "x-nonce": nonce,
-                "X-Fiber-Fuel-Receipt": "valid_receipt",
-                "DPoP": dpop_proof,
-            }
-
-            async with httpx.AsyncClient(base_url=self.local_url, timeout=10.0) as client:
-                return await client.post(url, json=payload, headers=headers)
-
         req_count = 10
-        results = await asyncio.gather(*[send_compute(i) for i in range(1, req_count + 1)])
+        results = await asyncio.gather(*[
+            self._invoke_gateway(
+                self.finlib_id,
+                "resolve_dates",
+                {"base_date": "2026-09-04", "offset_business_days": i},
+                req_id=i,
+            )
+            for i in range(1, req_count + 1)
+        ])
         if any(res.status_code != 200 for res in results):
             raise RuntimeError("Linear Queueing failed")
 
     async def phase_oracle_multiplexing(self):
-        async def fetch_symbol(symbol: str, req_id: int):
-            payload = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "method": "tools/call",
-                "params": {"name": "fetch_aggregated_kline", "arguments": {"symbol": symbol}},
-            }
-
-            nonce = uuid.uuid4().hex
-            url = f"{self.local_url}/v1/mcp-gateway/{self.oracle_id}/invoke"
-            dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-            headers = {
-                "x-idempotency-key": uuid.uuid4().hex,
-                "x-nonce": nonce,
-                "X-Fiber-Fuel-Receipt": "valid_receipt",
-                "DPoP": dpop_proof,
-            }
-
-            async with httpx.AsyncClient(base_url=self.local_url, timeout=15.0) as client:
-                return await client.post(url, json=payload, headers=headers)
-
-        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+        models = ["gpt-4o", "claude", "gemini"]
         start_time = time.time()
 
-        results = await asyncio.gather(*[fetch_symbol(sym, 100 + i) for i, sym in enumerate(symbols)])
+        results = await asyncio.gather(*[
+            self._invoke_gateway(
+                self.oracle_id,
+                "lookup_model_cost",
+                {"model_name": m},
+                req_id=100 + i,
+                timeout=15.0,
+            )
+            for i, m in enumerate(models)
+        ])
         elapsed = time.time() - start_time
-        log.info(f"  └─ 3 Concurrent Oracle Fetches Completed in {elapsed:.2f}s")
+        log.info(f"  └─ 3 Concurrent Model Price Fetches Completed in {elapsed:.2f}s")
 
         if any(res.status_code != 200 for res in results):
-            raise RuntimeError("Oracle Multiplexing failed. One or more API calls returned error.")
+            raise RuntimeError("Model Price Multiplexing failed. One or more API calls returned error.")
 
     async def phase_margin_simulation(self):
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 200,
-            "method": "tools/call",
-            "params": {
-                "name": "calculate_trajectory_margin",
-                "arguments": {
-                    "symbol": "BTC-USDT",
-                    "observations": {
-                        "arn:binance": {"rate": 0.0001, "time": int(time.time())},
-                        "arn:bybit": {"rate": 0.00012, "time": int(time.time())},
-                    },
-                    "trade_size_usd": 10000.0,
-                    "pricing": {"base_fee_usd": 0.002, "profit_share_ratio": 0.05},
-                    "infra": {
-                        "monthly_fixed_cost_usd": 30.0,
-                        "compute_cost_per_sec_usd": 0.00001,
-                        "avg_latency_sec": 0.05,
-                    },
-                    "tps_range": [1.0, 10.0, 50.0],
-                },
+        now_ts = int(time.time())
+        args = {
+            "symbol": "BTC-USDT",
+            "observations": {
+                "arn:binance": {"rate": 0.0001, "time": now_ts},
+                "arn:bybit": {"rate": 0.00012, "time": now_ts},
             },
+            "trade_size_usd": 10000.0,
+            "pricing": {"base_fee_usd": 0.002, "profit_share_ratio": 0.05},
+            "infra": {
+                "monthly_fixed_cost_usd": 30.0,
+                "compute_cost_per_sec_usd": 0.00001,
+                "avg_latency_sec": 0.05,
+            },
+            "tps_range": [1.0, 10.0, 50.0],
         }
-
-        nonce = uuid.uuid4().hex
-        url = f"{self.local_url}/v1/mcp-gateway/{self.margin_id}/invoke"
-        dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-        headers = {
-            "x-idempotency-key": uuid.uuid4().hex,
-            "x-nonce": nonce,
-            "X-Fiber-Fuel-Receipt": "valid_receipt",
-            "DPoP": dpop_proof,
-        }
-
-        async with httpx.AsyncClient(base_url=self.local_url) as client:
-            res = await client.post(url, json=payload, headers=headers)
-            if res.status_code != 200:
-                raise RuntimeError(f"Margin Sim Failed: Expected 200, got {res.status_code} ({res.text})")
+        res = await self._invoke_gateway(self.margin_id, "calculate_trajectory_margin", args, req_id=200)
+        if res.status_code != 200:
+            raise RuntimeError(f"Margin Sim Failed: Expected 200, got {res.status_code} ({res.text})")
 
     async def phase_billing_rejection(self):
         tunnel = await TunnelFactory.get_default()
@@ -280,78 +227,30 @@ class MCPRouterPipeline(MockPipeline):
 
         await tunnel.set(redis_key, "1")
         try:
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 300,
-                "method": "tools/call",
-                "params": {"name": "eval_math", "arguments": {"expression": "1 + 1"}},
-            }
-            nonce = uuid.uuid4().hex
-            url = f"{self.local_url}/v1/mcp-gateway/{self.finlib_id}/invoke"
-            dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-            headers = {
-                "x-idempotency-key": uuid.uuid4().hex,
-                "x-nonce": nonce,
-                "X-Fiber-Fuel-Receipt": "invalid_receipt",
-                "DPoP": dpop_proof,
-            }
-
-            async with httpx.AsyncClient(base_url=self.local_url) as client:
-                res = await client.post(url, json=payload, headers=headers)
-                if res.status_code != 402:
-                    raise RuntimeError(f"Expected HTTP 402, got {res.status_code}")
+            res = await self._invoke_gateway(
+                self.finlib_id, "eval_math", {"expression": "1 + 1"}, req_id=300, receipt="invalid_receipt"
+            )
+            if res.status_code != 402:
+                raise RuntimeError(f"Expected HTTP 402, got {res.status_code}")
         finally:
             await tunnel.delete(redis_key)
 
     async def phase_error_routing(self):
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 99,
-            "method": "tools/call",
-            "params": {"name": "calc_indicators_batch", "arguments": {"prices_matrix": "BAD_DATA"}},
-        }
-
-        nonce = uuid.uuid4().hex
-        url = f"{self.local_url}/v1/mcp-gateway/{self.finlib_id}/invoke"
-        dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-        headers = {
-            "x-idempotency-key": uuid.uuid4().hex,
-            "x-nonce": nonce,
-            "X-Fiber-Fuel-Receipt": "valid_receipt",
-            "DPoP": dpop_proof,
-        }
-
-        async with httpx.AsyncClient(base_url=self.local_url) as client:
-            res = await client.post(url, json=payload, headers=headers)
-            if res.status_code != 502:
-                raise RuntimeError("Expected HTTP 502")
+        res = await self._invoke_gateway(
+            self.finlib_id, "calc_indicators_batch", {"prices_matrix": "BAD_DATA"}, req_id=99
+        )
+        if res.status_code != 502:
+            raise RuntimeError("Expected HTTP 502")
 
     async def phase_duckdb_search_worker(self):
-        req_id = 400
-        payload = {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "method": "tools/call",
-            "params": {
-                "name": "search_market_evidence",
-                "arguments": {"domain": "Domain_1_Control_Failure", "limit": 2},
-            },
-        }
-
-        nonce = uuid.uuid4().hex
-        url = f"{self.local_url}/v1/mcp-gateway/{self.search_id}/invoke"
-        dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-        headers = {
-            "x-idempotency-key": uuid.uuid4().hex,
-            "x-nonce": nonce,
-            "X-Fiber-Fuel-Receipt": "valid_receipt",
-            "DPoP": dpop_proof,
-        }
-
         start_time = time.time()
-        async with httpx.AsyncClient(base_url=self.local_url, timeout=60.0) as client:
-            res = await client.post(url, json=payload, headers=headers)
-
+        res = await self._invoke_gateway(
+            self.search_id,
+            "search_market_evidence",
+            {"domain": "Domain_1_Control_Failure", "limit": 2},
+            req_id=400,
+            timeout=60.0,
+        )
         elapsed = time.time() - start_time
         if res.status_code != 200:
             raise RuntimeError(f"Search Worker Failed: Expected 200, got {res.status_code}")
@@ -362,9 +261,7 @@ class MCPRouterPipeline(MockPipeline):
 
         try:
             result_content = data.get("result", {}).get("content", [])[0].get("text", "{}")
-            parsed_result = json.loads(result_content)
-
-            telemetry = parsed_result.get("telemetry", {})
+            telemetry = json.loads(result_content).get("telemetry", {})
             if telemetry:
                 log.info(f"  └─ Total E2E Latency: {elapsed:.2f}s")
                 log.info(f"  ├─ [DuckDB] Processed {telemetry.get('scanned_file_mb', 0)} MB")
@@ -381,7 +278,6 @@ class MCPRouterPipeline(MockPipeline):
         await tunnel.set(redis_key, "1")
         try:
             await asyncio.sleep(1.0)
-
             price_tag_key = f"eco:price_tag:{self.search_id}"
             dynamic_price_str = await tunnel.get(price_tag_key)
 
@@ -399,35 +295,18 @@ class MCPRouterPipeline(MockPipeline):
                     f"Dynamic price (${dynamic_price}) did not increase from Genesis floor despite compute usage."
                 )
 
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 500,
-                "method": "tools/call",
-                "params": {
-                    "name": "search_market_evidence",
-                    "arguments": {"domain": "Domain_2_Security_Audit", "limit": 1},
-                },
-            }
-
-            nonce = uuid.uuid4().hex
-            url = f"{self.local_url}/v1/mcp-gateway/{self.search_id}/invoke"
-            dpop_proof = self.dpop_client.generate_proof(url=url, method="POST", nonce=nonce)
-            headers = {
-                "x-idempotency-key": uuid.uuid4().hex,
-                "x-nonce": nonce,
-                "X-Fiber-Fuel-Receipt": "invalid_receipt",
-                "DPoP": dpop_proof,
-            }
-
-            async with httpx.AsyncClient(base_url=self.local_url) as client:
-                res = await client.post(url, json=payload, headers=headers)
-
+            res = await self._invoke_gateway(
+                self.search_id,
+                "search_market_evidence",
+                {"domain": "Domain_2_Security_Audit", "limit": 1},
+                req_id=500,
+                receipt="invalid_receipt",
+            )
             if res.status_code != 402:
                 raise RuntimeError(f"Expected 402 Payment Required, got {res.status_code}")
 
             error_msg = res.json().get("detail", "")
             expected_fee_string = f"${dynamic_price:.4f}"
-
             if expected_fee_string not in error_msg:
                 raise RuntimeError(f"Rejection message does not contain dynamic price! Msg: {error_msg}")
 
@@ -435,7 +314,6 @@ class MCPRouterPipeline(MockPipeline):
                 f"  └─ Gateway precisely rejected underfunded request based on Dynamic Price ({expected_fee_string})."
             )
         finally:
-            # 상태 복구
             await tunnel.delete(redis_key)
 
 
@@ -466,13 +344,13 @@ class CoreSuiteRunner:
             report_buffer.append(line)
 
         report_buffer.append("-" * 80)
-
-        if all_passed:
-            report_buffer.append("CORE ROUTING PIPELINE VALIDATED SUCCESSFULLY.")
-        else:
-            report_buffer.append("CORE ROUTING FAILURE DETECTED. Check logs for details.")
-
+        report_buffer.append(
+            "CORE ROUTING PIPELINE VALIDATED SUCCESSFULLY."
+            if all_passed
+            else "CORE ROUTING FAILURE DETECTED. Check logs for details."
+        )
         report_buffer.append("=" * 80 + "\n")
+
         aggregated_report = "\n".join(report_buffer)
         if all_passed:
             self.log.info(aggregated_report)
