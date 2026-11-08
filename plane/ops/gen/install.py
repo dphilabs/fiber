@@ -35,7 +35,7 @@ NC='\\033[0m'
 
 echo -e "${BLUE}▶ Starting {{PROJECT_NAME_TITLE}} LLM Pipeline & MCP Gateway Installation...${NC}\\n"
 
-# Parse optional target version (e.g., curl ... | bash -s -- v1.1.4.10)
+# Parse optional target version (e.g., curl ... | bash -s -- v1.1.4.11)
 FIBER_VERSION=${1:-""}
 REPO_URL="git+https://github.com/{{GITHUB_REPO}}.git"
 
