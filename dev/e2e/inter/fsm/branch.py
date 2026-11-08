@@ -1,49 +1,35 @@
-# fiber.dev.e2e.inter.fsm.convergence
-import json
-import sys
+# fiber.dev.e2e.inter.fsm.branch
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fiber.dev.base.fsm.registry import default_asl_registry
+from fiber.dev.base.mcp.worker import E2EWorkerManager
 from fiber.dev.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
 from fiber.dev.base.workflow.pipeline import BasePipeline, log
-from fiber.gateway.bridge.action.connect import (
-    ACTIVE_TARGETS_TUNNEL_KEY,
-    ResolvedTarget,
-    _specs_from_mapped_entries,
-)
 from fiber.gateway.bridge.fsm.polyglot import PolyglotExecutionBridge
-from fiber.plane.mcp.connector import MCPServerConnector
-from fiber.plane.mcp.mapper.config import McpConfigMapper
-import fiber.plane.mcp.worker.eco.finlib as worker_finlib
-import fiber.plane.mcp.worker.search.archive as worker_search
 
 from xphi.node.runtime.fsm.traverser import GraphTraverser, TraversalResult
 from xphi.node.runtime.wasm.broker import WasmBroker
-from xphi.node.space.bind.resolver import resolve_path
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.anchor.store import AnchorStore
 from xphi.state.phase.reactor import PhaseReactor
 
-ANCHOR_MCP_JSON = resolve_path("anchor") / "mcp.json"
-
-
-class MultiverseConvergencePipeline(BasePipeline):
+class BranchConvPipeline(BasePipeline):
     def __init__(self, config: E2EConfig):
         super().__init__(
             config=config,
-            name="Multiverse Fork, Pre-Flight Park & Polyglot Convergence Suite",
-            scope_name="MULTIVERSE_CONVERGENCE",
+            name="Branch Fork, Pre-Flight Park & Polyglot Convergence Suite",
+            scope_name="BRANCH_CONV",
         )
         self.finlib_id = "worker.eco.finlib"
         self.search_id = "worker.search.archive"
-        self.base_stream_id = f"mv_conv_{uuid.uuid4().hex[:8]}"
+        self.base_stream_id = f"br_conv_{uuid.uuid4().hex[:8]}"
         self.initial_fuel = 1000
 
         self.asl_schema: Dict[str, Any] = {}
-        self.bridge: PolyglotExecutionBridge = None
-        self.traverser: GraphTraverser = None
-        self.first_pass: TraversalResult = None
+        self.bridge: Optional[PolyglotExecutionBridge] = None
+        self.traverser: Optional[GraphTraverser] = None
+        self.first_pass: Optional[TraversalResult] = None
         self.hitl_approved: bool = False
 
         self.set_phases([
@@ -61,42 +47,18 @@ class MultiverseConvergencePipeline(BasePipeline):
             ),
         ])
 
-    def _load_specs_from_anchor_root(self) -> Dict[str, ResolvedTarget]:
-        if ANCHOR_MCP_JSON.is_file():
-            entries = McpConfigMapper.parse_file(ANCHOR_MCP_JSON, agent_hint="fiber")
-            return {s.target_id: s for s in _specs_from_mapped_entries(entries)}
-        return {}
-
     async def setup_workers(self) -> None:
-        tunnel = await TunnelFactory.get_default()
-        raw_active = await tunnel.get(ACTIVE_TARGETS_TUNNEL_KEY)
-        active_daemon_ids = set(json.loads(raw_active)) if raw_active else set()
-        anchor_specs = self._load_specs_from_anchor_root()
+        await E2EWorkerManager.mount_workers(
+            self,
+            [self.finlib_id, self.search_id],
+            tag="BranchConv",
+        )
 
-        targets = {
-            self.finlib_id: (f"{sys.executable} -m {worker_finlib.__name__}", "linear", r"normalize_order|pow\(|exp\("),
-            self.search_id: (f"{sys.executable} -m {worker_search.__name__}", "multiplex", None),
-        }
-        for tid, (cmd, mode, default_guard) in targets.items():
-            if tid in active_daemon_ids:
-                log.info(f"[Multiverse E2E] Attached to live McpWorkerDaemon target: [{tid}]")
-                continue
-            spec = anchor_specs.get(tid)
-            self.connectors.append(
-                MCPServerConnector(
-                    target_id=tid,
-                    execution_target=spec.exec_cmd if spec else cmd,
-                    mode=spec.mode if spec else mode,
-                    transport_type=spec.transport if spec else "stdio",
-                    preflight_pattern=(spec.preflight if spec else None) or default_guard,
-                )
-            )
-
-        loaded = default_asl_registry.get("multiverse_convergence")
+        loaded = default_asl_registry.get("branch_conv")
         if not loaded:
-            raise FileNotFoundError("ASL schema 'multiverse_convergence.json' not found in ASLRegistry.")
+            raise FileNotFoundError("ASL schema 'branch_conv.json' not found in ASLRegistry.")
         self.asl_schema, src_name = loaded
-        log.info(f"[Multiverse E2E] Loaded ASL topology from '{src_name}'.")
+        log.info(f"[BranchConv] Loaded ASL topology from '{src_name}'.")
 
         broker = WasmBroker.get_shared()
         self.traverser = GraphTraverser(broker=broker)
@@ -104,6 +66,7 @@ class MultiverseConvergencePipeline(BasePipeline):
             runtime=self.traverser.runtime,
             mcp_gateway_url=f"{self.local_url}/v1/mcp-gateway",
             allow_exec_subprocess=True,
+            http_timeout=35.0,
         )
         self.traverser.node_executor = self._intercept_hitl_or_delegate
 
@@ -136,14 +99,13 @@ class MultiverseConvergencePipeline(BasePipeline):
         }
 
     async def _intercept_hitl_or_delegate(self, cursor, node_spec, task_io):
-        """Delegates all execution to PolyglotExecutionBridge, injecting resolved output upon HITL resume."""
-        uri = task_io.get("resource_uri", "")
+        """Delegates execution to PolyglotExecutionBridge, enforcing Pre-Flight HITL yield & resume on Branch B."""
+        uri = str(task_io.get("resource_uri", ""))
+
         if uri.endswith("/normalize_order") and not self.hitl_approved:
-            # Trigger Pre-Flight HITL Yield (simulating or capturing HTTP 202 guard)
             meta_up, offload, cost = await self.bridge(cursor, node_spec, task_io)
             if meta_up.get("_hitl_yield"):
                 return meta_up, offload, cost
-            # If external daemon did not return 202 directly on REST edge, enforce Pre-Flight yield contract
             return {"_hitl_yield": True, "_hitl_ticket": f"ticket_{cursor.stream_id}"}, {"parked": True}, 0
 
         if uri.endswith("/normalize_order") and self.hitl_approved:
@@ -168,25 +130,35 @@ class MultiverseConvergencePipeline(BasePipeline):
                 initial_fuel=self.initial_fuel,
             )
 
-            log.info(f"  ├─ Visited History (Pass 1): {self.first_pass.visited_history}")
-            log.info(f"  ├─ Parked & Barrier-Waiting Cursors: {len(self.first_pass.parked_cursors)}")
+            history = self.first_pass.visited_history
+            parked = self.first_pass.parked_cursors
+            log.info(f"  ├─ Visited History (Pass 1): {history}")
+            log.info(f"  ├─ Parked & Barrier-Waiting Cursors: {len(parked)}")
 
-            # Verify all 3 parallel branches are preserved (Branch A at barrier, Branch C via Fallback at barrier, Branch B HITL-parked)
-            if len(self.first_pass.parked_cursors) != 3:
+            fallback_entries = [h for h in history if "(FALLBACK)" in h]
+            hitl_entries = [h for h in history if "(HITL_PARKED)" in h]
+
+            if len(fallback_entries) != 1:
                 raise RuntimeError(
-                    f"Expected 3 preserved cursors (1 HITL + 2 Barrier Siblings), got {len(self.first_pass.parked_cursors)}"
+                    f"Expected exactly 1 FALLBACK transition (Branch C), got {len(fallback_entries)}: {fallback_entries}"
                 )
 
-            has_fallback = any("(FALLBACK)" in h for h in self.first_pass.visited_history)
-            has_hitl = any("(HITL_PARKED)" in h for h in self.first_pass.visited_history)
-            if not (has_fallback and has_hitl):
+            if len(hitl_entries) != 1:
                 raise RuntimeError(
-                    f"Missing expected FALLBACK or HITL_PARKED transition in history: {self.first_pass.visited_history}"
+                    f"Expected exactly 1 HITL_PARKED transition (Branch B), got {len(hitl_entries)}: {hitl_entries}"
+                )
+
+            if len(parked) != 3:
+                raise RuntimeError(
+                    f"Expected 3 preserved cursors (1 HITL + 2 Barrier Siblings), got {len(parked)}"
                 )
         finally:
             await tunnel.delete(fuel_key)
 
     async def phase_audit_and_approve_hitl(self) -> None:
+        if self.first_pass is None:
+            raise RuntimeError("Cannot audit HITL cursors: Phase 1 did not produce a valid TraversalResult.")
+
         hitl_cursors = [c for c in self.first_pass.parked_cursors if c.meta_ctx.get("_hitl_yield")]
         if len(hitl_cursors) != 1:
             raise RuntimeError(f"Expected exactly 1 cursor with _hitl_yield=True, got {len(hitl_cursors)}")
@@ -201,6 +173,9 @@ class MultiverseConvergencePipeline(BasePipeline):
         log.info(f"  └─ Operator HITL Approval granted for '{target_c.stream_id}'. Ready for O(1) resume.")
 
     async def phase_resume_and_converge(self) -> None:
+        if self.first_pass is None or not self.first_pass.parked_cursors:
+            raise RuntimeError("Cannot resume: No parked cursors available from Phase 1.")
+
         resumed_res = await self.traverser.resume(
             targets=self.first_pass.parked_cursors,
             base_stream_id=self.base_stream_id,
@@ -224,28 +199,30 @@ class MultiverseConvergencePipeline(BasePipeline):
         if not resumed_res.final_cursor.meta_ctx.get("convergence_verified"):
             raise RuntimeError(f"Final audit fn did not execute! Meta: {resumed_res.final_cursor.meta_ctx}")
 
-        head_hash = AnchorStore().get_head_hash(self.base_stream_id)
+        head_hash = (
+            self.traverser.runtime.store.get_head_hash(self.base_stream_id)
+            or AnchorStore().get_head_hash(self.base_stream_id)
+            or resumed_res.final_cursor.pointer.tx_hash
+        )
         if not head_hash:
             raise RuntimeError(f"AnchorStore head commit missing for converged stream '{self.base_stream_id}'")
 
         log.info(f"  └─ AnchorStore Ledger Head Verified: {head_hash[:12]}... (Multiverse Convergence Complete)")
 
 
-class ConvergenceSuiteRunner:
+class ConvSuiteRunner:
     def __init__(self):
         self.results: List[TestResult] = []
 
-    async def execute(self):
+    async def execute(self) -> None:
         net_config = E2EConfig(host="127.0.0.1", port=get_free_port(8360), protocol="http")
-        self.results.extend(await MultiverseConvergencePipeline(config=net_config).run_pipeline())
+        self.results.extend(await BranchConvPipeline(config=net_config).run_pipeline())
         for idx, r in enumerate(self.results, 1):
             mark = "[O]" if r.passed else "[X]"
             log.info(f"{mark} {idx:02d}. {r.scenario} -> {'PASSED' if r.passed else 'FAILED'}")
 
-
-def main(args_list: list[str] = None):
-    PhaseReactor.ignite(main_coro_func=ConvergenceSuiteRunner().execute)
-
+def main(args_list: list[str] = None) -> None:
+    PhaseReactor.ignite(main_coro_func=ConvSuiteRunner().execute)
 
 if __name__ == "__main__":
     main()

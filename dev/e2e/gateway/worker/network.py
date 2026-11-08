@@ -11,7 +11,7 @@ import httpx
 
 from fiber.dev.base.workflow.config import Phase, E2EConfig, TestResult, get_free_port
 from fiber.dev.base.workflow.pipeline import MockPipeline, log
-from fiber.dev.base.workflow.mcp import MockMcpServer
+from fiber.dev.base.mcp.server import MockMcpServer
 from fiber.gateway.bridge.action.connect import resolve_connector_spec
 from fiber.plane.mcp.connector import MCPServerConnector
 from fiber.dev.base.mcp.payload import McpPayloadBuilder

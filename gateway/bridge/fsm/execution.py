@@ -32,7 +32,7 @@ class FiberExecutionBridge:
         tenant_id: str = "default_tenant",
         mcp_gateway_url: str = "http://127.0.0.1:8356/v1/mcp-gateway",
         interceptors: Optional[List[Any]] = None,
-        http_timeout: float = 30.0,
+        http_timeout: float = 35.0,
     ):
         self.runtime = runtime
         self.tenant_id = tenant_id
@@ -132,67 +132,95 @@ class FiberExecutionBridge:
         cursor: BranchCursor,
         task_io: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], int]:
-        parsed_uri = parse_resource_uri(task_io.get("resource_uri", ""))
+        raw_uri = str(task_io.get("resource_uri", ""))
+        parsed_uri = parse_resource_uri(raw_uri)
         resolved_args = resolve_dynamic_params(task_io.get("call_params", {}), cursor.meta_ctx)
         projection = task_io.get("projection")
         extras = task_io.get("extras") or {}
 
-        # Support both `mcp://target_id/tool_name` (live JSON-RPC gateway) and `mcp://target_id` (legacy stub)
-        target_id = parsed_uri.target_id
-        tool_name = resolved_args.pop("_tool_name", None)
-        if "/" in target_id:
-            target_id, uri_tool = target_id.split("/", 1)
-            tool_name = tool_name or uri_tool
+        # 1. Resolve `target_id` and `tool_name` for both `mcp://target_id/tool_name` and `mcp://target_id`
+        target_id, uri_tool = self._split_mcp_target_and_tool(raw_uri, parsed_uri)
+        tool_name = resolved_args.pop("_tool_name", None) or uri_tool
 
         receipt = str(resolved_args.pop("_fuel_receipt", "valid_receipt"))
+        idem_key = self._build_idempotency_key(cursor, resolved_args)
+        ckpt_handle = cursor.pointer.to_key()
+
         url = f"{self.mcp_gateway_url}/{target_id}/invoke"
         nonce = uuid.uuid4().hex
         headers = {
-            "x-idempotency-key": cursor.pointer.to_key(),
+            "x-idempotency-key": idem_key,
             "x-nonce": nonce,
             "X-Fiber-Fuel-Receipt": receipt,
+            "X-Fiber-Checkpoint": ckpt_handle,
+            "X-Fiber-Tenant": self.tenant_id,
+            "X-Fiber-Stream": cursor.stream_id,
             "DPoP": self._dpop.generate_proof(url=url, method="POST", nonce=nonce),
         }
 
         if tool_name:
             payload: Dict[str, Any] = {
                 "jsonrpc": "2.0",
-                "id": ( cursor.tick or 1 ),
+                "id": int(cursor.tick or 1),
                 "method": "tools/call",
                 "params": {"name": tool_name, "arguments": resolved_args},
-                "checkpoint_handle": cursor.pointer.to_key(),
-                "meta": cursor.meta_ctx,
             }
         else:
             payload = {
-                "checkpoint_handle": cursor.pointer.to_key(),
+                "checkpoint_handle": ckpt_handle,
                 "arguments": resolved_args,
                 "meta": cursor.meta_ctx,
             }
 
-        resp = await self._http_client.post(url, json=payload, headers=headers)
+        try:
+            resp = await self._http_client.post(url, json=payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            raise TimeoutError(
+                f"[Bridge:{cursor.stream_id}] MCP Gateway timeout on '{target_id}/{tool_name or ''}' ({url})"
+            ) from exc
 
         # HTTP 202 (SEP-2322 Pre-Flight HITL Yield): Park cursor without advancing state
         if resp.status_code == 202:
-            hitl_data = resp.json()
+            try:
+                hitl_data = resp.json()
+            except Exception:
+                hitl_data = {"status": 202, "raw": resp.text}
+            if not isinstance(hitl_data, dict):
+                hitl_data = {"data": hitl_data}
+
             ticket = (
                 hitl_data.get("ticket_id")
                 or hitl_data.get("handle_id")
                 or extract_json_path(hitl_data, "detail.handle_id")
-                or ""
+                or extract_json_path(hitl_data, "params.handle_id")
+                or resp.headers.get("X-Fiber-HITL-Ticket", "")
             )
             log.info(f"[Bridge:{cursor.stream_id}] MCP Pre-Flight HITL Lock triggered at '{cursor.curr_node}'.")
             return (
                 {
                     "_hitl_yield": True,
                     "_hitl_ticket": str(ticket),
+                    "_idem_key": idem_key,
                 },
                 hitl_data,
                 0,
             )
 
-        resp.raise_for_status()
-        tool_result = self._unwrap_mcp_jsonrpc(resp.json())
+        if resp.status_code >= 400:
+            detail = resp.text[:300]
+            raise httpx.HTTPStatusError(
+                f"MCP Gateway HTTP {resp.status_code} on '{target_id}/{tool_name or ''}': {detail}",
+                request=resp.request,
+                response=resp,
+            )
+
+        raw_json = resp.json()
+        if isinstance(raw_json, dict) and "error" in raw_json and raw_json["error"]:
+            raise RuntimeError(
+                f"[Bridge:{cursor.stream_id}] MCP JSON-RPC error on '{target_id}/{tool_name or ''}': {raw_json['error']}"
+            )
+
+        tool_result = self._unwrap_mcp_jsonrpc(raw_json)
 
         meta_updates, offload_payload = apply_projection(
             raw_output=tool_result,
@@ -201,6 +229,31 @@ class FiberExecutionBridge:
         )
         default_cost = int(extras.get("step_cost", tool_result.get("step_cost", 5)))
         return meta_updates, offload_payload, max(1, default_cost)
+
+    @staticmethod
+    def _split_mcp_target_and_tool(raw_uri: str, parsed_uri: Any) -> Tuple[str, Optional[str]]:
+        """Extracts `(target_id, tool_name)` reliably across `mcp://target/tool` and `mcp://target`."""
+        candidate = (
+            raw_uri.split("://", 1)[1].strip("/")
+            if "://" in raw_uri
+            else (getattr(parsed_uri, "target", None) or getattr(parsed_uri, "target_id", "")).strip("/")
+        )
+        if "/" in candidate:
+            target_id, tool_name = candidate.split("/", 1)
+            return target_id.strip(), (tool_name.strip() or None)
+        return (getattr(parsed_uri, "target_id", "") or candidate).strip(), None
+
+    @staticmethod
+    def _build_idempotency_key(cursor: BranchCursor, resolved_args: Dict[str, Any]) -> str:
+        """
+        Generates a clean 32-char hex idempotency key unique per branch & checkpoint,
+        preventing sibling collision after 1:N fork while remaining deterministic across HITL resume.
+        """
+        explicit = resolved_args.pop("_idem_key", None) or cursor.meta_ctx.get("_idem_key")
+        if explicit:
+            return str(explicit)
+        seed = f"{cursor.stream_id}:{cursor.curr_node}:{cursor.pointer.to_key()}"
+        return uuid.uuid5(uuid.NAMESPACE_OID, seed).hex
 
     @staticmethod
     def _unwrap_mcp_jsonrpc(raw_resp: Any) -> Dict[str, Any]:
