@@ -20,7 +20,7 @@ from xphi.arch.contract.fsm import (
     parse_resource_uri,
     resolve_dynamic_params,
 )
-from xphi.node.runtime.phase import BranchCursor, BranchController
+from xphi.watcher.reflex.controller import BranchCursor, BranchController
 
 log = get_emitter("fsm.bridge.execution", phase="ACTUATOR_BRIDGE")
 

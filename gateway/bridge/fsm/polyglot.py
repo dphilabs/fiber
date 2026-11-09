@@ -16,7 +16,7 @@ from xphi.arch.contract.fsm import (
     parse_resource_uri,
     resolve_dynamic_params,
 )
-from xphi.node.runtime.phase import BranchController, BranchCursor
+from xphi.watcher.reflex.controller import BranchController, BranchCursor
 
 log = get_emitter("fsm.bridge.polyglot", phase="POLYGLOT_BRIDGE")
 
