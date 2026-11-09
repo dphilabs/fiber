@@ -1,11 +1,12 @@
 # fiber.gateway.serv.gateway
+import os
 import json
 import asyncio
 import time
 import uuid
 from typing import Dict, Any, Optional, Union
 
-from fastapi import APIRouter, Body, Header, Request, HTTPException, Depends
+from fastapi import APIRouter, Body, Header, Query, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
 from xphi.node.rpc.method import RpcMethod
@@ -19,10 +20,14 @@ from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("serv.gateway")
 
+DISCOVERY_TIMEOUT = float(os.getenv("FIBER_MCP_DISCOVERY_TIMEOUT", "2.0"))
+
+
 def _extract_error_message(error_detail: Any) -> str:
     if isinstance(error_detail, dict):
         return error_detail.get("message", str(error_detail))
     return str(error_detail) if error_detail else "Unknown Execution Fault"
+
 
 class TransitionBridge:
     def __init__(self, mapper: IdempotencyMapper, nonce_protector: NonceReplayProtector):
@@ -109,6 +114,7 @@ class TransitionBridge:
         # Identify MCP discovery and initialization methods
         mcp_method = payload.get("method", "")
         is_discovery_phase = mcp_method in ("initialize", "tools/list", "prompts/list", "resources/list")
+        trace_ctx["is_discovery"] = is_discovery_phase
 
         # Authentication (DPoP Mandatory) & Fuel Validation
         if is_discovery_phase:
@@ -136,15 +142,16 @@ class TransitionBridge:
                     log.warning(f"[Bridge:Fuel] Fuel validation rejected", extra={"status_code": e.status_code, "detail": e.detail, **trace_ctx})
                     raise HTTPException(status_code=402, detail=f"Fuel/Intent Rejected: {e.detail}")
 
-        # [추가] 기성 IDE(Cursor/Claude)의 Long-Polling 지원을 위해 payload._meta.hold_on_yield 플래그 추출
+        # 기성 IDE(Cursor/Claude)의 Long-Polling 지원을 위해 payload._meta.hold_on_yield 플래그 추출
         hold_on_yield = payload.get("params", {}).get("_meta", {}).get("hold_on_yield", False)
         trace_ctx["hold_on_yield"] = hold_on_yield
 
-        await rpc.call(RpcMethod.MCP_STATE_PENDING_SEAL, {
-            "handle_id": handle_id,
-            "payload": payload,
-            "target_server_id": identity.target_server_id
-        })
+        if not is_discovery_phase:
+            await rpc.call(RpcMethod.MCP_STATE_PENDING_SEAL, {
+                "handle_id": handle_id,
+                "payload": payload,
+                "target_server_id": identity.target_server_id
+            })
 
         await rpc.publish_intent(
             channel=f"mcp.intent.queue.{identity.target_server_id}",
@@ -165,8 +172,13 @@ class TransitionBridge:
         # 202 응답 시 제공될 Location 헤더
         location_header = {"Location": f"/v1/mcp-gateway/{target_server_id}/status/{handle_id}"}
         
-        # 기성 IDE를 위한 Long-Hold 모드일 경우 타임아웃을 300초(5분)로 대폭 연장
-        wait_timeout = 300.0 if trace_ctx.get("hold_on_yield") else 30.0
+        # Discovery 단계는 짧은 타임아웃(기본 2.0초)을 적용하고, Long-Hold 모드는 300초로 연장
+        if trace_ctx.get("is_discovery"):
+            wait_timeout = DISCOVERY_TIMEOUT
+        elif trace_ctx.get("hold_on_yield"):
+            wait_timeout = 300.0
+        else:
+            wait_timeout = 30.0
 
         try:
             async with asyncio.timeout(wait_timeout):
@@ -225,6 +237,10 @@ class TransitionBridge:
                                     
                             return executable_payload
         except asyncio.TimeoutError:
+            if trace_ctx.get("is_discovery"):
+                log.warning(f"[Bridge:PubSub:Timeout] Discovery timeout ({wait_timeout}s) for '{target_server_id}'. Skipping.", extra=trace_ctx)
+                raise HTTPException(status_code=504, detail=f"Discovery timeout for '{target_server_id}'.")
+
             log.warning(f"[Bridge:PubSub:Timeout] {wait_timeout}s timeout reached. Broadcasting FORCE_ROLLBACK", extra=trace_ctx)
             
             try:
@@ -242,8 +258,10 @@ class TransitionBridge:
             await pubsub.unsubscribe(reply_channel)
             await pubsub.close()
 
+
 ## HTTP Ingress Route (MCP 2026-07-28 Spec)
 mcp_bridge = APIRouter(prefix="/v1/mcp-gateway", tags=["Enterprise MCP Bridge"])
+
 
 @mcp_bridge.post("/{target_server_id}/invoke")
 async def invoke_mcp_stateless(
@@ -333,30 +351,71 @@ async def discover_tools(
 
 ACTIVE_TARGETS_TUNNEL_KEY = "mcp:registry:active_targets"
 NAMESPACE_DELIM = "__"
+DEFAULT_EXCLUDED_TAGS = {"STANDALONE", "HIDDEN"}
+FULL_VIEW_KEYWORDS = {"FULL", "ALL", "*"}
 
 
-async def _get_active_targets(request: Request) -> list[str]:
+def _normalize_tag_set(raw: Any) -> set[str]:
+    if not raw:
+        return set()
+    if isinstance(raw, (list, tuple, set)):
+        items = raw
+    elif isinstance(raw, str):
+        s = raw.strip()
+        if not s or s == "[]":
+            return set()
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                parsed = json.loads(s)
+                items = parsed if isinstance(parsed, list) else [s]
+            except Exception:
+                items = s[1:-1].replace("'", "").replace('"', "").split(",")
+        else:
+            items = s.split(",")
+    else:
+        return set()
+    return {str(x).strip().upper() for x in items if str(x).strip()}
+
+
+async def _get_active_targets(request: Request, tags: Optional[str] = None) -> list[str]:
+    raw_data: Any = None
     try:
         tunnel = getattr(request.app.state, "tunnel", None) or await TunnelFactory.get_default()
         if tunnel:
             raw = await tunnel.get(ACTIVE_TARGETS_TUNNEL_KEY)
             if raw:
-                data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
-                if isinstance(data, list) and data:
-                    return [str(x) for x in data]
+                raw_data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
     except Exception as e:
         log.warning(f"[Gateway:Unified] Failed to read active targets from tunnel: {e}")
 
-    fallback = getattr(request.app.state, "mcp_active_targets", None)
-    return [str(x) for x in fallback] if isinstance(fallback, list) else []
+    if raw_data is None:
+        raw_data = getattr(request.app.state, "mcp_active_targets", None)
+
+    if isinstance(raw_data, list):
+        target_map: Dict[str, set[str]] = {str(x): set() for x in raw_data if str(x).strip()}
+    elif isinstance(raw_data, dict):
+        target_map = {str(k): _normalize_tag_set(v) for k, v in raw_data.items() if str(k).strip()}
+    else:
+        return []
+
+    req_tags = _normalize_tag_set(tags)
+
+    if req_tags & FULL_VIEW_KEYWORDS:
+        return list(target_map.keys())
+
+    if req_tags:
+        return [tid for tid, t_tags in target_map.items() if t_tags & req_tags]
+
+    return [tid for tid, t_tags in target_map.items() if not (t_tags & DEFAULT_EXCLUDED_TAGS)]
 
 
 @mcp_bridge.get("/tools")
 async def discover_unified_tools(
     request: Request,
+    tags: Optional[str] = Query(None, description="Filter by tag(s) (e.g. 'standalone', 'hidden', 'cf') or 'full' for all targets"),
     rpc: InternalRpcClient = Depends(get_rpc_client),
 ):
-    targets = await _get_active_targets(request)
+    targets = await _get_active_targets(request, tags=tags)
 
     async def _fetch(tid: str) -> list[Dict[str, Any]]:
         try:
@@ -379,6 +438,7 @@ async def discover_unified_tools(
 async def invoke_unified_mcp(
     request: Request,
     payload: Dict[str, Any] = Body(...),
+    tags: Optional[str] = Query(None, description="Filter tools/list by tag(s) or 'full'"),
     x_idempotency_key: Optional[str] = Header(None, alias="x-idempotency-key"),
     x_nonce: Optional[str] = Header(None, alias="x-nonce"),
     x_dpop_proof: Optional[str] = Header(None, alias="DPoP"),
@@ -402,7 +462,8 @@ async def invoke_unified_mcp(
         return JSONResponse(status_code=202, content={})
 
     if method == "tools/list":
-        res = await discover_unified_tools(request=request, rpc=rpc)
+        effective_tags = tags or payload.get("params", {}).get("_meta", {}).get("tags")
+        res = await discover_unified_tools(request=request, tags=effective_tags, rpc=rpc)
         res["id"] = req_id
         return res
 
@@ -418,9 +479,7 @@ async def invoke_unified_mcp(
     params["name"] = actual_tool_name
     routed_payload = {**payload, "params": params}
 
-    # Unified Endpoint 경유 플래그 설정 (invoke_mcp_stateless 내부에서 hold_on_yield 처리에 활용됨)
     request.state.is_unified_mcp = True
-
     return await invoke_mcp_stateless(
         request=request,
         target_server_id=target_server_id,
