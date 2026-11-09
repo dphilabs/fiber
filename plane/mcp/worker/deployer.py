@@ -15,6 +15,7 @@ from xphi.arch.bound.adapter.pta import NodeSigner
 
 log = logging.getLogger("worker.deployer")
 
+
 class ExecutionDeployer(AsyncWorkerProtocol):
     def __init__(self):
         super().__init__(agent_name="execution.deployer")
@@ -67,6 +68,34 @@ class ExecutionDeployer(AsyncWorkerProtocol):
             return
 
         await super()._route_request_async(req)
+
+    async def handle_tools_list(self, req_id: Any):
+        tools = [
+            {
+                "name": "execute_db_migration",
+                "description": "Execute SQL schema migration on a target service environment with cryptographic HITL attestation for destructive production queries.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "service_name": {
+                            "type": "string",
+                            "description": "Target microservice or database identifier",
+                        },
+                        "target_env": {
+                            "type": "string",
+                            "enum": ["development", "staging", "production"],
+                            "description": "Deployment environment",
+                        },
+                        "sql_script": {
+                            "type": "string",
+                            "description": "SQL DDL/DML migration script to execute",
+                        },
+                    },
+                    "required": ["service_name", "target_env", "sql_script"],
+                },
+            }
+        ]
+        await self.send_response(req_id, {"tools": tools})
 
     async def handle_tools_call(self, req_id: Any, tool_name: str, arguments: Dict[str, Any], meta: Dict[str, Any]):
         if tool_name == "execute_db_migration":
@@ -180,12 +209,14 @@ class ExecutionDeployer(AsyncWorkerProtocol):
             self.pending_prompts.pop(prompt_req_id, None)
             return ""
 
+
 def main():
     server = ExecutionDeployer()
     try:
         asyncio.run(server.serve_forever_async())
     except KeyboardInterrupt:
         log.info("Server shutting down.")
+
 
 if __name__ == "__main__":
     main()
