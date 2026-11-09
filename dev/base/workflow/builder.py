@@ -13,7 +13,7 @@ from typing import List, Tuple, Any, Optional
 from fiber.llm.model.router.fallback import fallback_model_registry
 from xphi.arch.bound.scope.manager import managed_scope
 
-from xphi.state.topos.workflow import ErrorMessage, StopMessage, Workflow, WorkflowMessage, step
+from xphi.arch.model.workflow import ErrorMessage, StopMessage, Workflow, WorkflowMessage, step
 from xphi.state.phase.reactor import PhaseReactor
 from xphi.watcher.plane.emitter import get_emitter
 

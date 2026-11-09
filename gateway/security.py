@@ -21,7 +21,7 @@ from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.arch.model.auth import NodeAuthPayload
 from xphi.arch.bound.adapter.pta import NodeSigner, SignStateAdapter
 
-from xphi.arch.bound.adapter.settlement import (
+from xphi.state.settlement.mandate import (
     Ap2MandateConstraints,
     Ap2MandatePayload,
     Ap2Authorization,

@@ -10,7 +10,7 @@ from fiber.dev.base.scene.epoch import EpochBase
 from fiber.dev.base.scene.epoch import ActorIdentity
 from fiber.dev.base.scene.runner import SchemeRunner
 
-from xphi.arch.bound.adapter.settlement import ClearingAdapter
+from xphi.state.settlement.mandate import ClearingAdapter
 from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.node.runtime.wasm.method import WasmMethod
 from xphi.watcher.plane.emitter import get_emitter
