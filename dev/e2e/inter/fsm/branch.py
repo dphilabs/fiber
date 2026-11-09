@@ -8,7 +8,7 @@ from fiber.dev.base.workflow.config import E2EConfig, Phase, TestResult, get_fre
 from fiber.dev.base.workflow.pipeline import BasePipeline, log
 from fiber.gateway.bridge.fsm.polyglot import PolyglotExecutionBridge
 
-from xphi.node.runtime.fsm.traverser import GraphTraverser, TraversalResult
+from xphi.watcher.reflex.traverser import GraphTraverser, TraversalResult
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.anchor.store import AnchorStore

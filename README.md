@@ -329,7 +329,7 @@ The runtime resolves options per request (via JSON payload or `metadata`), envir
 | **`vcr_speed` / `VCR_SPEED`** | `"max"` \| `"real"` | Immediate execution (`~0ms`) or emulated historical latency pacing (`ttfb_ms`, `delta_ms`). |
 | **`vcr_chaos` / `vcr_tick`** | Float | Injects synthetic replay jitter (ms) or sets the SSE chunk coalescing window (default `100.0` ms). |
 
-> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./dev/abc/spec/infra/vcr.test.md)** · **[Fixture Format Spec](./dev/abc/spec/infra/vcr.fixture.format.md)**
+> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./dev/abc/spec/infra/vcr/test.md)** · **[Fixture Format Spec](./dev/abc/spec/infra/vcr/fixture.format.md)**
 
 ---
 
