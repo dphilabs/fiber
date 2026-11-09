@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import serialization
 
 from fiber.dev.base.scene.runner import SchemeRunner
 
-from xphi.arch.bound.adapter.settlement import MandateAdapter, Ap2MandateResult, SettlementReceipt, TransactionReceipt
+from xphi.state.settlement.mandate import MandateAdapter, Ap2MandateResult, SettlementReceipt, TransactionReceipt
 from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.node.runtime.wasm.method import WasmMethod
