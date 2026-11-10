@@ -34,9 +34,8 @@ def log_fail(msg: str) -> None:
 def run_cmd(cmd: list[str], env: dict[str, str] | None = None, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, env=env, capture_output=True, text=True, check=check)
 
-
 def verify_brew_paths() -> tuple[Path, Path]:
-    """1. Verify Homebrew prefix and opt/fiber installation directory."""
+    """Verify Homebrew prefix and opt/fiber installation directory."""
     if not shutil.which("brew"):
         log_fail("Homebrew ('brew') binary not found in PATH.")
 
@@ -54,7 +53,7 @@ def verify_brew_paths() -> tuple[Path, Path]:
 
 
 def verify_virtualenv_and_links(brew_prefix: Path, opt_fiber: Path) -> Path:
-    """2. Verify bin/fiber symlink and isolated libexec Python 3.12 environment."""
+    """Verify bin/fiber symlink and isolated libexec Python 3.12 environment."""
     fiber_bin = brew_prefix / "bin" / "fiber"
     libexec_fiber = opt_fiber / "libexec" / "bin" / "fiber"
     libexec_py = opt_fiber / "libexec" / "bin" / "python"
@@ -84,17 +83,28 @@ def verify_virtualenv_and_links(brew_prefix: Path, opt_fiber: Path) -> Path:
 
     return fiber_bin
 
+def verify_state_backend(opt_fiber: Path) -> None:
+    """Verify embedded Valkey (valkeylite) binary inside libexec virtualenv."""
+    libexec_py = opt_fiber / "libexec" / "bin" / "python"
+    probe_code = (
+        "import os, pathlib, valkeylite; "
+        "pkg = pathlib.Path(valkeylite.__file__).resolve().parent; "
+        "bins = [str(p) for p in pkg.rglob('valkey-server') if os.access(p, os.X_OK)]; "
+        "print(bins[0] if bins else '')"
+    )
+    res = run_cmd([str(libexec_py), "-c", probe_code], check=False)
+    valkey_bin = res.stdout.strip() if res.returncode == 0 else ""
 
-def verify_dependencies(brew_prefix: Path) -> None:
-    """3. Verify Redis dependency."""
-    redis_cli = shutil.which("redis-cli") or str(brew_prefix / "opt" / "redis" / "bin" / "redis-cli")
-    if not os.access(redis_cli, os.X_OK):
-        log_fail("Dependency 'redis' (redis-cli) not found.")
-    log_pass(f"Dependency 'redis' verified ({redis_cli})")
+    if not valkey_bin:
+        fallback_bin = shutil.which("valkey-server") or ""
+        if not fallback_bin:
+            log_fail("Embedded 'valkeylite' (valkey-server binary) not found in libexec.")
+        valkey_bin = fallback_bin
 
+    log_pass(f"Embedded Valkey backend verified ({valkey_bin})")
 
 def verify_sandbox_bootstrap(fiber_bin: Path) -> None:
-    """4. Replicate `brew test` in an isolated temporary HOME directory."""
+    """Replicate `brew test` in an isolated temporary HOME directory."""
     with tempfile.TemporaryDirectory(prefix="fiber_brew_verify_") as tmp_dir:
         tmp_home = Path(tmp_dir)
         env = os.environ.copy()
@@ -122,9 +132,8 @@ def verify_sandbox_bootstrap(fiber_bin: Path) -> None:
         else:
             log_info(f"'fiber sign status' returned {sign_res.returncode} (non-fatal)")
 
-
 def verify_service_and_gateway(brew_prefix: Path, host: str = "127.0.0.1", port: int = 8356) -> None:
-    """5. Check service directories and live loopback daemon (:8356) if active."""
+    """Check service directories and live loopback daemon (:8356) if active."""
     var_fiber = brew_prefix / "var" / "fiber"
     log_fiber = brew_prefix / "var" / "log" / "fiber"
 
@@ -142,7 +151,7 @@ def verify_service_and_gateway(brew_prefix: Path, host: str = "127.0.0.1", port:
 
     if not is_listening:
         log_info(f"Daemon is not currently listening on {host}:{port}.")
-        log_info("To start the background daemon: `brew services start redis && brew services start dphilabs/fiber/fiber`")
+        log_info("To start the background daemon: `brew services start dphilabs/fiber/fiber`")
         return
 
     log_pass(f"Loopback daemon is active on {host}:{port}")
@@ -157,15 +166,13 @@ def verify_service_and_gateway(brew_prefix: Path, host: str = "127.0.0.1", port:
 
     log_pass(f"Gateway HTTP endpoint responded (HTTP {status_code} on {url})")
 
-
 def run_brew_audit(tap_formula: str = "dphilabs/fiber/fiber") -> None:
-    """Optional: Run `brew audit --strict` and `brew test`."""
+    """Optional: Run `brew audit --strict`."""
     log_info(f"Running `brew audit --strict {tap_formula}`...")
     audit_res = run_cmd(["brew", "audit", "--strict", tap_formula], check=False)
     if audit_res.returncode != 0:
         log_fail(f"`brew audit --strict` failed:\n{audit_res.stdout}\n{audit_res.stderr}")
     log_pass("`brew audit --strict` passed with 0 offenses")
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify Fiber Homebrew installation and runtime.")
@@ -174,12 +181,12 @@ def main() -> None:
     args = parser.parse_args()
 
     print("========================================================")
-    print(" Fiber Homebrew Installation & Runtime Verifier (Python)")
+    print(" Fiber Homebrew Installation & Runtime Verifier")
     print("========================================================")
 
     brew_prefix, opt_fiber = verify_brew_paths()
     fiber_bin = verify_virtualenv_and_links(brew_prefix, opt_fiber)
-    verify_dependencies(brew_prefix)
+    verify_state_backend(opt_fiber)
     verify_sandbox_bootstrap(fiber_bin)
     verify_service_and_gateway(brew_prefix)
 

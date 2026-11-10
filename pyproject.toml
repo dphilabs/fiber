@@ -7,7 +7,7 @@ name = "fiber"
 #version = "1.1.2"
 description = "The Universal Integration Boundary for heterogeneous AI ecosystems"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dynamic = ["version", "dependencies"]
 authors = [{ name = "Wittgena Lee", email = "wittegena@gmail.com" }]
 license = "MIT"
@@ -31,7 +31,7 @@ dev = ["pytest", "pytest-asyncio"]
 [tool.hatch.metadata.hooks.custom]
 path = "plane/ops/hatch.py"
 base_dependencies = [
-    "uvloop", "psutil", "fastapi", "redis==8.0.1", "pyyaml", "orjson", "typer", "canonicaljson", "aiohttp", "requests",
+    "uvloop", "psutil", "fastapi", "valkeylite==9.1.*; sys_platform != 'win32'", "redis==8.0.1", "pyyaml", "orjson", "typer", "canonicaljson", "aiohttp", "requests",
     "watchdog", "rocksdict", "filetype", "openai", "anthropic", "google-genai", "mcp==2.0.0a3", "pydantic", "httpx", "wasmtime",
     "tinytag", "typing_extensions", "eth_account", "web3", "numpy", "duckdb", "qrcode", "tokenizers", "tqdm", "pyotp", "deprecation", "ollama",
     "onnxruntime", "pytest-asyncio", "nicegui", "docker", "libtmux", "platformdirs"

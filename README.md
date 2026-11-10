@@ -447,10 +447,7 @@ Console Studio is a unified web console for the local daemon featuring **MCP Gat
 
 ### 3.2. Python Environment via `uv pip` (Recommended for SDK & Local Control Plane)
 
-**Prerequisites**
-
-* **Python**: `>= 3.12`
-* **Redis** *(Optional)*: Only required for distributed modes (`fiber daemon`), pub/sub event routing, and stateful governance (e.g., Stream Breaker). Standalone pipeline execution runs entirely in-memory without Redis.
+- **Python**: `>= 3.12`
 
 Best suited for full-stack integration—including the in-process Python harness (`from fiber.llm.entry import acompletion`), CLI orchestration, and local daemon deployment. We recommend using `uv pip` for deterministic dependency resolution:
 
@@ -476,12 +473,11 @@ Best suited for running Fiber as a persistent, OS-supervised background service 
 > **Isolated Runtime & Service Supervision:** The Homebrew formula provisions a dedicated Python 3.12 runtime under `libexec`, links the `fiber` CLI into your system `PATH`, and registers a `launchd` service (`keep_alive`).
 
 ```bash
-## Install Fiber (auto-provisions isolated Python 3.12 runtime & Redis dependency)
+## Install Fiber (auto-provisions isolated Python 3.12 runtime & embedded Valkey)
 brew install dphilabs/fiber/fiber
 
 ## Bootstrap local workspace (~/.anchor) & start background services
 fiber init
-brew services start redis
 brew services start dphilabs/fiber/fiber
 
 ## Verify install, bootstrap, and gateway

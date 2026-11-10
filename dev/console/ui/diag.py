@@ -73,7 +73,7 @@ def _caller_tag(depth: int = 2) -> str:
 def _emit_safe(level: str, msg: str, *args: Any, depth: int = 3, **ctx: Any) -> None:
     """
     모든 콘솔 내부 로그의 단일 출구.
-    - flow_id="global": TunnelSurface의 Redis 발행을 원천 차단
+    - flow_id="global": TunnelSurface의 Tunnel 발행을 원천 차단
     - ui_internal=True: StudioPlaneObserver(plane.ingest)의 콘솔 화면 재유입을 원천 차단
     """
     caller = ctx.pop("caller", None) or _caller_tag(depth=depth)
@@ -148,7 +148,7 @@ async def snapshot(reason: str = "manual") -> Dict[str, Any]:
     has_issue = bool(anomalies or js_errors)
 
     state_dump = {
-        "redis_online": state.pipeline.redis_online,
+        "tunnel_online": state.pipeline.tunnel_online,
         "finops_fuel": state.finops.ledger_balance,
         "xray_latencies": list(state.security.xray_latencies),
         "cli_buffered": len(refs.cli_buffer),

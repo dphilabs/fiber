@@ -201,7 +201,7 @@ async def _on_startup(url: str) -> None:
     """Initialize node/account/MCP state and spawn non-blocking background workers."""
     await _sync_initial_node_and_account_state()
     _bg_tasks.append(asyncio.create_task(header.ensure_console_compats(silent=True), name="fiber-compats-sync"))
-    _bg_tasks.append(asyncio.create_task(plane.redis_pubsub_worker(), name="fiber-redis-pubsub"))
+    _bg_tasks.append(asyncio.create_task(plane.tunnel_pubsub_worker(), name="fiber-tunnel-pubsub"))
     _bg_tasks.append(asyncio.create_task(mcp.mcp_gateway_health_worker(), name="fiber-mcp-health"))
     _bg_tasks.append(asyncio.create_task(_delayed_open_window(url), name="fiber-open-window"))
 

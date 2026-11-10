@@ -6,7 +6,6 @@ import json
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-import redis.exceptions
 import uvicorn
 
 from fiber.dev.base.workflow.config import (
@@ -195,7 +194,7 @@ class BasePipeline(PipelineRunner):
                     if msg and msg.get("type") == "message":
                         raw = msg["data"]
                         return json.loads(raw) if isinstance(raw, (str, bytes)) else raw
-                except redis.exceptions.TimeoutError:
+                except TimeoutError:
                     continue
                 await asyncio.sleep(0.05)
 

@@ -34,23 +34,25 @@ log = get_emitter(__name__)
 API_KEY_NAME = "X-Dphi-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
+
 class Config(BaseModel):
     web_url: str = ""
     gateway_url: str = ""
-    allow_cors_origins: list[str] = ["http://localhost:3000"] 
+    allow_cors_origins: list[str] = ["http://localhost:3000"]
     session_api_keys: list[str] = []
     pubsub_channel: str = "audit_channel"
     wasm_timeout: float = 30.0
     committee_pubs: list[str] = []
-    
-    redis_url: str = "redis://localhost:6379"
+
     max_payload_size: int = 10485760  # 10MB
-    
+
     vcr_default_mode: str = os.getenv("VCR_MODE", "live")
     vcr_fixture_dir: str = os.getenv("VCR_FIXTURE_DIR", "")
 
+
 def get_default_config() -> Config:
     return Config()
+
 
 async def verify_access_credential(request: Request, api_key: str = Security(api_key_header)):
     raw_token = request.headers.get("Authorization") or request.headers.get("X-Fiber-Fuel-Receipt")
@@ -61,7 +63,7 @@ async def verify_access_credential(request: Request, api_key: str = Security(api
             translated_receipt = await TokenTranslator.exchange(jwt_token)
         else:
             translated_receipt = raw_token
-            
+
     request.state.fuel_receipt = translated_receipt
     path = request.url.path
     whitelist = {
@@ -71,9 +73,9 @@ async def verify_access_credential(request: Request, api_key: str = Security(api
         "/openapi.json",
         "/docs",
         "/redoc",
-        "/_health"
+        "/_health",
     }
-    
+
     if path in whitelist or path.startswith("/v1/mcp-gateway/"):
         return None
 
@@ -83,23 +85,24 @@ async def verify_access_credential(request: Request, api_key: str = Security(api
 
     if not request.state.fuel_receipt:
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Zero-Trust Enforced: Valid Token or Payment Required.",
-            headers={"WWW-Authenticate": 'Bearer realm="api"'}
+            headers={"WWW-Authenticate": 'Bearer realm="api"'},
         )
-        
+
     return request.state.fuel_receipt
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Starting DPHI REST Edge API Payload (Stateless Mode)...")
     config: Config = getattr(app.state, "config", get_default_config())
-    
+
     try:
         log.info("Initializing Origin Registry and verifying cryptographic state...")
         registry = OriginRegistry()
         trusted_state = registry.load_and_verify()
-        
+
         app.state.origin_registry = registry
         log.info(f"Origin Registry integrated successfully. Active signers: {len(trusted_state.active_signers)}")
 
@@ -117,7 +120,6 @@ async def lifespan(app: FastAPI):
             loaded_names = [type(i).__name__ for i in app.state.pipeline_interceptors]
             log.info(f"Pipeline Interceptors Ready: {loaded_names}")
 
-        # VCR Engine Proxy Mounting (Supports dynamic per-request live/record/replay switching)
         fixture_root = config.vcr_fixture_dir or str(resolve_path("compats") / "suites" / "base")
         default_vcr_mode = (config.vcr_default_mode or "live").lower()
         bootstrap_cfg = VCRPlaybackConfig(
@@ -138,17 +140,14 @@ async def lifespan(app: FastAPI):
         pubsub = DistributedPubSub(channel=config.pubsub_channel, tunnel=tunnel)
         await pubsub.start_listening()
         app.state.pubsub = pubsub
-        
-        # WASM Broker 초기화
+
         app.state.broker = WasmBroker(timeout=config.wasm_timeout)
         log.info(f"WasmBroker initialized (timeout: {config.wasm_timeout}s).")
 
-        # OTLP Parser & Extraction Engine Init
         otlp_parser = OtlpRulesetParser()
         app.state.otlp_engine = otlp_parser.parse_ruleset(default_otlp_ruleset)
         log.info("StrictOtlpExtractionEngine initialized.")
 
-        # Stateless Transition Bridge
         nonce_protector = NonceReplayProtector(tunnel=tunnel)
         mapper = IdempotencyMapper(tunnel=tunnel)
         app.state.mcp_transition_adapter = TransitionBridge(mapper=mapper, nonce_protector=nonce_protector)
@@ -161,7 +160,7 @@ async def lifespan(app: FastAPI):
     finally:
         app.state.is_ready = False
         log.info("Shutting down receptor.rest payload safely...")
-        
+
         try:
             VCRInjector.remove()
         except Exception as e:
@@ -172,20 +171,20 @@ async def lifespan(app: FastAPI):
                 await app.state.pubsub.close()
             except Exception as e:
                 log.error(f"Error closing PubSub: {e}")
-        
+
         log.info("API Payload Teardown complete. Goodbye.")
 
 
-# App Factory
 def _get_root_path(config: Config) -> str:
     if config.web_url:
         return urlparse(config.web_url).path.rstrip("/")
     return ""
 
+
 def create_app(
     config: Optional[Config] = None,
     tunnel: Optional[Any] = None,
-    anchor_store: Optional[Any] = None  
+    anchor_store: Optional[Any] = None,
 ) -> FastAPI:
     config = config or get_default_config()
     app = FastAPI(
@@ -193,20 +192,18 @@ def create_app(
         description="Edge Gateway",
         lifespan=lifespan,
         root_path=_get_root_path(config),
-        dependencies=[Depends(verify_access_credential)]
+        dependencies=[Depends(verify_access_credential)],
     )
-    
+
     app.state.config = config
     app.state.tunnel = tunnel
-    app.state.anchor_store = anchor_store  
-    app.state.is_ready = False  
-    
-    # Routers Binding
-    app.include_router(compliance_edge, tags=["mcp-exposed"]) 
-    app.include_router(llm_edge)
-    app.include_router(mcp_bridge)  
+    app.state.anchor_store = anchor_store
+    app.state.is_ready = False
 
-    # Readiness Probe
+    app.include_router(compliance_edge, tags=["mcp-exposed"])
+    app.include_router(llm_edge)
+    app.include_router(mcp_bridge)
+
     @app.get("/_health", tags=["system"], include_in_schema=False)
     async def readiness_probe():
         if getattr(app.state, "is_ready", False):
@@ -215,28 +212,28 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        client_host = request.client.host if request.client else 'unknown'
+        client_host = request.client.host if request.client else "unknown"
         safe_hints = []
         for err in exc.errors():
             loc = err.get("loc", [])
             if len(loc) > 0:
                 field_name = str(loc[-1])
-                if not field_name.isdigit(): 
+                if not field_name.isdigit():
                     safe_hints.append(field_name)
-        
+
         hint_msg = ""
         if safe_hints:
             unique_hints = sorted(list(set(safe_hints)))
             hint_msg = f" Missing or invalid field(s) detected: {unique_hints}."
 
         log.warning(f"[Security] Rejected malformed payload from {client_host}.{hint_msg}")
-        
+
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, 
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
                 "detail": f"Payload validation failed.{hint_msg}",
-                "resolution": "Ensure the payload complies with the strictly required JSON schema."
-            }
+                "resolution": "Ensure the payload complies with the strictly required JSON schema.",
+            },
         )
 
     @app.exception_handler(RpcException)
@@ -247,8 +244,8 @@ def create_app(
             content={
                 "error": True,
                 "detail": exc.detail,
-                "resolution": "Check the upstream RPC worker or payload requirements."
-            }
+                "resolution": "Check the upstream RPC worker or payload requirements.",
+            },
         )
 
     app.add_middleware(SentinelFirewallMiddleware, max_body_size=config.max_payload_size)
@@ -261,5 +258,5 @@ def create_app(
     mcp.bind_fastapi(app, allowed_tags=["mcp-exposed"])
     mcp_asgi_app = mcp.sse_app()
     app.mount("/mcp", mcp_asgi_app)
-    
+
     return app
