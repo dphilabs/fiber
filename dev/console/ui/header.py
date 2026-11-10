@@ -136,7 +136,7 @@ def build_header() -> None:
             with ui.row().classes("w-full items-center justify-between no-wrap"):
                 with ui.row().classes("items-center gap-3"):
                     ui.label("Runtime Harness").classes("text-base font-extrabold tracking-wider text-white")
-                    ui.badge().bind_text_from(state, "redis_badge_text").props(
+                    ui.badge().bind_text_from(state, "tunnel_badge_text").props(
                         "color=slate-8 text-color=emerald-3"
                     ).classes("text-xs px-2 py-0.5")
                     ui.badge().bind_text_from(state.security, "ssh_badge_text").props(

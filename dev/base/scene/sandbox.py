@@ -17,9 +17,9 @@ log = get_emitter("scene.sandbox")
 
 # [Shared Constants & Payloads]
 class TestPayloads:
-    PHASE_GEN       = {"topo": 50, "press": -10, "rupture": False}
-    INJECTED_STATE  = {"topo": 100, "press": 200, "rupture": True, "injected_anchor": 999999, "injected_tick": 77}
-    MALFORMED_JSON  = '{"topo": 50, "press": -10, "rupture": '
+    PHASE_GEN       = {"topo": 50, "press": -10, "discont": False}
+    INJECTED_STATE  = {"topo": 100, "press": 200, "discont": True, "injected_anchor": 999999, "injected_tick": 77}
+    MALFORMED_JSON  = '{"topo": 50, "press": -10, "discont": '
 
 @dataclass(frozen=True)
 class TestConstants:

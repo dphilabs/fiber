@@ -162,9 +162,9 @@ class MCPRouterPipeline(BasePipeline):
 
     async def phase_billing_rejection(self) -> None:
         tunnel = await TunnelFactory.get_default()
-        redis_key = f"config:fuel:{self.finlib_id}"
+        tunnel_key = f"config:fuel:{self.finlib_id}"
 
-        await tunnel.set(redis_key, "1")
+        await tunnel.set(tunnel_key, "1")
         try:
             res = await self._invoke_gateway(
                 self.finlib_id, "eval_math", {"expression": "1 + 1"}, req_id=300, receipt="invalid_receipt"
@@ -172,7 +172,7 @@ class MCPRouterPipeline(BasePipeline):
             if res.status_code != 402:
                 raise RuntimeError(f"Expected HTTP 402, got {res.status_code}")
         finally:
-            await tunnel.delete(redis_key)
+            await tunnel.delete(tunnel_key)
 
     async def phase_error_routing(self) -> None:
         res = await self._invoke_gateway(
@@ -212,9 +212,9 @@ class MCPRouterPipeline(BasePipeline):
 
     async def phase_dynamic_pricing_alignment(self) -> None:
         tunnel = await TunnelFactory.get_default()
-        redis_key = f"config:fuel:{self.search_id}"
+        tunnel_key = f"config:fuel:{self.search_id}"
 
-        await tunnel.set(redis_key, "1")
+        await tunnel.set(tunnel_key, "1")
         try:
             await asyncio.sleep(1.0)
             price_tag_key = f"eco:price_tag:{self.search_id}"
@@ -253,7 +253,7 @@ class MCPRouterPipeline(BasePipeline):
                 f"  └─ Gateway precisely rejected underfunded request based on Dynamic Price ({expected_fee_string})."
             )
         finally:
-            await tunnel.delete(redis_key)
+            await tunnel.delete(tunnel_key)
 
 
 class CoreSuiteRunner:

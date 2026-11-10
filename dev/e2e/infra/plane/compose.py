@@ -3,7 +3,6 @@ import os
 import sys
 import argparse
 import logging
-import asyncio
 from pathlib import Path
 from typing import Any, List, Dict
 
@@ -16,15 +15,17 @@ from xphi.watcher.plane.emitter import get_emitter
 FIBER_ROOT = resolve_path("fiber")
 log = get_emitter("e2e.plane.compose")
 
+
 class ComposeWorkflowScene:
-    """Executes Docker Compose runtime to cross-validate System E2E tests"""
+    """Executes Docker Compose runtime to cross-validate System E2E tests."""
+
     def __init__(self, broker: Any = None, context: ComposeContext = None):
         self.broker = broker
         self.context = context
-        
+
         self.adapter = context.adapter if context else None
         self.auditors = context.auditors if context else {}
-        
+
         self.fail_count = 0
         self.failed_cases: List[Dict[str, str]] = []
         self.log = get_emitter("scene.compose")
@@ -38,11 +39,11 @@ trap 'EXIT_CODE=$?; if [ $EXIT_CODE -ne 0 ] && [ -f kernel_boot.log ]; then echo
 echo "[CI-SYNC] Verifying Pre-initialized Node Identity (Baked in Image)..."
 fiber sign status
 
-echo "[CI-SYNC] Booting Kernel (Background)..."
+echo "[CI-SYNC] Booting Kernel & Embedded Valkey (Background)..."
 nohup python -u -m xphi.node.ops.boot > kernel_boot.log 2>&1 &
 
 echo "[CI-SYNC] Waiting for Kernel Healthcheck..."
-timeout 30 bash -c 'while ! curl -s http://127.0.0.1:8356/v1/exchange/keys > /dev/null; do sleep 1; done' || { echo -e "\\nKERNEL BOOT FAILED! DUMPING LOG: \\n"; cat kernel_boot.log; exit 1; }
+timeout 30 bash -c 'while ! curl -sf http://127.0.0.1:8356/_health > /dev/null; do sleep 1; done' || { echo -e "\\nKERNEL BOOT FAILED! DUMPING LOG: \\n"; cat kernel_boot.log; exit 1; }
 echo "Kernel is fully up and running!"
 
 echo "[CI-SYNC] Executing E2E Gateway Client..."
@@ -58,17 +59,18 @@ fiber e2e infra.plane.flare --mode dev
 
         try:
             success = await self.adapter.apply_job(
-                job_name="system-e2e-test", 
+                job_name="system-e2e-test",
                 env={
                     "XPHI_ENV": "ci",
-                    "REDIS_URL": "redis://redis:6379/0",
-                    "FIBER_E2E_STEPS": e2e_bash_script.strip()
-                }
+                    "FIBER_E2E_STEPS": e2e_bash_script.strip(),
+                },
             )
             if not success:
-                raise RuntimeError("System E2E job fractured. Check the streamed Docker Compose logs above for specific traceback.")
-                
-            self.log.info("  └─ System E2E Test Passed (Services & Binding OK)")
+                raise RuntimeError(
+                    "System E2E job fractured. Check the streamed Docker Compose logs above for specific traceback."
+                )
+
+            self.log.info("  └─ System E2E Test Passed (Services & Socket Tunnel Binding OK)")
         except Exception as e:
             self.fail_count += 1
             self.failed_cases.append({"title": "System E2E Test Job", "error": str(e)})
@@ -76,7 +78,7 @@ fiber e2e infra.plane.flare --mode dev
 
     async def run_all(self):
         self.log.info("\n=== [START] Executing COMPOSE CI/CD Workflow Scenes ===")
-        
+
         if not self.adapter:
             self.log.error("  └─ Compose Runtime Availability: Failed")
             self.fail_count += 1
@@ -88,6 +90,7 @@ fiber e2e infra.plane.flare --mode dev
             self.log.info("=== [DONE] All Workflow Scenes Passed Successfully ===")
         else:
             self.log.warning(f"=== [DONE] Workflow Scenes Completed with {self.fail_count} Failures ===")
+
 
 class ComposeFlow:
     def __init__(self, mode: str = "dev", keep_workspace: bool = False, rebuild: bool = False):
@@ -107,29 +110,30 @@ class ComposeFlow:
             controller = ComposeOrchestrator(
                 mode=self.mode,
                 suites={"workflow_validation": ComposeWorkflowScene},
-                rebuild=self.rebuild
+                rebuild=self.rebuild,
             )
             controller.keep_workspace = self.keep_workspace
-            
+
             success, err_msg = await controller.execute(broker=None)
-            
-            self.log.info("\n" + "="*70)
-            self.log.info(f"COMPOSE CI/CD PIPELINE EXECUTION REPORT".center(70))
-            self.log.info("="*70)
+
+            self.log.info("\n" + "=" * 70)
+            self.log.info("COMPOSE CI/CD PIPELINE EXECUTION REPORT".center(70))
+            self.log.info("=" * 70)
             if success:
-                self.log.info(f"[SUCCESS] All Workflow Declarative Tests PASSED.")
-                self.log.info("="*70 + "\n")
+                self.log.info("[SUCCESS] All Workflow Declarative Tests PASSED.")
+                self.log.info("=" * 70 + "\n")
             else:
-                self.log.critical(f"[FAILED] COMPOSE CI Test execution terminated with errors.")
+                self.log.critical("[FAILED] COMPOSE CI Test execution terminated with errors.")
                 if err_msg:
-                     self.log.error(f"Reason: {err_msg}")
+                    self.log.error(f"Reason: {err_msg}")
                 sys.exit(1)
-                
+
         finally:
             os.chdir(original_cwd)
 
     async def run(self):
         await self.test()
+
 
 def main(args_list: list[str] = None):
     parser = argparse.ArgumentParser(description="Fiber CI/CD E2E Orchestrator via DOCKER COMPOSE")
@@ -137,7 +141,7 @@ def main(args_list: list[str] = None):
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
-    
+
     args, _ = parser.parse_known_args(args_list)
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)

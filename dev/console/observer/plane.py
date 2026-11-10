@@ -19,13 +19,10 @@ from fiber.dev.console.observer.signal import (
 )
 from fiber.plane.infra.account.state import state, refs
 import fiber.dev.console.ui.diag as diag
+from xphi.arch.contract.config.tunnel import TUNNEL_SOCK_PATH
 from xphi.arch.contract.event.next import EventObserver, LogEvent
+from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.watcher.plane.regulator import default_plane
-
-try:
-    import redis.asyncio as redis
-except ImportError:
-    redis = None
 
 surface_filter = SurfaceFilter(min_level="INFO")
 _seen_fp: deque[str] = deque(maxlen=256)
@@ -61,6 +58,7 @@ def _is_self_diagnostic(payload: Dict[str, Any]) -> bool:
     src = str(payload.get("source_id") or "").strip().lower()
     return src.startswith(_SELF_SOURCE_PREFIXES)
 
+
 def _format_line(payload: Dict[str, Any], meta: RoutedSurfaceMeta) -> str:
     p_mark = "🔥" if meta.is_bursting else ""
     gain = payload.get("gain")
@@ -72,6 +70,7 @@ def _format_line(payload: Dict[str, Any], meta: RoutedSurfaceMeta) -> str:
     tags = f"{p_mark}{g_str}{a_str}"
     msg = str(payload.get("message") or "").strip()
     return f"[{meta.level}] {tags + ' ' if tags else ''}{msg}{f_str}"
+
 
 def _apply_meta(meta: RoutedSurfaceMeta, payload: Dict[str, Any], raw_msg: str = "") -> None:
     """`signal.SurfaceClassifier`가 분류한 `RoutedSurfaceMeta`를 소비하여 State 및 UI 반영"""
@@ -182,7 +181,7 @@ def _apply_meta(meta: RoutedSurfaceMeta, payload: Dict[str, Any], raw_msg: str =
             f.last_op = "REVOKE"
             f.push_chart_point()
 
-        # 이미 복구(AUTO_RESTORE)나 수동 충전으로 잔액이 양수(> 0)로 복원된 상태라면 지연 도착한 차단 로그는 무시
+        # 이미 복구(AUTO_RESTORE)나 수동 충전으로 잔액이 양수(greater than 0)로 복원된 상태라면 지연 도착한 차단 로그는 무시
         if f.ledger_balance > 0:
             return
 
@@ -203,7 +202,8 @@ def _apply_meta(meta: RoutedSurfaceMeta, payload: Dict[str, Any], raw_msg: str =
                 refs.live_stream_log.push("Agent Response: 'HTTP 402: Remaining fuel exhausted. Halted safely.'")
             ui.notify("Kill-Switch Activated! Active stream severed.", type="negative", position="top")
 
-# Public Ingestion API (In-Memory / CLI / Redis)
+
+# Public Ingestion API (In-Memory / CLI / Tunnel)
 def ingest(event_or_dict: Union[LogEvent, Dict[str, Any]]) -> bool:
     """모든 플레인 이벤트가 통과하는 단일 진입점 (자기 진단 로그 루프 차단 내장)"""
     payload = event_or_dict if isinstance(event_or_dict, dict) else event_or_dict.__dict__
@@ -243,6 +243,7 @@ def ingest(event_or_dict: Union[LogEvent, Dict[str, Any]]) -> bool:
 def emit(source_id: str, message: str, level: str = "INFO", **ctx: Any) -> None:
     ingest({"source_id": source_id, "message": message, "level": level, "context": ctx})
 
+
 def emit_ledger(source_id: str, message: str, fuel: int, core: int, ver: int, level: str = "INFO") -> None:
     emit(
         source_id,
@@ -256,6 +257,7 @@ def emit_ledger(source_id: str, message: str, fuel: int, core: int, ver: int, le
         },
     )
 
+
 def bridge_cli_line(line: str) -> None:
     """CLI stdout의 `LOG | PHASE | LEVEL | src: msg` 포맷을 파싱하여 ingest로 연결"""
     if "|" not in line or ":" not in line:
@@ -267,11 +269,14 @@ def bridge_cli_line(line: str) -> None:
         src, msg = parts[3].split(":", 1)
         emit(src.split()[-1], msg.strip(), parts[2], phase=parts[1])
 
+
 class StudioPlaneObserver(EventObserver):
     def update(self, event: LogEvent) -> None:
         ingest(event)
 
+
 _studio_observer: StudioPlaneObserver | None = None
+
 
 def mount_studio_plane() -> None:
     """콘솔(Studio UI) 시작 시에만 명시적으로 호출하여 default_plane에 옵저버를 연결합니다."""
@@ -281,39 +286,42 @@ def mount_studio_plane() -> None:
         default_plane.attach(_studio_observer)
 
 
-async def check_redis_health() -> bool:
+async def check_tunnel_health() -> bool:
     p = state.pipeline
-    if redis is None:
-        p.redis_online = False
+    if not TUNNEL_SOCK_PATH.exists():
+        p.tunnel_online = False
         return False
-    client = None
+
+    tunnel = None
     try:
-        client = redis.from_url(p.redis_url, decode_responses=True)
-        await asyncio.wait_for(client.ping(), timeout=0.4)
-        p.redis_online = True
+        tunnel = await TunnelFactory.get_isolated(max_connections=2, socket_timeout=0.5)
+        await asyncio.wait_for(tunnel.ping(), timeout=0.4)
+        p.tunnel_online = True
     except Exception:
-        p.redis_online = False
+        p.tunnel_online = False
     finally:
-        if client is not None:
+        if tunnel is not None:
             try:
-                await client.aclose()
+                await tunnel.aclose()
             except Exception:
                 pass
-    return p.redis_online
+    return p.tunnel_online
 
 
-async def redis_pubsub_worker() -> None:
+async def tunnel_pubsub_worker() -> None:
     mount_studio_plane()
     p = state.pipeline
     while True:
-        if not await check_redis_health():
+        if not await check_tunnel_health():
             await asyncio.sleep(3.0)
             continue
-        client = None
+
+        tunnel = None
         pubsub = None
         try:
-            client = redis.from_url(p.redis_url, decode_responses=True)
-            pubsub = client.pubsub()
+            # socket_timeout=None 필수: 유휴 구간에서 pubsub.listen()이 5초마다 끊기는 것 방지
+            tunnel = await TunnelFactory.get_isolated(max_connections=4, socket_timeout=None)
+            pubsub = tunnel.pubsub()
             await pubsub.psubscribe("log:*", "finops:*", "mcp:*", "sign:*", "vcr:*", "node:*")
             refs.push_pubsub("plane:bus", "Subscribed to TunnelSurface ('log:*') & Control Channels")
             async for msg in pubsub.listen():
@@ -328,20 +336,21 @@ async def redis_pubsub_worker() -> None:
                     except Exception:
                         pass
                 ingest({"source_id": ch.replace(":", "."), "message": data, "level": "INFO"})
+            p.tunnel_online = False
         except asyncio.CancelledError:
             break
         except Exception as e:
-            p.redis_online = False
-            refs.push_pubsub("plane:bus", f"Redis offline ({e}) -> In-Memory StudioPlaneObserver Active")
+            p.tunnel_online = False
+            refs.push_pubsub("plane:bus", f"Tunnel offline ({e}) -> In-Memory StudioPlaneObserver Active")
             await asyncio.sleep(2.0)
         finally:
             if pubsub is not None:
                 try:
-                    await pubsub.aclose()
+                    await pubsub.close()
                 except Exception:
                     pass
-            if client is not None:
+            if tunnel is not None:
                 try:
-                    await client.aclose()
+                    await tunnel.aclose()
                 except Exception:
                     pass

@@ -1,18 +1,13 @@
 # fiber.plane.infra.daemon.rest
 import os
 import asyncio
-import json
-import sys
-import datetime
-from typing import Optional, List, Literal
-import uvicorn
+from typing import Optional, List
 from contextlib import suppress
-from aiohttp import web, ClientSession
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import uvicorn
 
 from fiber.gateway.payload import create_app, Config
 
-from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT, FIBER_GATEWAY_URL, REDIS_URL, PUBSUB_CHANNEL
+from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT, PUBSUB_CHANNEL
 from xphi.arch.contract.config.constants import MAX_PAYLOAD_SIZE, WASM_TIMEOUT
 from xphi.arch.contract.registry.unified import contract
 
@@ -24,13 +19,12 @@ from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("daemon.rest")
 
-
 async def clear_zombie_ports(ports: List[int], tag: str):
-    """지정된 포트들을 점유하고 있는 기존 프로세스를 정리하는 공통 유틸리티"""
-    reaper = SystemOps(redis_conn=None, tag=tag)
+    """Terminates existing processes occupying the target ports."""
+    reaper = SystemOps(tunnel=None, tag=tag)
     my_pid = str(os.getpid())
-    is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
-    
+    is_root = os.geteuid() == 0 if hasattr(os, "geteuid") else False
+
     for port in set(ports):
         if port < 1024 and not is_root:
             log.warning(f"[{tag}] Port {port} requires elevated privileges. Cleanup bypassed.")
@@ -46,11 +40,12 @@ async def clear_zombie_ports(ports: List[int], tag: str):
                     await reaper._execute_kill(pid, force=True)
                 except Exception as kill_err:
                     log.error(f"[{tag}] Failed to terminate PID {pid} (Permission/OS restriction): {kill_err}")
-            
+
             if pids:
                 await asyncio.sleep(1.5)
         except Exception as e:
             log.warning(f"[{tag}] Error scanning port {port}: {e}")
+
 
 @contract.daemon("rest_edge")
 class RestEdgeDaemon(AbstractDaemon):
@@ -75,9 +70,8 @@ class RestEdgeDaemon(AbstractDaemon):
 
             resolved_url = os.getenv("FIBER_GATEWAY_URL", f"http://127.0.0.1:{self.target_port}")
             runtime_config = Config(
-                internal_edge_url=resolved_url,
-                redis_url=REDIS_URL,
-                max_payload_size=MAX_PAYLOAD_SIZE, 
+                gateway_url=resolved_url,
+                max_payload_size=MAX_PAYLOAD_SIZE,
                 wasm_timeout=WASM_TIMEOUT,
                 pubsub_channel=PUBSUB_CHANNEL,
             )
@@ -85,7 +79,7 @@ class RestEdgeDaemon(AbstractDaemon):
             injected_app = create_app(
                 config=runtime_config,
                 tunnel=self._tunnel,
-                anchor_store=anchor_store
+                anchor_store=anchor_store,
             )
 
             config = uvicorn.Config(
@@ -94,14 +88,14 @@ class RestEdgeDaemon(AbstractDaemon):
                 port=self.target_port,
                 loop="none",
                 log_level="warning",
-                access_log=False
+                access_log=False,
             )
             self.server = uvicorn.Server(config)
-            
+
             self._server_task = asyncio.create_task(self.server.serve())
             log.info(f"[{self.name}] REST Edge listening on http://127.0.0.1:{self.target_port}")
             log.info(f"[{self.name}] Routing internal traffic to: {resolved_url}")
-            
+
             while self.running:
                 if self._server_task.done():
                     exc = self._server_task.exception()
@@ -111,7 +105,7 @@ class RestEdgeDaemon(AbstractDaemon):
                         log.error(f"[{self.name}] Uvicorn server exited unexpectedly.")
                     break
                 await asyncio.sleep(1.0)
-                
+
         except asyncio.CancelledError:
             log.info(f"[{self.name}] Shutdown signal received.")
         except Exception as e:
@@ -121,12 +115,12 @@ class RestEdgeDaemon(AbstractDaemon):
 
     async def _teardown(self):
         log.info(f"[{self.name}] Releasing REST Edge resources...")
-        
+
         if self.server:
             self.server.should_exit = True
-            
+
         shutdown_timeout = float(os.getenv("SHUTDOWN_TIMEOUT", 15.0))
-        
+
         if self._server_task and not self._server_task.done():
             try:
                 log.info(f"[{self.name}] Waiting up to {shutdown_timeout}s for API graceful shutdown...")

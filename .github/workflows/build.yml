@@ -8,33 +8,22 @@ on:
     types: [opened, synchronize, reopened]
 
 concurrency:
-  group: \({{ github.workflow }}-\){{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   system-e2e-test:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: read
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout Fiber
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Checkout fiber-compats (Fixtures)
         uses: actions/checkout@v4
         with:
@@ -56,7 +45,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          
+
       - name: Install Cloudflare Wrangler
         run: npm install -g wrangler
 
@@ -68,16 +57,15 @@ jobs:
       - name: Bootstrap Workspace & Initialize Node Identity
         run: |
           fiber init
-      
-      - name: Boot Node (Background)
+
+      - name: Boot Node & Embedded Valkey (Background)
         env:
-          REDIS_URL: "redis://localhost:6379/0" 
           XPHI_ENV: "local"
           XPHI_WORKERS: "2"
         run: |
-          echo "Starting Node in background..."
+          echo "Starting Node (with embedded Valkey unix socket) in background..."
           nohup python -u -m xphi.node.ops.boot > node_boot.log 2>&1 &
-          echo "NODE_PID=\(!" >>\)GITHUB_ENV
+          echo "NODE_PID=$!" >> $GITHUB_ENV
 
           echo "Waiting for Node to become ready on port 8356..."
           timeout 30 bash -c 'while ! curl -s http://127.0.0.1:8356/v1/compliance/keys > /dev/null; do sleep 1; done'
@@ -85,46 +73,19 @@ jobs:
 
       - name: Run E2E Edge Test
         env:
-          REDIS_URL: "redis://localhost:6379/0" 
           XPHI_ENV: "local"
         run: |
           fiber e2e gateway.compliance
           fiber e2e gateway.security
           fiber e2e inter.finops --vcr replay
 
-      - name: Execute Reaper (Teardown)
-        if: always()
-        env:
-          REDIS_URL: "redis://localhost:6379/0" 
-          XPHI_ENV: "ci"
-        run: |
-          echo "Executing Node Reaper..."
-          python -m xphi.node.ops.reaper
-          
-          if kill -0 ${{ env.NODE_PID }} 2>/dev/null; then
-            echo "Reaper did not terminate the process. Forcing kill..."
-            kill ${{ env.NODE_PID }} || true
-          fi
-          echo "Node reaped cleanly."
-
-      - name: Upload Node Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-error-logs
-          path: node_boot.log
-
       - name: Run Remaining E2E Tests
-        env:
-          REDIS_URL: "redis://localhost:6379/0" 
         run: |
           fiber e2e infra.wasm.gateway
           fiber e2e infra.wasm.phase
           fiber e2e infra.plane.flare --mode dev
-      
+
       - name: Run E2E Concurrency & Load Benchmark
-        env:
-          REDIS_URL: "redis://localhost:6379/0" 
         run: |
           fiber e2e inter.concurrency --vcr replay --concurrency 50
 
@@ -134,3 +95,24 @@ jobs:
           FIBER_COMPATS_DIR: ${{ github.workspace }}/fiber-compats
         run: |
           pytest -v -s llm/pipeline/interceptor/tests/router.py
+
+      - name: Execute Reaper (Teardown)
+        if: always()
+        env:
+          XPHI_ENV: "ci"
+        run: |
+          echo "Executing Node Reaper..."
+          python -m xphi.node.ops.reaper
+
+          if kill -0 ${{ env.NODE_PID }} 2>/dev/null; then
+            echo "Reaper did not terminate the process. Forcing kill..."
+            kill ${{ env.NODE_PID }} || true
+          fi
+          echo "Node and embedded Valkey reaped cleanly."
+
+      - name: Upload Node Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-error-logs
+          path: node_boot.log

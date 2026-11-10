@@ -54,7 +54,7 @@ class EpochBase(SchemeRunner):
         commit_hash = hashlib.sha256(canonical_bytes).hexdigest().encode('utf-8')
         return [k.sign(commit_hash).hex() for k in signers]
 
-    async def execute_anchor_lifecycle(self, topo: int, press: int, rupture: bool) -> None:
+    async def execute_anchor_lifecycle(self, topo: int, press: int, discont: bool) -> None:
         log.info(f"\n=== [Lifecycle START] {self.scenario_name} ===")
         
         try:
@@ -64,7 +64,7 @@ class EpochBase(SchemeRunner):
                 "ts": current_ts, 
                 "topo": topo, 
                 "press": press, 
-                "rupture": rupture,
+                "discont": discont,
                 "injected_tick": None
             }
             init_payload = StateAdapter.to_canonical_bytes(init_req).decode('utf-8')

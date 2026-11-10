@@ -319,7 +319,7 @@ class MasterGatewaySuite:
             else:
                 await builder.execute()
             
-            if getattr(builder, 'rupture_confirmed', False):
+            if builder.build_failed: 
                 self.log.critical("[FATAL] Gateway WASM build failed. Aborting E2E Sequence.")
                 sys.exit(1)
                 

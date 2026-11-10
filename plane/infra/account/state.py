@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import time
 from typing import Any, Dict, List, Tuple
+
+from xphi.arch.contract.config.tunnel import DEFAULT_TUNNEL_URL
 from xphi.node.space.bind.resolver import resolve_path
 
 STATE_FILE_PATH = resolve_path("anchor") / "state.json"
@@ -39,7 +41,6 @@ _PERSIST_SCHEMA: Dict[str, Tuple[str, ...]] = {
         "oob_require_totp",
     ),
     "pipeline": (
-        "redis_url",
         "vcr_mode",
         "vcr_scenario",
         "vcr_speed",
@@ -89,7 +90,7 @@ class FinOpsState:
         self.y_fuel.append(self.ledger_balance)
         self.y_core.append(self.fuel_budget)
         self.chart_dirty = True
-    
+
     @property
     def balance_usd(self) -> float:
         return self.ledger_balance / USD_TO_FUEL_RATE
@@ -105,6 +106,7 @@ class FinOpsState:
             f"Balance: {self.ledger_balance:,} / Quota: {self.fuel_budget:,} Fuel "
             f"(${self.balance_usd:,.2f} / ${self.quota_usd:,.2f})"
         )
+
 
 @dataclass
 class SecurityState:
@@ -185,8 +187,7 @@ class SecurityState:
 
 @dataclass
 class PipelineState:
-    redis_online: bool = False
-    redis_url: str = "redis://localhost:6379"
+    tunnel_online: bool = False
     pubsub_eps: int = 0
 
     vcr_mode: str = "record"
@@ -202,7 +203,6 @@ class PipelineState:
     vcr_bench_replay_ms: float = 3.2
     vcr_chart_dirty: bool = False
 
-
 @dataclass
 class StudioState:
     finops: FinOpsState = field(default_factory=FinOpsState)
@@ -211,8 +211,8 @@ class StudioState:
     last_saved_at: str = "Never"
 
     @property
-    def redis_badge_text(self) -> str:
-        return "🟢 Redis: Pub/Sub" if self.pipeline.redis_online else "🟡 Mode: Standalone (In-Memory)"
+    def tunnel_badge_text(self) -> str:
+        return "🟢 Tunnel: Pub/Sub" if self.pipelinetunnels_online else "🟡 Mode: Standalone (In-Memory)"
 
     @property
     def fuel_kpi_text(self) -> str:
@@ -250,6 +250,7 @@ class StudioState:
         self.finops.y_core.clear()
         self.finops.y_core.append(self.finops.fuel_budget)
 
+
 @dataclass
 class UIRefs:
     finops_chart: Any = None
@@ -273,7 +274,7 @@ class UIRefs:
     def push_pubsub(self, channel: str, msg: str) -> None:
         state.pipeline.pubsub_eps += 1
         self.pubsub_buffer.append(f"[{time.strftime('%H:%M:%S.%f')[:-3]}] [{channel}] {msg}")
-    
+
     def refresh_finops_chart(self) -> None:
         chart = self.finops_chart
         if chart is None:
