@@ -111,7 +111,7 @@ class EcoScene(SchemeRunner):
             "ts": int(time.time() * 1000), 
             "topo": 1, 
             "press": 5, 
-            "rupture": False, 
+            "discont": False, 
             "injected_tick": None
         }
         await self._run_case("Pipeline: Generate Parity Triplet (init_epoch)", WasmMethod.INIT_EPOCH.value, payload, expected_success=True)
@@ -167,7 +167,7 @@ class EcoScene(SchemeRunner):
             "ts": raw_intent["timestamp"], 
             "topo": 101, 
             "press": 5, 
-            "rupture": False,
+            "discont": False,
             "injected_tick": None
         }
         
@@ -370,13 +370,13 @@ class AnchorScene(SchemeRunner):
         
         log.info("\n=== [PHASE 3] Executing 5-Flow Complete Epoch Scenarios ===")
         swarm = SwarmConsensusScene(self.broker, simulate_wallet=True)
-        await swarm.execute_anchor_lifecycle(topo=1, press=3, rupture=False)
+        await swarm.execute_anchor_lifecycle(topo=1, press=3, discont=False)
         self.success_count += swarm.success_count
         self.fail_count += swarm.fail_count
         self.failed_cases.extend(swarm.failed_cases)
         
         prov = ProvAlignScene(self.broker, simulate_wallet=True)
-        await prov.execute_anchor_lifecycle(topo=1, press=3, rupture=True)
+        await prov.execute_anchor_lifecycle(topo=1, press=3, discont=True)
         self.success_count += prov.success_count
         self.fail_count += prov.fail_count
         self.failed_cases.extend(prov.failed_cases)

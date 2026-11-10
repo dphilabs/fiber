@@ -1,5 +1,4 @@
 # fiber.plane.ops.hatch
-## @lineage: fiber.phase.hatch
 import os
 from pathlib import Path
 from hatchling.metadata.plugin.interface import MetadataHookInterface

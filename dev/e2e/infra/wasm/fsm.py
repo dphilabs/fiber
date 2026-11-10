@@ -438,8 +438,8 @@ class FsmWasmFlow:
         builder = WasmBuilder()
         await builder.trace()
 
-        if builder.rupture_confirmed:
-            self.log.error("[CLI] Builder encountered a fatal rupture.")
+        if builder.build_failed:
+            self.log.error("[CLI] Builder encountered a fatal error.")
             return False
 
         self.log.info("[CLI] Builder completed successfully.")

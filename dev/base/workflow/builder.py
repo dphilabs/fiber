@@ -99,8 +99,8 @@ class E2EBaseWorkflow(Workflow):
         return StopMessage(result=all_passed)        
 
     @step
-    async def handle_rupture(self, msg: ErrorMessage) -> None:
-        self.log.error(f"[{self.name}] Fatal topological rupture: {msg.msg}")
+    async def handle_error(self, msg: ErrorMessage) -> None:
+        self.log.error(f"[{self.name}] Fatal error: {msg.msg}")
         self.post_message(StopMessage(result=False))
 
 class E2EBaseApplication:
