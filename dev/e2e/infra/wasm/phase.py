@@ -8,7 +8,7 @@ from typing import List, Dict
 import fiber.dev.base.scene as scene_module
 
 from xphi.arch.bound.wasm.builder import WasmBuilder
-from xphi.arch.bound.wasm.tester import WasmTester
+from xphi.arch.bound.wasm.tester import WasmNodeTester
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor
@@ -75,7 +75,7 @@ class DphiFlow:
         return True
 
     async def test(self) -> bool:
-        self.log.info(f"\n[CLI] Starting Isolated WasmTester for suites: {self.suites}...")
+        self.log.info(f"\n[CLI] Starting Isolated WasmNodeTester for suites: {self.suites}...")
         if not self.dest_wasm_file.exists():
             self.log.error(f"[CLI] Missing WASM binary at {self.dest_wasm_file}. Please run with '--build' option or pre-compile it.")
             return False
@@ -95,7 +95,7 @@ class DphiFlow:
             self.log.error("[CLI] No valid test suites found to execute.")
             return False
 
-        tester = WasmTester(
+        tester = WasmNodeTester(
             wasm_module_path=str(self.dest_wasm_file),
             sandbox_root=str(self.time_root),
             suites=suite_map

@@ -10,7 +10,7 @@ from fiber.dev.base.scene.runner import SandboxRunner
 
 from xphi.arch.bound.adapter.fsm import FsmAdapter, FsmTarget, FsmOp
 from xphi.arch.bound.wasm.builder import WasmBuilder
-from xphi.arch.bound.wasm.tester import WasmTester
+from xphi.arch.bound.wasm.tester import WasmNodeTester
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor
 from xphi.watcher.plane.emitter import get_emitter
@@ -446,7 +446,7 @@ class FsmWasmFlow:
         return True
 
     async def test(self) -> bool:
-        self.log.info(f"\n[CLI] Starting Isolated FSM WasmTester for suites: {self.suites}...")
+        self.log.info(f"\n[CLI] Starting Isolated FSM WasmNodeTester for suites: {self.suites}...")
 
         if not self.dest_wasm_file.exists():
             self.log.error(
@@ -469,7 +469,7 @@ class FsmWasmFlow:
             self.log.error("[CLI] No valid FSM test suites found to execute.")
             return False
 
-        tester = WasmTester(
+        tester = WasmNodeTester(
             wasm_module_path=str(self.dest_wasm_file),
             sandbox_root=str(self.time_root),
             suites=suite_map,
