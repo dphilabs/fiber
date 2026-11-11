@@ -9,7 +9,7 @@ As the counterpart on the model path, the same engine normalizes heterogeneous p
 | **1. Local MCP Gateway** | Loopback Daemon for Agents & IDEs, Pre-Flight HITL Locks, Zero-Key LLM Routing, Config Sync | **[1. Local MCP Gateway](#1-local-mcp-gateway)** |
 | **2. LLM Guardrails & Replay** | In-Flight DLP Guardrails, Mid-Stream Kill-Switch, Deterministic VCR Replay, Schema Traverser | **[2.1 LLM Guardrails](#21-llm-guardrails)** · **[2.2 VCR](#22-deterministic-replay-llm-vcr--fixtures)** · **[2.3 Schema Traverser](#23-schema-traverser--compat-registry)** |
 | **3. CLI & Installation** | Connect CLI, Account & Quota Governance, Sandbox Provisioning (`uv pip`), Node Identity (`fiber init`) & Homebrew | **[3.1 Connect CLI](#31-fiber-connect-cli)** · **[3.2 Python & CLI](#32-python-environment-via-uv-pip-recommended-for-sdk--local-control-plane)** · **[3.3 Homebrew](#33-macos-homebrew-tap-for-local-daemon--mcp-gateway)** |
-| **4. Edge Plane & Benchmarks** | Edge V8 Isolate Offload (`plane.flare`), BYOC Provisioning & 200-VU Concurrency Metrics | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane-planeflare)** · **[4.2 Benchmarks](#42-pipeline-performance-benchmarks-apple-m2-32gb-ram)** |
+| **4. Edge Plane & Benchmarks** | Edge V8 Isolate Offload, BYOC Provisioning & 200-VU Concurrency Metrics | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane-planeflare)** · **[4.2 Benchmarks](#42-pipeline-performance-benchmarks-apple-m2-32gb-ram)** |
 | **5. System Validation Logs** | End-to-End Security, FSM, Guardrail & Edge Cryptographic Audit Logs | **[5. System Validation Logs](#5-system-validation-logs)** |
 
 ---
@@ -17,7 +17,7 @@ As the counterpart on the model path, the same engine normalizes heterogeneous p
 ## 0. Quick Start
 
 ```bash
-uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.11
+uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.5.0
 ```
 
 **1. Boot the Local Control Plane**
@@ -456,7 +456,7 @@ Best suited for full-stack integration—including the in-process Python harness
 mkdir -p ~/fiber-user && cd ~/fiber-user
 pyenv local fiber-user
 
-uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.4.11
+uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.5.0
 # OR: uv pip install -e /path/to/local/self/fiber
 
 ## Bootstrap workspace & Provision node identity
@@ -488,9 +488,9 @@ fiber ops brew.verify
 
 Beyond the default host loopback runtime (`XPHI_WASM_PLANE=local`), Fiber extends its execution governance to **Cloudflare Edge V8 Isolates** for zero-trust, hardware-isolated sandbox offload.
 
-### 4.1. Edge V8 Execution Plane (`plane.flare`)
+### 4.1. Edge V8 Execution Plane
 
-Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edge V8 Plane (`flare`)** without modifying local agent or gateway logic. Fiber dispatches compiled WASM kernels (`phase`, `fsm`) and sandboxed Python (`Pyodide`) across an HTTP/1.1 JSON-RPC bridge—enforcing hypervisor-level CPU/Wall-Time cutoffs (`Error 1102`) and returning cryptographic execution receipts (`X-XPHI-Canonical-Hash`) to the local state ledger:
+Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edge V8 Plane** without modifying local agent or gateway logic. Fiber dispatches compiled WASM kernels (`phase`, `fsm`) and sandboxed Python (`Pyodide`) across an HTTP/1.1 JSON-RPC bridge—enforcing hypervisor-level CPU/Wall-Time cutoffs (`Error 1102`) and returning cryptographic execution receipts (`X-XPHI-Canonical-Hash`) to the local state ledger:
 
 ```bash
 # Flare Local Dev Plane: Auto-provisions local Dual V8 Isolates (:8787/:8788) on demand

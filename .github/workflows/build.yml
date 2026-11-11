@@ -19,12 +19,12 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout Fiber
+      - name: Checkout Fiber Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Checkout fiber-compats (Fixtures)
+      - name: Checkout Compatibility Fixtures (fiber-compats)
         uses: actions/checkout@v4
         with:
           repository: dphilabs/fiber-compats
@@ -41,7 +41,7 @@ jobs:
         with:
           deno-version: v1.x
 
-      - name: Setup Node.js (for Wrangler)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -49,12 +49,12 @@ jobs:
       - name: Install Cloudflare Wrangler
         run: npm install -g wrangler
 
-      - name: Install dependencies
+      - name: Install Python Dependencies
         run: |
           pip install uv hatch
           uv pip install --system -e .[dev]
 
-      - name: Bootstrap Workspace & Initialize Node Identity
+      - name: Bootstrap Workspace & Node Identity
         run: |
           fiber init
 
@@ -71,7 +71,13 @@ jobs:
           timeout 30 bash -c 'while ! curl -s http://127.0.0.1:8356/v1/compliance/keys > /dev/null; do sleep 1; done'
           echo "Node is fully up and running!"
 
-      - name: Run E2E Edge Test
+      - name: Run Wasm & Plane Infrastructure
+        run: |
+          fiber e2e infra.wasm.gateway
+          fiber e2e infra.wasm.phase
+          fiber e2e infra.plane.flare --mode dev
+
+      - name: Run Gateway & FinOps Interceptors
         env:
           XPHI_ENV: "local"
         run: |
@@ -79,24 +85,18 @@ jobs:
           fiber e2e gateway.security
           fiber e2e inter.finops --vcr replay
 
-      - name: Run Remaining E2E Tests
-        run: |
-          fiber e2e infra.wasm.gateway
-          fiber e2e infra.wasm.phase
-          fiber e2e infra.plane.flare --mode dev
-
-      - name: Run E2E Concurrency & Load Benchmark
-        run: |
-          fiber e2e inter.concurrency --vcr replay --concurrency 50
-
-      - name: Run Router Semantic Routing Tests
+      - name: Run Semantic Router (VCR)
         env:
           VCR_MODE: replay
           FIBER_COMPATS_DIR: ${{ github.workspace }}/fiber-compats
         run: |
           pytest -v -s llm/pipeline/interceptor/tests/router.py
 
-      - name: Execute Reaper (Teardown)
+      - name: Run Concurrency & Load Benchmark
+        run: |
+          fiber e2e inter.concurrency --vcr replay --concurrency 50
+
+      - name: Teardown Node & Embedded Valkey (Reaper)
         if: always()
         env:
           XPHI_ENV: "ci"
@@ -110,7 +110,7 @@ jobs:
           fi
           echo "Node and embedded Valkey reaped cleanly."
 
-      - name: Upload Node Log on Failure
+      - name: Upload Node Boot Logs on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:

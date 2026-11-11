@@ -15,7 +15,6 @@ from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("scene.sandbox")
 
-# [Shared Constants & Payloads]
 class TestPayloads:
     PHASE_GEN       = {"topo": 50, "press": -10, "discont": False}
     INJECTED_STATE  = {"topo": 100, "press": 200, "discont": True, "injected_anchor": 999999, "injected_tick": 77}
@@ -32,6 +31,11 @@ class TestConstants:
     MAX_TIMEOUT: float = 35.0 
     MEM_WARN_LIMIT: float = 85.0
     CPU_WARN_LIMIT: float = 95.0
+    
+    # [3-Tier Sandbox Cooldown Constants]
+    COOLDOWN_MICRO: float = 0.2  # 연속 호출 간 이벤트 루프/스트림 플러시 여유
+    COOLDOWN_SOFT: float  = 0.8  # 대용량 힙 사용 또는 비정상 종료 트랩 후 상태 정리
+    COOLDOWN_HARD: float  = 2.0  # Timeout/OOM 강제 종료 후 Deno 워커 재생성 대기
     
     T_ID: int = 101010
     P_ID: int = 999999
@@ -86,6 +90,7 @@ while True:
             self._record_fail(0, "System failed to trap infinite resource allocation.", "Gas Boundary")
             
         await self._set_worker_policy("SYSTEM")
+        await asyncio.sleep(CONST.COOLDOWN_HARD)
 
     async def _proof_floating_point_determinism(self):
         log.info("\n--- [Proof 3] Floating-Point Determinism ---")
@@ -97,10 +102,12 @@ val = sum(math.sin(i * 0.1) * math.cos(i * 0.05) for i in range(1000))
 print(f"{val:.15f}")
 """
         results = []
-        for _ in range(3):
+        for idx in range(3):
             res = await self.broker.execute(code=fp_code)
             if res.success:
                 results.append(res.output.strip())
+            if idx < 2:
+                await asyncio.sleep(CONST.COOLDOWN_MICRO)
 
         # 모든 샌드박스의 실행 결과가 단 1비트의 오차도 없이 동일해야 함
         if len(results) == 3 and len(set(results)) == 1:
@@ -180,6 +187,7 @@ class SandboxScene(SandboxRunner):
         await self._assert_script(TestScripts.LEGACY_NORMAL)
         await self._assert_script(TestScripts.COMPUTE_HEAVY)
         await self._assert_script(TestScripts.DATA_PROCESSING)
+        await asyncio.sleep(CONST.COOLDOWN_SOFT)
         
         # 시스템 탈옥 방어 (Escape Defense)
         await self._assert_script(TestScripts.IO_VIOLATION)
@@ -188,11 +196,14 @@ class SandboxScene(SandboxRunner):
         await self._assert_script(TestScripts.SUBPROCESS_ATTACK)
         await self._assert_script(TestScripts.THREAD_ATTACK)
         await self._assert_script(TestScripts.SYS_EXIT_ATTACK)
+        await asyncio.sleep(CONST.COOLDOWN_SOFT)
         
         # 악성 자원 소모 방어 (Cgroup Trap - STANDARD Tier 강제)
         await self._assert_script(TestScripts.INFINITE_LOOP_ATTACK)
+        await asyncio.sleep(CONST.COOLDOWN_HARD)
+        
         await self._assert_script(TestScripts.HEAP_ALLOCATION_ATTACK)
-        await asyncio.sleep(3.0)
+        await asyncio.sleep(CONST.COOLDOWN_HARD)
         
         # 시간 누수 및 멱등성 검증 (Determinism)
         def validate_time_leak(out: str) -> bool:
@@ -221,6 +232,7 @@ class SandboxScene(SandboxRunner):
         )
         
         r1 = await self.broker.execute(code=TestScripts.PRNG_IDEMPOTENT.code)
+        await asyncio.sleep(CONST.COOLDOWN_MICRO)
         r2 = await self.broker.execute(code=TestScripts.PRNG_IDEMPOTENT.code)
         if r1.success and r2.success and (r1.output == r2.output):
             self._record_success(0, f"PRNG sequences are 100% identical ({r1.output.strip()})")
