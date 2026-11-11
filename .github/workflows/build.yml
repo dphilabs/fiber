@@ -78,13 +78,7 @@ jobs:
           fiber e2e gateway.compliance
           fiber e2e gateway.security
           fiber e2e inter.finops --vcr replay
-
-      - name: Run Remaining E2E Tests
-        run: |
-          fiber e2e infra.wasm.gateway
-          fiber e2e infra.wasm.phase
-          fiber e2e infra.plane.flare --mode dev
-
+      
       - name: Run E2E Concurrency & Load Benchmark
         run: |
           fiber e2e inter.concurrency --vcr replay --concurrency 50
@@ -95,6 +89,13 @@ jobs:
           FIBER_COMPATS_DIR: ${{ github.workspace }}/fiber-compats
         run: |
           pytest -v -s llm/pipeline/interceptor/tests/router.py
+      
+      - name: Run Remaining E2E Tests
+        run: |
+          pkill -f "deno|fiber.plane.mcp" || true
+          fiber e2e infra.wasm.gateway
+          fiber e2e infra.wasm.phase
+          fiber e2e infra.plane.flare --mode dev
 
       - name: Execute Reaper (Teardown)
         if: always()
