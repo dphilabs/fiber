@@ -74,7 +74,7 @@ jobs:
       - name: Run Wasm & Plane Infrastructure
         run: |
           fiber e2e infra.wasm.gateway
-          fiber e2e infra.wasm.phase
+          fiber e2e infra.wasm.fsm
           fiber e2e infra.plane.flare --mode dev
 
       - name: Run Gateway & FinOps Interceptors
