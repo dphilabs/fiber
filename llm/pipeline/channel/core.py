@@ -20,7 +20,7 @@ from fiber.gateway.llm.stream.param.processor import CompletionProcessor, Embedd
 from fiber.gateway.llm.context.metadata import ExecutionMetadata
 
 from xphi.arch.contract.event.next import next_trace_id
-from xphi.arch.model.auth import BrokerKey, NodeAuthPayload
+from xphi.node.schema.auth import BrokerKey, NodeAuthPayload
 from xphi.state.phase.channel import ChannelPipeline, ChannelContext, DuplexChannel, RpcBridge
 from xphi.watcher.plane.emitter import get_emitter
 

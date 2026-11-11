@@ -20,7 +20,7 @@ from fiber.plane.vcr.manager import VCRIdentityRule
 from fiber.plane.infra.account.state import state, STATE_FILE_PATH, load_or_init_state
 
 from xphi.arch.contract.event.next import next_trace_id
-from xphi.arch.model.auth import BrokerKey, BrokerAction
+from xphi.node.schema.auth import BrokerKey, BrokerAction
 from xphi.watcher.plane.emitter import get_emitter, flow_scope
 
 log = get_emitter("serv.llm")

@@ -7,7 +7,7 @@ import argparse
 from typing import Optional
 
 from xphi.arch.contract.config.env import config as env_config
-from xphi.node.rpc.schema.receipt import EdgeHeader
+from xphi.node.schema.receipt import EdgeHeader
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.watcher.plane.emitter import get_emitter
 from xphi.watcher.plane.flare.tunnel import FlareTunnelFactory

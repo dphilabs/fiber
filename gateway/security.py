@@ -18,7 +18,7 @@ from xphi.watcher.receptor.warden import SecretAuditor
 from xphi.watcher.plane.emitter import get_emitter
 
 from xphi.node.runtime.wasm.broker import WasmBroker
-from xphi.arch.model.auth import NodeAuthPayload
+from xphi.node.schema.auth import NodeAuthPayload
 from xphi.arch.bound.adapter.pta import NodeSigner, SignStateAdapter
 
 from xphi.state.settlement.mandate import (

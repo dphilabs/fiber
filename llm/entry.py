@@ -12,7 +12,7 @@ from fiber.llm.model.types.provider.general import EmbeddingResponse
 from fiber.llm.exception.eco import UnsupportedParamsError
 from fiber.llm.response import ModelResponse
 
-from xphi.arch.model.auth import BrokerKey, NodeAuthPayload
+from xphi.node.schema.auth import BrokerKey, NodeAuthPayload
 from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("llm.entry")

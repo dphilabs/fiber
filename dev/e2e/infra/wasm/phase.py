@@ -7,8 +7,8 @@ from typing import List, Dict
 
 import fiber.dev.base.scene as scene_module
 
-from xphi.arch.bound.wasm.builder import WasmBuilder
-from xphi.arch.bound.wasm.tester import WasmNodeTester
+from xphi.node.ops.wasm.builder import WasmBuilder
+from xphi.node.ops.wasm.tester import WasmNodeTester
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor

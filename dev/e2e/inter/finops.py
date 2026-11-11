@@ -37,7 +37,7 @@ from fiber.dev.base.workflow.builder import create_e2e_parser, build_e2e_context
 import fiber.plane.mcp.worker.finops as worker_finops
 from fiber.plane.infra.finops.watcher import default_finops_watcher, default_tenant_eco
 
-from xphi.arch.model.auth import NodeAuthPayload
+from xphi.node.schema.auth import NodeAuthPayload
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.arch.bound.adapter.pta import PtaAdapter, PtaTransaction, PtaOutput
