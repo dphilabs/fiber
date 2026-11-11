@@ -30,7 +30,7 @@ from fiber.llm.compat.secret.redact import (
     SECRET_KEY_PATTERNS,
     configure_redaction,
 )
-from xphi.arch.model.workflow import WorkflowMessage, step
+from xphi.state.phase.workflow import WorkflowMessage, step
 
 
 class BaselineAndCacheMsg(WorkflowMessage): pass

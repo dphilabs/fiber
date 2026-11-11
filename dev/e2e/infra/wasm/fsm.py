@@ -9,8 +9,8 @@ from typing import Any, List, Dict, Optional
 from fiber.dev.base.scene.runner import SandboxRunner
 
 from xphi.arch.bound.adapter.fsm import FsmAdapter, FsmTarget, FsmOp
-from xphi.arch.bound.wasm.builder import WasmBuilder
-from xphi.arch.bound.wasm.tester import WasmNodeTester
+from xphi.node.ops.wasm.builder import WasmBuilder
+from xphi.node.ops.wasm.tester import WasmNodeTester
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor
 from xphi.watcher.plane.emitter import get_emitter

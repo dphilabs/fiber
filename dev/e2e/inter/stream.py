@@ -37,7 +37,7 @@ from fiber.llm.pipeline.channel.observer import MeteringObserver
 
 from xphi.arch.bound.adapter.pta import PtaAdapter
 from xphi.arch.contract.event.next import next_trace_id
-from xphi.arch.model.auth import NodeAuthPayload
+from xphi.node.schema.auth import NodeAuthPayload
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.phase.reactor import PhaseReactor

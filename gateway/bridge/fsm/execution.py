@@ -10,7 +10,7 @@ from fiber.llm.pipeline.channel.observer import MeteringObserver
 from fiber.plane.infra.finops.watcher import default_finops_watcher, default_tenant_eco
 
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
-from xphi.arch.model.auth import NodeAuthPayload
+from xphi.node.schema.auth import NodeAuthPayload
 from xphi.watcher.plane.emitter import get_emitter
 from xphi.arch.contract.fsm import (
     CompactKey,

@@ -21,7 +21,7 @@ from fiber.gateway.serv.depend import (
 )
 from xphi.arch.bound.client.rpc import InternalRpcClient, RpcException
 from fiber.gateway.contract.router import ContractRouter
-from xphi.node.rpc.schema.receipt import EdgeState, EdgeHeader, IntentValidationRequest
+from xphi.node.schema.receipt import EdgeState, EdgeHeader, IntentValidationRequest
 from xphi.arch.xor.parser.ruleset.otlp import OtlpExtractionEngine
 
 from xphi.node.space.tunnel.subs import DistributedPubSub

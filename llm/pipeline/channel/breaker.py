@@ -18,7 +18,7 @@ from fiber.gateway.llm.state.traverser import StateMapper
 from fiber.gateway.llm.stream.parser.chunk import StreamChunkParser
 from fiber.llm.model.token.encoder import encode
 
-from xphi.arch.model.auth import BrokerKey, NodeAuthPayload
+from xphi.node.schema.auth import BrokerKey, NodeAuthPayload
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
 from xphi.watcher.plane.emitter import get_emitter
 
