@@ -4,13 +4,15 @@
 Fiber is a local runtime harness that sits between AI agents and everything they call—tools and models alike. A single loopback daemon (`127.0.0.1:8356`) fronts your MCP servers as a **Local MCP Gateway** with idempotent execution and pre-flight human approval (**1**), unified under a zero-boilerplate CLI for config sync and quota governance (**3.1**). 
 As the counterpart on the model path, the same engine normalizes heterogeneous provider schemas declaratively (2.3)—via an OpenAI-compatible endpoint or in-process Python harness—to govern live traffic with two-track DLP guardrails and mid-stream kill-switches (2.1) while accelerating offline testing (pytest) via zero-cost, 3ms deterministic VCR replay (2.2), all without changing your agent configs or business logic.
 
+**KYOC (Keep Your Own Cloud):** Fiber runs only on infrastructure you control—your machine or your own Cloudflare account. API keys resolve from your host, state stays in your local ledger, and edge workers are deployed from your machine ([4.1](#41-edge-v8-execution-plane-planeflare)); DphiLabs never holds your credentials or access.
+
 | Section | Target Focus & Key Capabilities | Quick Jump |
 | :--- | :--- | :--- |
 | **1. Local MCP Gateway** | Loopback Daemon for Agents & IDEs, Pre-Flight HITL Locks, Zero-Key LLM Routing, Config Sync | **[1. Local MCP Gateway](#1-local-mcp-gateway)** |
 | **2. LLM Guardrails & Replay** | In-Flight DLP Guardrails, Mid-Stream Kill-Switch, Deterministic VCR Replay, Schema Traverser | **[2.1 LLM Guardrails](#21-llm-guardrails)** · **[2.2 VCR](#22-deterministic-replay-llm-vcr--fixtures)** · **[2.3 Schema Traverser](#23-schema-traverser--compat-registry)** |
 | **3. CLI & Installation** | Connect CLI, Account & Quota Governance, Sandbox Provisioning (`uv pip`), Node Identity (`fiber init`) & Homebrew | **[3.1 Connect CLI](#31-fiber-connect-cli)** · **[3.2 Python & CLI](#32-python-environment-via-uv-pip-recommended-for-sdk--local-control-plane)** · **[3.3 Homebrew](#33-macos-homebrew-tap-for-local-daemon--mcp-gateway)** |
-| **4. Edge Plane & Benchmarks** | Edge V8 Isolate Offload, BYOC Provisioning & 200-VU Concurrency Metrics | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane-planeflare)** · **[4.2 Benchmarks](#42-pipeline-performance-benchmarks-apple-m2-32gb-ram)** |
-| **5. System Validation Logs** | End-to-End Security, FSM, Guardrail & Edge Cryptographic Audit Logs | **[5. System Validation Logs](#5-system-validation-logs)** |
+| **4. Edge Plane & Benchmarks** | Edge V8 Isolate Offload, KYOC Provisioning & 200-Stream Concurrency Metrics | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane-planeflare)** · **[4.2 Benchmarks](#42-pipeline-performance-benchmarks-apple-m2-32gb-ram)** |
+| **5. System Validation Logs** | End-to-End Security, Guardrail & Edge Cryptographic Audit Logs | **[5. System Validation Logs](#5-system-validation-logs)** |
 
 ---
 
@@ -486,23 +488,23 @@ fiber ops brew.verify
 
 ## 4. Execution Planes & Pipeline Benchmarks
 
-Beyond the default host loopback runtime (`XPHI_WASM_PLANE=local`), Fiber extends its execution governance to **Cloudflare Edge V8 Isolates** for zero-trust, hardware-isolated sandbox offload.
+Beyond the default host loopback runtime (`XPHI_WASM_PLANE=local`), Fiber extends its execution governance to **Cloudflare Edge V8 Isolates** for isolated-level sandbox offload.
 
 ### 4.1. Edge V8 Execution Plane
 
-Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edge V8 Plane** without modifying local agent or gateway logic. Fiber dispatches compiled WASM kernels (`phase`, `fsm`) and sandboxed Python (`Pyodide`) across an HTTP/1.1 JSON-RPC bridge—enforcing hypervisor-level CPU/Wall-Time cutoffs (`Error 1102`) and returning cryptographic execution receipts (`X-XPHI-Canonical-Hash`) to the local state ledger:
+Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edge V8 Plane** without modifying local agent or gateway logic. Fiber dispatches compiled WASM kernels (`phase`, `fsm`) and sandboxed Python (`Pyodide`) across an HTTP/1.1 JSON-RPC bridge—enforcing runtime-enforced CPU/Wall-Time limits (`Error 1102`) and returning cryptographic execution receipts (`X-XPHI-Canonical-Hash`) to the local state ledger:
 
 ```bash
 # Flare Local Dev Plane: Auto-provisions local Dual V8 Isolates (:8787/:8788) on demand
 $ XPHI_WASM_PLANE=flare fiber daemon
 
-# Flare Global Edge Plane (BYOC): Routes directly to a self-hosted Cloudflare Worker
+# Flare Global Edge Plane (KYOC): Routes directly to a self-hosted Cloudflare Worker
 $ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev fiber daemon
 
 ```
 
-**Autonomous Blueprint Synthesis & Self-Hosted (BYOC) Provisioning**
-To prevent cross-tenant state exposure and metering exhaustion, Fiber operates strictly on a **Self-Hosted (BYOC)** basis rather than routing traffic to a shared public endpoint. During provisioning, the Edge Controller synthesizes an ephemeral two-tier microservice workspace comprising an upstream **WASM Gateway (`xphi-gateway-node`)** and a downstream **Pyodide Engine (`xphi-python-node`)** linked via internal Cloudflare Service Bindings (`PYTHON_ENGINE`).
+**Autonomous Blueprint Synthesis & Self-Hosted (KYOC) Provisioning**
+To prevent cross-tenant state exposure and metering exhaustion, Fiber operates strictly on a **Self-Hosted (KYOC)** basis rather than routing traffic to a shared public endpoint. During provisioning, the Edge Controller synthesizes an ephemeral two-tier microservice workspace comprising an upstream **WASM Gateway (`xphi-gateway-node`)** and a downstream **Pyodide Engine (`xphi-python-node`)** linked via internal Cloudflare Service Bindings (`PYTHON_ENGINE`).
 
 While the core runtime retains final state Merkle rollups, fuel metering, and policy locks on the local host (Host-Sovereign mode), both the transport facade (`EdgeStateAnchor`) and synthesized manifests (`edge_state_bindings`) expose open extension slots for external **Cloudflare Durable Objects, D1, or Queues** integrations:
 

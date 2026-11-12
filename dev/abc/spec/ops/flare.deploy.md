@@ -13,7 +13,7 @@ Fiber's **Flare Execution Plane (`plane.flare`)** decouples deterministic comput
    - Seals execution boundaries with a cryptographic receipt (`X-XPHI-Canonical-Hash`) computed via the Edge WASM fingerprint kernel.
 2. **Host-Sovereign Control & Ledger (Local Host)**:
    - Retains final PTA Epoch Merkle Root rollups, quota/fuel ledger mutations, and real-time control plane policy locks on the local loopback control plane.
-   - To prevent cross-tenant state exposure and metering exhaustion, remote Edge execution operates strictly on a **Self-Hosted (BYOC)** basis without shared public endpoints.
+   - To prevent cross-tenant state exposure and metering exhaustion, remote Edge execution operates strictly on a **Self-Hosted (KYOC)** basis without shared public endpoints.
 
 ---
 
@@ -25,7 +25,7 @@ The WASM execution broker resolves its underlying transport dynamically through 
 | :--- | :--- | :--- | :--- |
 | Unset or `"local"` | **Host Native** | Local Stream Store | **Default.** Dispatches over native host streams and local WASM workers. |
 | `"flare"` or `"flare:dev"` | **Edge Local Dev** | `http://127.0.0.1:8787` | Auto-provisions local Dual V8 Isolates (`:8787`, `:8788`) on demand if the local gateway port is inactive. |
-| `"flare:https://<worker>.<subdomain>.workers.dev"` | **Global Edge (BYOC)** | `https://<worker>.<subdomain>.workers.dev` | Bypasses local spawning and routes JSON-RPC payloads directly to the user-deployed Cloudflare Worker. |
+| `"flare:https://<worker>.<subdomain>.workers.dev"` | **Global Edge (KYOC)** | `https://<worker>.<subdomain>.workers.dev` | Bypasses local spawning and routes JSON-RPC payloads directly to the user-deployed Cloudflare Worker. |
 
 ---
 
@@ -113,7 +113,7 @@ Fiber intentionally leaves Edge-native state persistence unimplemented in core m
 # Live Cloudflare Edge Provisioning & 3-Stage Smoke Verification (Deploys Dual Workers)
 $ fiber ops flare.deploy
 
-# Zero-Deploy Smoke Verification against an existing Self-Hosted (BYOC) Endpoint
+# Zero-Deploy Smoke Verification against an existing Self-Hosted (KYOC) Endpoint
 $ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev python -m fiber ops flare.deploy
 
 # Full Local Dual-Isolate E2E Suite (23 Scenarios: Bridge + 6-Domain Security & PTA Rollup)
