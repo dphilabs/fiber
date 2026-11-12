@@ -62,6 +62,7 @@ jobs:
         env:
           XPHI_ENV: "local"
           XPHI_WORKERS: "2"
+          XPHI_TUNNEL_URL: "redis://127.0.0.1:6379"
         run: |
           echo "Starting Node (with embedded Valkey unix socket) in background..."
           nohup python -u -m xphi.node.ops.boot > node_boot.log 2>&1 &

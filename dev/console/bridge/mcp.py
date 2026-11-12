@@ -89,7 +89,7 @@ async def scan_mcp_topology_and_health(gateway_url: str, *, force_parse: bool = 
             raw = await tunnel.get("mcp:registry:active_targets")
             if raw:
                 parsed = orjson.loads(raw)
-                if isinstance(parsed, list):
+                if isinstance(parsed, (list, dict)):
                     live_targets = {str(x) for x in parsed}
     except Exception:
         pass

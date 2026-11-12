@@ -158,8 +158,8 @@ def open_model_catalog_modal() -> None:
 
 
 class HitlNSettingTab(StudioTab):
-    title = "HITL & Setting"
-    left_header = "MCP Guard - Pre-Flight"
+    title = "HITL"
+    left_header = "MCP Guard - PreFlight"
     right_header = "Slack HITL & Admin Identity"
     ratio = 52
 

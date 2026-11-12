@@ -63,7 +63,6 @@ LONG_FINOPS_PROMPT = (
     "walkthroughs for every single section without summarizing or skipping any details."
 )
 
-
 class FinOpsPipeline(MockPipeline):
     def __init__(self, config: E2EConfig, vcr_config: VCRPlaybackConfig, vcr_manager: "VCRManager", target_model: str):
         super().__init__(
@@ -167,7 +166,7 @@ class FinOpsPipeline(MockPipeline):
         self.issued_jwt = jwt_token
         log.info(f"  └─ 1. Successfully received PoC JWT from FinOps Worker: {jwt_token[:30]}...")
 
-        # 2. 발급받은 JWT를 TokenTranslator를 통해 AP2 Mandate로 변환 및 Watcher 예산 동기화 검증
+        # 발급받은 JWT를 TokenTranslator를 통해 AP2 Mandate로 변환 및 Watcher 예산 동기화 검증
         translated_receipt = await TokenTranslator.exchange(jwt_token)
         if not translated_receipt or "AP2-v1.0" not in translated_receipt:
             raise RuntimeError("JWT to AP2 Translation failed.")
@@ -177,13 +176,13 @@ class FinOpsPipeline(MockPipeline):
             raise RuntimeError(f"Watcher budget sync mismatch: expected 50000000.0 Fuel, got {synced_fuel}")
         log.info(f"  └─ 2. FinOps JWT translated to AP2 Mandate & synced budget ({synced_fuel} Fuel).")
 
-        # 3. [중복 생성 방지 검증] 동일 JWT(동일 JTI)로 TOP_UP이나 재호출 시 예산이 중복 합산되지 않는지 확인
+        # 동일 JWT(동일 JTI)로 TOP_UP이나 재호출 시 예산이 중복 합산되지 않는지 확인
         await TokenTranslator.exchange(jwt_token)
         if default_finops_watcher.local_budget_cache.get(self.test_tenant) != 50_000_000.0:
             raise RuntimeError("JTI Idempotency failed: duplicate token exchange mutated budget.")
         log.info("  └─ 3. JTI Idempotency verified (duplicate token exchange safely ignored).")
 
-        # 4. [변경(TOP_UP) 검증] 상위 버전(policy_ver=2) TOP_UP 토큰 주입 시 정상 합산되는지 확인
+        # 상위 버전(policy_ver=2) TOP_UP 토큰 주입 시 정상 합산되는지 확인
         topup_jwt = self.token_gen.generate_token(
             tenant_id=self.test_tenant, budget_usd=10.0, op="TOP_UP", policy_ver=2
         )
@@ -193,7 +192,7 @@ class FinOpsPipeline(MockPipeline):
             raise RuntimeError(f"TOP_UP transition failed: expected 60000000.0 Fuel, got {updated_fuel}")
         log.info(f"  └─ 4. Policy version upgrade (v2 TOP_UP) verified: Budget -> {updated_fuel} Fuel.")
 
-        # 5. [구버전 차단 검증] v2가 적용된 상태에서 구버전(v1) 토큰 재사용 시 거부(None)되는지 확인
+        # v2가 적용된 상태에서 구버전(v1) 토큰 재사용 시 거부(None)되는지 확인
         stale_res = await TokenTranslator.exchange(jwt_token)
         if stale_res is not None:
             raise RuntimeError("Stale policy version (v1) was not rejected after v2 upgrade.")
@@ -296,7 +295,6 @@ class FinOpsPipeline(MockPipeline):
             else:
                 os.environ.pop("FIBER_ENFORCE_QUOTA", None)
 
-
 class HybridSuiteRunner:
     def __init__(self, vcr_config: VCRPlaybackConfig, vcr_manager: "VCRManager", target_model: str):
         self.vcr_config = vcr_config
@@ -316,7 +314,6 @@ class HybridSuiteRunner:
             log.info("FINOPS SYSTEM VALIDATED SUCCESSFULLY.")
         else:
             log.critical("FINOPS FAILURE DETECTED.")
-
 
 def main(args_list: list[str] = None):
     parser = create_e2e_parser("FinOps Integration Test Runner")

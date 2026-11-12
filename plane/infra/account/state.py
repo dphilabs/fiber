@@ -9,7 +9,6 @@ from pathlib import Path
 import time
 from typing import Any, Dict, List, Tuple
 
-from xphi.arch.contract.config.tunnel import DEFAULT_TUNNEL_URL
 from xphi.node.space.bind.resolver import resolve_path
 
 STATE_FILE_PATH = resolve_path("anchor") / "state.json"
@@ -212,7 +211,7 @@ class StudioState:
 
     @property
     def tunnel_badge_text(self) -> str:
-        return "🟢 Tunnel: Pub/Sub" if self.pipelinetunnels_online else "🟡 Mode: Standalone (In-Memory)"
+        return "🟢 Tunnel: Pub/Sub" if self.pipeline.tunnel_online else "🟡 Mode: Standalone (In-Memory)"
 
     @property
     def fuel_kpi_text(self) -> str:

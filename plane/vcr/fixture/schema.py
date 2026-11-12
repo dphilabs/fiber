@@ -92,16 +92,14 @@ class VCRTargetInfo:
     def resolve_base_dir() -> Path:
         if env_dir := os.getenv("FIBER_COMPATS_DIR"):
             return Path(env_dir).resolve()
+        compats_root = Path(str(resolve_path("compats")))
+        if (compats_root / "adapters").is_dir():
+            return compats_root.resolve()
+
         if self_dir := find_current_self():
             cand = self_dir.parent / "fiber-compats"
             if cand.is_dir():
                 return cand.resolve()
-        for rel in (Path("fiber-compats"), Path("../fiber-compats")):
-            if rel.is_dir():
-                return rel.resolve()
-        compats_root = Path(str(resolve_path("compats")))
-        if (compats_root / "adapters").is_dir():
-            return compats_root.resolve()
         return Path(os.getcwd()) / "fiber-compats"
 
     @classmethod
@@ -173,7 +171,6 @@ class VCRSynthResult:
     tool_calls: Optional[List[Dict[str, Any]]] = None
     usage: Optional[Dict[str, Any]] = None
 
-
 class VCRToolCallSpec(DynamicSurgeModel):
     """합성된 단일 Tool Call 명세"""
     name: str
@@ -186,7 +183,6 @@ class VCRToolCallSpec(DynamicSurgeModel):
             "type": "function",
             "function": {"name": self.name, "arguments": args_str},
         }
-
 
 class VCRSynthSpec(DynamicSurgeModel):
     """생성된 픽스처 스펙 및 VCRFixtureTraceState 변환 모델"""
