@@ -9,7 +9,6 @@ from pathlib import Path
 import time
 from typing import Any, Dict, List, Tuple
 
-from xphi.arch.contract.config.tunnel import DEFAULT_TUNNEL_URL
 from xphi.node.space.bind.resolver import resolve_path
 
 STATE_FILE_PATH = resolve_path("anchor") / "state.json"

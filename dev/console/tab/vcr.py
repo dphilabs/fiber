@@ -9,21 +9,21 @@ from fiber.plane.infra.account.state import state, refs
 from fiber.gateway.bridge.console import run_fiber_cli
 import fiber.dev.console.ui.kit as kit
 from fiber.dev.console.ui.kit import StudioTab
-from xphi.node.space.bind.resolver import find_current_self
+from xphi.node.space.bind.resolver import resolve_path, find_current_self
 
 def _resolve_compat_adapters_dir() -> Path:
-    from xphi.node.space.bind.resolver import resolve_path
-    self_dir = find_current_self()
-    if self_dir:
-        cand = self_dir.parent / "fiber-compats" / "adapters"
-        if cand.is_dir():
-            return cand.resolve()
-
     compats_root = Path(str(resolve_path("compats")))
     for sub in ("adapters", "fiber-compats/adapters"):
         cand_fix = compats_root / sub
         if cand_fix.is_dir():
             return cand_fix.resolve()
+    
+    self_dir = find_current_self()
+    if self_dir:
+        cand = self_dir.parent / "dphilabs" / "fiber-compats" / "adapters"
+        if cand.is_dir():
+            return cand.resolve()
+
     return compats_root / "adapters"
 
 def _discover_compat_models_and_dirs() -> dict[str, Path]:
