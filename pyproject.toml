@@ -32,7 +32,7 @@ dev = ["pytest", "pytest-asyncio"]
 path = "plane/ops/hatch.py"
 base_dependencies = [
     "uvloop", "psutil", "fastapi", "valkeylite==9.1.*; sys_platform != 'win32'", "redis==8.0.1", "pyyaml", "orjson", "typer", "canonicaljson", "aiohttp", "requests",
-    "watchdog", "rocksdict", "filetype", "openai", "anthropic", "google-genai", "mcp==2.3.0", "pydantic", "httpx", "wasmtime",
+    "watchdog", "rocksdict", "filetype", "openai", "anthropic", "google-genai", "mcp==2.3.0", "pydantic", "pydantic_settings", "httpx", "wasmtime",
     "tinytag", "typing_extensions", "eth_account", "web3", "numpy", "duckdb", "qrcode", "tokenizers", "tqdm", "pyotp", "deprecation", "ollama",
     "onnxruntime", "pytest-asyncio", "nicegui", "docker", "libtmux", "platformdirs"
 ]
