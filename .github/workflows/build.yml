@@ -61,7 +61,7 @@ jobs:
       - name: Boot Node & Embedded Valkey (Background)
         env:
           XPHI_ENV: "local"
-          XPHI_WORKERS: "2"
+          XPHI_WORKERS: "1"
           XPHI_TUNNEL_URL: "redis://127.0.0.1:6379"
         run: |
           echo "Starting Node (with embedded Valkey unix socket) in background..."

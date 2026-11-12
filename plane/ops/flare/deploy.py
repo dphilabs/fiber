@@ -240,7 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--url",
         type=str,
         default=None,
-        help="Target BYOC workers.dev URL for zero-deploy binding or verification",
+        help="Target KYOC workers.dev URL for zero-deploy binding or verification",
     )
     parser.add_argument(
         "--skip-verify",
