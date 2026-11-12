@@ -1,0 +1,72 @@
+name: "Fiber Agent"
+
+on:
+  workflow_run:
+    workflows: ["Fiber CI/CD Pipeline"]
+    types: [completed]
+
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: fiber-agent-${{ github.event.workflow_run.id || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  report-ci-result:
+    if: >
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post or Update CI Report as fiber-agent
+        env:
+          GH_TOKEN: ${{ secrets.FIBER_AGENT_TOKEN }}
+          REPO: ${{ github.repository }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUM: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          # 포크된 레포의 PR 등 PR 번호가 안 잡히는 경우 커밋 SHA로 PR 번호 역추적
+          if [ -z "$PR_NUM" ]; then
+            PR_NUM=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" --jq '.[0].number')
+          fi
+          if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "null" ]; then
+            echo "No associated PR found. Exiting."
+            exit 0
+          fi
+
+          BODY="[Fiber Agent] Automated CI/CD Pipeline Report
+          - Commit: \`${HEAD_SHA::7}\`
+          - Result: **${CONCLUSION^^}**
+          - Workflow Run: [View Execution Logs](${GITHUB_SERVER_URL}/${REPO}/actions/runs/${RUN_ID})"
+
+          EXISTING_ID=$(gh api "repos/${REPO}/issues/${PR_NUM}/comments" \
+            --jq '.[] | select(.user.login == "fiber-agent" and (.body | contains("[Fiber Agent] Automated CI/CD"))) | .id' | head -n 1)
+
+          if [ -n "$EXISTING_ID" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING_ID}" -f body="$BODY"
+          else
+            gh issue comment "$PR_NUM" --repo "$REPO" --body "$BODY"
+          fi
+
+  on-demand-command:
+    if: >
+      github.event_name == 'issue_comment' &&
+      github.actor != 'fiber-agent' &&
+      startsWith(github.event.comment.body, '/fiber') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reply to Command as fiber-agent
+        env:
+          GH_TOKEN: ${{ secrets.FIBER_AGENT_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          CMD: ${{ github.event.comment.body }}
+        run: |
+          gh issue comment "$ISSUE_NUM" --repo "$REPO" --body "[Fiber Agent] Command acknowledged.
+          - Command: \`${CMD}\`
+          - Requested by: @${{ github.actor }}
+          - Status: Ready for on-demand execution."
