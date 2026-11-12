@@ -211,7 +211,7 @@ class StudioState:
 
     @property
     def tunnel_badge_text(self) -> str:
-        return "🟢 Tunnel: Pub/Sub" if self.pipelinetunnels_online else "🟡 Mode: Standalone (In-Memory)"
+        return "🟢 Tunnel: Pub/Sub" if self.pipeline.tunnel_online else "🟡 Mode: Standalone (In-Memory)"
 
     @property
     def fuel_kpi_text(self) -> str:

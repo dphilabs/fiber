@@ -174,7 +174,7 @@ def _on_tick(tabs: Sequence[StudioTab]) -> None:
         diag.exception("100ms tick flush error", exc=exc)
 
 def build_tabs() -> list[StudioTab]:
-    return [McpGatewayTab(), LLMGuardrailTab(), MeteringTab(), VcrTab(), HitlNSettingTab()]
+    return [McpGatewayTab(), LLMGuardrailTab(), HitlNSettingTab(), VcrTab(), MeteringTab()]
 
 def build_modals() -> list[ModalTemplate]:
     return [HitlModal(), QrModal(), GuideModal(), HitlSimulatorModal()]
