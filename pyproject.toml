@@ -23,7 +23,7 @@ Homepage = "https://github.com/dphilabs/fiber"
 Repository = "https://github.com/dphilabs/fiber.git"
 
 [project.scripts]
-fiber = "fiber.console.cli.main:app"
+fiber = "fiber.studio.cli.main:app"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]

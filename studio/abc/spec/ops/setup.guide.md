@@ -51,7 +51,7 @@ pyenv local self
 
 ## 3. Register Zsh Alias (Prevents binary shadowing against USER/Homebrew installations)
 ## Recommended in ~/.zprofile to strictly separate DEV entrypoint from global 'fiber' CLI
-alias fiber-dev="python -m fiber.console.cli.main"
+alias fiber-dev="python -m fiber.studio.cli.main"
 
 ## 4. Trigger self-replication & topology binding (around.py injects xphi.pth & anchor/bound.json)
 fiber-dev --help

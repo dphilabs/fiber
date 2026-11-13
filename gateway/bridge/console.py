@@ -32,7 +32,7 @@ async def run_fiber_cli(*args: str) -> None:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "fiber.console.cli.main",
+            "fiber.studio.cli.main",
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,

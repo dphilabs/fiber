@@ -144,7 +144,7 @@ def run_daemon(
         log_dir = Path(str(resolve_path("log")))
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "daemon.log"
-        cmd = [sys.executable, "-m", "fiber.console.cli.main", "daemon", "-s", start] + (["-f", env_file] if env_file else [])
+        cmd = [sys.executable, "-m", "fiber.studio.cli.main", "daemon", "-s", start] + (["-f", env_file] if env_file else [])
         with open(log_file, "a", encoding="utf-8") as out:
             proc = subprocess.Popen(cmd, stdout=out, stderr=out, start_new_session=True)
         log.info(f"[Fiber] Background daemon started (PID: {proc.pid}) -> Log: {log_file}")

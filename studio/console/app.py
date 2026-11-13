@@ -116,7 +116,7 @@ def _ensure_local_daemon(env_file: Optional[str] = None) -> None:
         log_dir = Path(str(resolve_path("log")))
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "daemon.log"
-        cmd = [sys.executable, "-m", "fiber.console.cli.main", "daemon", "-s", "all"]
+        cmd = [sys.executable, "-m", "fiber.studio.cli.main", "daemon", "-s", "all"]
         if env_file:
             cmd.extend(["-f", env_file])
 
