@@ -1,9 +1,15 @@
-# fiber_try.py — Zero-Key In-Process Guardrail & VCR Stream Demo
-# Run instantly: uv run https://gist.githubusercontent.com/<user>/<id>/raw/fiber_try.py
+# fiber.node.kyoc.tester.guardrail.try
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["fiber @ git+https://github.com/dphilabs/fiber.git"]
 # ///
+"""
+Fiber — Zero-Key In-Process LLM Guardrail (PII Masking & Secret Blocking) + Deterministic VCR Stream Replay.
+Docs: https://fiber.dphilabs.com | Repo: https://github.com/dphilabs/fiber
+
+Run via CLI:   fiber kyoc tester.guardrail.try
+Run via URL:   uv run https://raw.githubusercontent.com/dphilabs/fiber/main/node/kyoc/tester/guardrail/try.py
+"""
 import asyncio
 from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.interceptor.guardrail import (
@@ -32,7 +38,7 @@ async def main():
         async for chunk in stream:
             delta = chunk.choices[0].delta.content or ""
             print(delta, end="", flush=True)
-            await asyncio.sleep(0.08)  # Optional pacing for terminal readability
+            await asyncio.sleep(0.08)
         print("\n")
 
         # POST_TRANSLATE: Hard-blocks leaked credentials (33 built-in rules) prior to any I/O
