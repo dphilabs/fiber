@@ -9,7 +9,7 @@ from nicegui import ui
 
 from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
 import fiber.studio.console.observer.plane as plane
-from fiber.node.auth.account.state import state, refs
+from fiber.node.account.state import state, refs
 
 
 def _extract_json_payload(raw_out: str) -> dict | None:

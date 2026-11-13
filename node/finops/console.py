@@ -1,5 +1,4 @@
 # fiber.node.finops.console
-## @lineage: fiber.node.infra.finops.console
 """
 Glossary:
 - fuel_budget: Fixed spending quota limit assigned via policy/Mandate (immutable until upgraded).
@@ -20,7 +19,7 @@ from fiber.gateway.bridge.action.account import (
     issue_account_mandate,
     revoke_account_mandate
 )
-from fiber.node.auth.account.state import state, refs, save_state_to_disk
+from fiber.node.account.state import state, refs, save_state_to_disk
 import fiber.studio.console.ui.diag as diag
 
 USD_TO_FUEL_RATE = 1_000_000

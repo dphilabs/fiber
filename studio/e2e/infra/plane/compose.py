@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, List, Dict
 
-from fiber.node.ops.compose import ComposeOrchestrator, ComposeContext
+from fiber.node.kyoc.compose import ComposeOrchestrator, ComposeContext
 
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor

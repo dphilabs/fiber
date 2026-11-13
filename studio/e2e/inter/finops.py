@@ -24,7 +24,7 @@ from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver
 from fiber.gateway.security import TokenTranslator
-from fiber.gateway.contract.token.gen import FinOpsTokenGenerator
+from fiber.node.finops.token.gen import FinOpsTokenGenerator
 from fiber.node.mcp.connector import MCPServerConnector
 
 from fiber.llm.vcr.manager import (
@@ -37,7 +37,7 @@ from fiber.studio.base.workflow.builder import create_e2e_parser, build_e2e_cont
 import fiber.node.mcp.worker.finops as worker_finops
 from fiber.node.finops.watcher import default_finops_watcher, default_tenant_eco
 
-from fiber.node.auth.payload import NodeAuthPayload
+from fiber.node.account.auth.payload import NodeAuthPayload
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.arch.bound.adapter.pta import PtaAdapter, PtaTransaction, PtaOutput

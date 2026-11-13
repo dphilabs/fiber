@@ -11,7 +11,7 @@ import time
 from typing import Tuple
 from nicegui import ui
 
-from fiber.node.auth.account.state import state, refs
+from fiber.node.account.state import state, refs
 from fiber.llm.compat.secret.redact import redact_string, FastRegexRedactionEngine
 
 
@@ -215,7 +215,7 @@ class PipelineActionBridge:
 
     async def run_gateway_vcr_suite(self) -> None:
         p = state.pipeline
-        refs.push_cli("$ fiber ops gateway.tester")
+        refs.push_cli("$ fiber kyoc gateway.tester")
         t0 = time.perf_counter()
         live_ms: float | None = None
         replay_ms: float | None = None
@@ -224,7 +224,7 @@ class PipelineActionBridge:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "fiber.node.ops.tester.gateway",
+                "fiber.node.kyoc.tester.gateway",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env={**os.environ, "FIBER_CONSOLE_ACTIVE": "1"},

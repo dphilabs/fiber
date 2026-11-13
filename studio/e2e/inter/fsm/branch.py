@@ -2,11 +2,11 @@
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fiber.studio.base.fsm.registry import default_asl_registry
+from fiber.gateway.reflex.asl.registry import default_asl_registry
 from fiber.studio.base.mcp.worker import E2EWorkerManager
 from fiber.studio.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
 from fiber.studio.base.workflow.pipeline import BasePipeline, log
-from fiber.gateway.bridge.fsm.polyglot import PolyglotExecutionBridge
+from fiber.gateway.reflex.polyglot import PolyglotExecutionBridge
 
 from xphi.watcher.reflex.traverser import GraphTraverser, TraversalResult
 from xphi.node.runtime.wasm.broker import WasmBroker

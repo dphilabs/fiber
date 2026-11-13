@@ -7,7 +7,7 @@ from typing import Dict, List
 from nicegui import ui
 import orjson
 
-from fiber.node.auth.account.state import state, refs
+from fiber.node.account.state import state, refs
 from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.env import get_slack_status
 from fiber.studio.console.ui.guide import open_guide_modal
