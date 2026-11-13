@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict
 from nicegui import ui
 
 from fiber.node.auth.account.state import state, refs
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 _emitter = get_emitter(name="console.ui.diag", phase="UI_DIAG", mode="RAW")
 

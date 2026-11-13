@@ -16,7 +16,7 @@ from fiber.llm.vcr.fixture.synth import VCRFixtureSynthesizer
 from fiber.llm.vcr.manager import VCRManager
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("fixture.router")
 

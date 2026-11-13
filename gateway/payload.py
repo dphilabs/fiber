@@ -27,7 +27,7 @@ from xphi.arch.xor.parser.ruleset.otlp import OtlpRulesetParser, default_otlp_ru
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.node.space.tunnel.subs import DistributedPubSub
 from xphi.node.runtime.wasm.broker import WasmBroker
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter(__name__)
 

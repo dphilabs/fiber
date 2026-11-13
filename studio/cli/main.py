@@ -22,7 +22,7 @@ if determine_execution_mode() == "USER" and not (Path.home() / ".anchor" / "boun
 
 from xphi.state.phase.reactor import PhaseReactor
 from xphi.node.ops.boot import main_async, teardown
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.node.space.bind.resolver import resolve_path
 from fiber.gateway.bridge.action.sign import app as sign_app
 

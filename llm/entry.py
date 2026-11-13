@@ -13,7 +13,7 @@ from fiber.llm.exception.eco import UnsupportedParamsError
 from fiber.llm.response import ModelResponse
 
 from fiber.node.auth.payload import BrokerKey, NodeAuthPayload
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("llm.entry")
 

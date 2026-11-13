@@ -7,7 +7,7 @@ from typing import Dict, Tuple, Optional, Union
 
 from xphi.arch.contract.config.env import config
 from xphi.node.space.bind.resolver import resolve_path 
-from xphi.watcher.plane.emitter import get_emitter 
+from fiber.gateway.bridge.emitter import get_emitter 
 
 log_cost = get_emitter("cost.registry")
 REGISTRY_ROOT = resolve_path("abc") / "registry"

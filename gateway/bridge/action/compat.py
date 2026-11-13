@@ -17,7 +17,7 @@ from fiber.llm.vcr.fixture.schema import (
 )
 from fiber.llm.vcr.injector import VCRInjector
 from fiber.llm.vcr.manager import VCRPlaybackConfig
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("action.compat")
 COMPAT_SAMPLE_TOOLS = DEFAULT_SYNTH_TOOLS

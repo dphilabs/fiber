@@ -15,7 +15,7 @@ from fiber.studio.base.client import GatewayClient, StrictPayloadFactory, Endpoi
 from xphi.state.phase.workflow import ErrorMessage, StopMessage, Workflow, WorkflowMessage, step
 from xphi.state.phase.reactor import PhaseReactor
 from fiber.studio.base.workflow.chaos import ChaosPayloadLibrary
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.config.env import FIBER_GATEWAY_URL, XPHI_ENV
 
 log = get_emitter("e2e.gateway.compliance")

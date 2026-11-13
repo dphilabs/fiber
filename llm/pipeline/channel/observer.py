@@ -10,7 +10,7 @@ from fiber.llm.pipeline.channel.breaker import extract_usage_info
 
 from fiber.node.auth.payload import BrokerKey
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log_pipeline = get_emitter("channel.observer", phase="METERING")
 

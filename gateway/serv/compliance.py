@@ -40,7 +40,7 @@ from xphi.arch.model.schema.audit import (
     KernelOtlpRecord
 )
 from xphi.watcher.receptor.warden import SecretAuditor
-from xphi.watcher.plane.emitter import get_emitter, flow_scope
+from fiber.gateway.bridge.emitter import get_emitter, flow_scope
 
 log = get_emitter("edge.compliance")
 

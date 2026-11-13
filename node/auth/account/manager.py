@@ -34,7 +34,7 @@ from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.anchor.key import KeyGen
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("account.manager")
 DEFAULT_INITIAL_FUEL = 1_000_000  # $1.00 = 1,000,000 Fuel

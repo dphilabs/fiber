@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any, Tuple
 
 import orjson
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("mcp.mapper.config")
 ANCHOR_ROOT = Path(resolve_path("anchor")).resolve()

@@ -3,7 +3,7 @@ import importlib
 from typing import Any
 
 import fiber.llm.gateway.inter.embedding as embedding_pkg
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("registry.embedding")
 

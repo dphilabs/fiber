@@ -9,7 +9,7 @@ from typing import Dict, Any, Tuple
 
 from xphi.watcher.plane.tracer.base import SystemBound
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.watcher.plane.emitter import get_emitter, flow_scope
+from fiber.gateway.bridge.emitter import get_emitter, flow_scope
 
 COMPOSE_ROOT = resolve_path("time") / "compose"
 log = get_emitter("infra.compose")

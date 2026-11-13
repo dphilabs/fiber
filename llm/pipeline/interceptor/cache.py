@@ -9,7 +9,7 @@ from fiber.llm.response import ModelResponse
 from fiber.llm.model.types.provider.core import Usage
 
 from xphi.state.phase.channel import DuplexChannel, ChannelContext
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.node.space.tunnel.factory import TunnelFactory
 
 cache_log = get_emitter("interceptor.cache")

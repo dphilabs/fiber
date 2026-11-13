@@ -9,7 +9,7 @@ from fiber.node.finops.cost.registry import RegistryIO, DEFAULT_REGISTRY_FILENAM
 from fiber.node.finops.cost.adapter import RegistryAdapters
 
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 WORKSPACE_ROOT = resolve_path(".")
 log = get_emitter("provider.cost.filter")

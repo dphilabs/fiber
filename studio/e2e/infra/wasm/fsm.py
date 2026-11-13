@@ -13,7 +13,7 @@ from xphi.node.ops.wasm.builder import WasmBuilder
 from xphi.node.ops.wasm.tester import WasmNodeTester
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("infra.wasm.fsm")
 

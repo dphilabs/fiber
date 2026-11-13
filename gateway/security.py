@@ -15,7 +15,7 @@ from xphi.arch.xor.secret.cipher import Cipher
 from xphi.arch.xor.secret.client import get_secret_from_vendor, KMSVendor
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.watcher.receptor.warden import SecretAuditor
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 from xphi.node.runtime.wasm.broker import WasmBroker
 from fiber.node.auth.payload import NodeAuthPayload

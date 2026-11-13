@@ -15,7 +15,7 @@ from xphi.arch.contract.config.constants import (
     MAX_TILE_HEIGHT,
     MAX_TILE_WIDTH,
 )
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("ext.vision")
 

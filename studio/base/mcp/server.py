@@ -10,7 +10,7 @@ import orjson
 from aiohttp import web
 
 from fiber.studio.base.mcp.payload import McpRequest, McpPayloadBuilder
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("e2e.mcp.server")
 

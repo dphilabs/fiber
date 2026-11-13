@@ -26,7 +26,7 @@ from xphi.arch.contract.config.constants import DEFAULT_IMAGE_TOKEN_COUNT
 
 from fiber.llm.response import Message
 
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("token.counter")
 

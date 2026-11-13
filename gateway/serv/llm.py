@@ -21,7 +21,7 @@ from fiber.node.auth.account.state import state, STATE_FILE_PATH, load_or_init_s
 
 from xphi.arch.contract.event.next import next_trace_id
 from fiber.node.auth.payload import BrokerKey, BrokerAction
-from xphi.watcher.plane.emitter import get_emitter, flow_scope
+from fiber.gateway.bridge.emitter import get_emitter, flow_scope
 
 log = get_emitter("serv.llm")
 

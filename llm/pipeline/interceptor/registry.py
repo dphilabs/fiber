@@ -4,7 +4,7 @@ import json
 import importlib
 from typing import List, Any
 import fiber.llm.pipeline.interceptor as trace_llm_pkg
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("interceptor.registry")
 

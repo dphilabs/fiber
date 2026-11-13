@@ -20,7 +20,7 @@ from fiber.llm.vcr.fixture.schema import (
 )
 from fiber.llm.vcr.injector import VCRInjector
 from fiber.llm.vcr.manager import VCRManager, VCRPlaybackConfig
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("fixture.synth")
 

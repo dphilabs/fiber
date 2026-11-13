@@ -9,7 +9,7 @@ from typing import Optional, Any, Dict, List
 
 from xphi.arch.model.surge.model import DynamicSurgeModel
 from xphi.arch.contract.config import env
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 class VCRRequestContext(DynamicSurgeModel):
     model: str

@@ -16,7 +16,7 @@ from xphi.arch.bound.client.rpc import InternalRpcClient, RpcException
 from xphi.arch.bound.adapter.gateway import AgentIdentity, IdempotencyMapper, NonceReplayProtector, DPoPValidator
 from xphi.arch.xor.parser.mcp import McpPayloadParser
 from xphi.node.space.tunnel.factory import TunnelFactory
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("serv.gateway")
 

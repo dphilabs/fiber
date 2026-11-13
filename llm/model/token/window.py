@@ -9,7 +9,7 @@ from fiber.llm.model.types.provider.openai import AllMessageValues
 from xphi.arch.contract.config.constants import DEFAULT_TRIM_RATIO
 
 from fiber.llm.model.token.counter import token_counter
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("token.window")
 

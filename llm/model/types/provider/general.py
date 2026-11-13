@@ -21,7 +21,7 @@ from fiber.llm.model.types.provider.openai import OpenAIChatCompletionFinishReas
 
 from xphi.arch.contract.event.next import uuid
 from xphi.arch.model.surge.model import DynamicSurgeModel
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("types.general")
 

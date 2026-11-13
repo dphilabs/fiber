@@ -16,7 +16,7 @@ import httpx
 from fiber.gateway.bridge.channel.oob import OutOfBandApprovalBridge
 from xphi.arch.bound.client.rpc import InternalRpcClient
 from xphi.node.space.tunnel.factory import TunnelFactory
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("bridge.channel.discord")
 

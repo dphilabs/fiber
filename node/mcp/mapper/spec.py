@@ -15,7 +15,7 @@ from fiber.node.mcp.guard.preflight import PreflightGuard
 from fiber.node.mcp.mapper.config import McpConfigMapper, MappedMcpEntry
 
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("mcp.mapper.spec")
 

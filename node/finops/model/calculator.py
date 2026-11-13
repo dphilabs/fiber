@@ -3,7 +3,7 @@
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, TypedDict, cast
 from fiber.llm.model.types.provider.general import CacheCreationTokenDetails, CompletionTokensDetailsWrapper, ImageResponse, ModelInfo, PromptTokensDetailsWrapper, ServiceTier, DataResidency
 from fiber.llm.model.types.provider.core import Usage
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("cost.unit")
 

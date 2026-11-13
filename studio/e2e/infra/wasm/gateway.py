@@ -8,7 +8,7 @@ from xphi.arch.bound.adapter.gateway import GatewayAdapter
 from xphi.node.ops.wasm.builder import WasmBuilder
 from xphi.state.inter.gateway import GatewayWasm
 from xphi.state.phase.reactor import PhaseReactor
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("infra.wasm.gateway")
 

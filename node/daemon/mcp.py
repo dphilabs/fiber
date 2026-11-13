@@ -20,7 +20,7 @@ from fiber.gateway.bridge.action.connect import (
 from xphi.arch.contract.registry.unified import contract
 from xphi.node.ops.daemon.base import AbstractDaemon
 from xphi.node.space.tunnel.factory import TunnelFactory
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("daemon.mcp")
 
