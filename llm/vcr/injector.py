@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from fiber.llm.model.router.adapter import AdapterRegistry
 from fiber.llm.vcr.manager import VCRPlaybackConfig, VCRManager
 from fiber.llm.vcr.proxy import VCRAdapterProxy
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("vcr.injector")
 

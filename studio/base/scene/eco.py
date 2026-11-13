@@ -13,7 +13,7 @@ from fiber.studio.base.scene.runner import SchemeRunner
 from xphi.state.settlement.mandate import ClearingAdapter
 from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.node.runtime.wasm.method import WasmMethod
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("scene.eco")
 

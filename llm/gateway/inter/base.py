@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union, TYPE_CHECKING
 from fiber.llm.gateway.inter.handler.util import asyncio_run
 
 from xphi.watcher.observer.span import observe
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 from fiber.llm.model.types.inter.response import ChatMessage, ChatResponse, ChatResponseAsyncGen, ChatResponseGen
 from fiber.llm.model.types.inter.block import MessageRole

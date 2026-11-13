@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from xphi.node.rpc.method import RpcMethod
 from fiber.node.mcp.guard.preflight import PreflightGuard
 from xphi.arch.bound.client.rpc import InternalRpcClient
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 
 class IntentState(Enum):

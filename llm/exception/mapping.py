@@ -36,7 +36,7 @@ from fiber.llm.exception.types import (
     LLMServiceUnavailableError,
     LLMTimeoutError,
 )
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("exception.mapping")
 

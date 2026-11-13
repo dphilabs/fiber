@@ -3,7 +3,7 @@
 from typing import Dict, Any
 from fiber.node.finops.cost.schema import ModelCostSchema
 from fiber.llm.model.adapter.openrouter import OpenRouterModelData
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("finops.cost.adapter")
 

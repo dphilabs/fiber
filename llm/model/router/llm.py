@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, asdict
 
 from fiber.llm.model.types.inter.llm import LLMBase
 import fiber.llm.gateway.inter as llm_pkg 
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 registry_log = get_emitter("router.llm")
 

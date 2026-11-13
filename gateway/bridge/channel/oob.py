@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from xphi.arch.bound.adapter.pta import NodeSigner
 from xphi.arch.bound.client.rpc import InternalRpcClient
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("gateway.bridge.oob")
 

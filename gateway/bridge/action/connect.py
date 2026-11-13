@@ -25,7 +25,7 @@ from fiber.node.mcp.mapper.spec import (
 )
 
 from xphi.node.space.tunnel.factory import TunnelFactory
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("bridge.action.connect")
 

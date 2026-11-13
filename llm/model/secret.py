@@ -18,7 +18,7 @@ from cryptography.fernet import Fernet
 from xphi.arch.contract.config.env import config
 from xphi.arch.xor.secret.client import get_secret_from_vendor
 from xphi.arch.xor.secret.cipher import Cipher
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("provider.secret")
 

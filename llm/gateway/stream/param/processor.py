@@ -21,7 +21,7 @@ from fiber.llm.compat.registry import PROVIDER_PARAM_RULES
 
 from xphi.arch.contract.config.env import config
 from xphi.arch.contract.config.constants import COMPLETION_HTTP_FALLBACK_SECONDS, DEFAULT_REQUEST_TIMEOUT_SECONDS, REQUEST_TIMEOUT
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("param.processor")
 

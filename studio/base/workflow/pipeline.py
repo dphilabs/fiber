@@ -24,7 +24,7 @@ from xphi.node.ops.daemon.rpc import RpcWorkerDaemon
 import xphi.node.rpc.registry as rpc_registry
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.anchor.store import AnchorRole, AnchorStore
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("infra.e2e.bridge")
 

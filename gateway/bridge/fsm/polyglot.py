@@ -7,7 +7,7 @@ import shlex
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from fiber.gateway.bridge.fsm.execution import FiberExecutionBridge
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.fsm import (
     CompactKey,
     NodeType,

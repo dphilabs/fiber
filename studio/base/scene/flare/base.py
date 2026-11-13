@@ -12,7 +12,7 @@ from fiber.studio.base.scene.epoch import ActorIdentity
 from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.arch.bound.adapter.pta import compute_merkle_root
 from xphi.node.runtime.wasm.method import WasmMethod
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("scene.flare.base")
 

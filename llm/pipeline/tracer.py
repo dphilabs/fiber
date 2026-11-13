@@ -15,7 +15,7 @@ from fiber.llm.gateway.state.traverser import StateTraverser
 from fiber.llm.response import ModelResponse
 from fiber.llm.model.types.provider.core import Usage
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 tracer_log = get_emitter("llm.tracer")
 

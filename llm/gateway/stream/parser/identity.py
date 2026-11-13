@@ -22,7 +22,7 @@ import os
 from typing import Any, Dict, Iterable, Optional, Type
 from starlette.datastructures import Headers
 from fiber.llm.response import DecodedResponseId
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("stream.identity")
 

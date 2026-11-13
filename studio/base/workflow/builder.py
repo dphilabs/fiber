@@ -15,7 +15,7 @@ from xphi.arch.bound.scope.manager import managed_scope
 
 from xphi.state.phase.workflow import ErrorMessage, StopMessage, Workflow, WorkflowMessage, step
 from xphi.state.phase.reactor import PhaseReactor
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("e2e.base")
 

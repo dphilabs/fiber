@@ -10,7 +10,7 @@ from xphi.arch.contract.config.constants import REPLICATE_MODEL_NAME_WITH_ID_LEN
 from fiber.llm.model.types.param.legacy import LegacyParams
 from fiber.llm.model.secret import get_secret_str, get_secret
 from xphi.arch.contract.config.env import config
-from xphi.watcher.plane.emitter import get_emitter 
+from fiber.gateway.bridge.emitter import get_emitter 
 
 log_route = get_emitter("model.resolver")
 

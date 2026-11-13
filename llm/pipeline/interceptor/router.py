@@ -14,7 +14,7 @@ from typing import Optional, Dict, Any, List
 from fiber.llm.pipeline.bootstrap import PipelineSlot
 from fiber.llm.model.token.encoder import encode
 from xphi.state.phase.channel import DuplexChannel, ChannelContext
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 router_log = get_emitter("interceptor.router")
 

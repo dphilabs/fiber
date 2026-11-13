@@ -18,7 +18,7 @@ from xphi.arch.model.schema.stream import (
     StreamIdentity,
     StreamMetadata,
 )
-from xphi.watcher.plane.emitter import flow_scope, get_emitter
+from fiber.gateway.bridge.emitter import flow_scope, get_emitter
 from xphi.watcher.observer.span import span_context
 
 log = get_emitter("transport.sentinel", phase="DEFENSE")

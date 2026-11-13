@@ -9,7 +9,7 @@ from fiber.studio.base.scene.runner import SandboxRunner
 from xphi.arch.bound.adapter.pta import compute_merkle_root
 from xphi.arch.contract.config.env import config as env_config
 from xphi.node.runtime.wasm.broker import WasmBroker
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.watcher.plane.flare.tunnel import FlareTunnelFactory
 
 log = get_emitter("scene.flare.bridge")

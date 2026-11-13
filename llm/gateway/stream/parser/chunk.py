@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from typing_extensions import TypedDict
 from fiber.llm.compat.registry import EXTRACTION_RULES
 from fiber.llm.compat.extraction import PROVIDER_RULE_ALIAS
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("chunk.parser")
 

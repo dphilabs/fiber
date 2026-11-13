@@ -9,7 +9,7 @@ from fiber.llm.pipeline.bootstrap import PipelineSlot
 from fiber.llm.compat.secret.redact import redact_string, sanitize_payload, FastRegexRedactionEngine
 
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 guardrail_log = get_emitter("interceptor.guardrail", phase="DEFENSE")
 

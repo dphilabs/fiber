@@ -33,7 +33,7 @@ from fiber.gateway.bridge.action.schema import (
 )
 from xphi.arch.bound.adapter.pta import NodeSigner
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 SIGN_ROOT = Path(str(resolve_path("sign")))
 SSH_DIR = Path.home() / ".ssh"

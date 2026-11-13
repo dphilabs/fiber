@@ -16,7 +16,7 @@ from xphi.arch.contract.config.env import config as env_config
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.state.phase.reactor import PhaseReactor
 from xphi.watcher.plane.flare.tunnel import FlareTunnelFactory
-from xphi.watcher.plane.emitter import get_emitter, flow_scope
+from fiber.gateway.bridge.emitter import get_emitter, flow_scope
 
 log = get_emitter("e2e.plane.flare")
 MODULE_PATH = scene_module.__name__

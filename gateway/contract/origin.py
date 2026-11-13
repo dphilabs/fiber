@@ -9,7 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from xphi.arch.bound.adapter.state import StateAdapter
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.node.space.bind.resolver import resolve_path
 
 ANCHOR_ROOT = resolve_path("anchor")

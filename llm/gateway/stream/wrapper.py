@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator, Callable, Optional, NoReturn, Dict, List
 
 from xphi.arch.contract.config.constants import MAX_STREAMING_DURATION_SECONDS
 from xphi.arch.contract.config.env import config
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.event.next import uuid
 
 from fiber.llm.exception.mapping import exception_type

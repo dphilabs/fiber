@@ -22,7 +22,7 @@ from fiber.llm.gateway.context.metadata import ExecutionMetadata
 from xphi.arch.contract.event.next import next_trace_id
 from fiber.node.auth.payload import BrokerKey, NodeAuthPayload
 from xphi.state.phase.channel import ChannelPipeline, ChannelContext, DuplexChannel, RpcBridge
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("runtime.entry")
 log_handlers = get_emitter("executor.handlers")

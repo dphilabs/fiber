@@ -15,7 +15,7 @@ from xphi.node.ops.daemon.base import AbstractDaemon
 from xphi.node.ops.reaper import SystemOps
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.anchor.store import AnchorStore
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("daemon.rest")
 

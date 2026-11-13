@@ -10,7 +10,7 @@ from fiber.node.ops.compose import ComposeOrchestrator, ComposeContext
 
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.state.phase.reactor import PhaseReactor
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 FIBER_ROOT = resolve_path("fiber")
 log = get_emitter("e2e.plane.compose")

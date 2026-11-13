@@ -10,7 +10,7 @@ from fiber.studio.console.observer.signal import UIKey, UIModal, UISlot, UISlotS
 
 from xphi.arch.bound.adapter.pta import NodeSigner
 from xphi.arch.bound.client.rpc import InternalRpcClient
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 class PreflightGuard:
     ENV_KEYS = ("FIBER_PREFLIGHT_PATTERN", "FIBER_HITL_ON")

@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     from fiber.llm.model.types.inter.tool import BaseTool
 
 from xphi.arch.contract.event.next import uuid4 
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter(__name__)
 

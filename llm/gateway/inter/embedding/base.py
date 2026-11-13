@@ -34,7 +34,7 @@ from fiber.llm.gateway.inter.handler.util import get_tqdm_iterable
 from fiber.llm.gateway.inter.embedding.jobs import run_jobs
 
 from xphi.watcher.observer.span import observe
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.config.constants import DEFAULT_EMBED_BATCH_SIZE
 
 log = get_emitter(__name__, phase="LLM_EMBEDDING")

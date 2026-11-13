@@ -15,7 +15,7 @@ from fiber.llm.model.types.inter.response import ChatMessage
 from xphi.arch.contract.event.next import uuid4
 from xphi.arch.model.surge.model import _melt_alien_objects
 from xphi.node.space.bind.resolver import get_invoker
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 _invoker_full, MODULE_NAMESPACE = get_invoker(Path(__file__))
 log = get_emitter(MODULE_NAMESPACE, phase="SYSTEM")

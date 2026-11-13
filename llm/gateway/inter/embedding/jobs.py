@@ -33,7 +33,7 @@ import platformdirs
 import requests
 
 from xphi.watcher.observer.span import observe
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 if TYPE_CHECKING:
     from fiber.llm.model.types.inter.block import ContentBlock, TextBlock

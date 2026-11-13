@@ -17,7 +17,7 @@ from fiber.llm.gateway.stream.parser.chunk import StreamChunkParser
 
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.arch.model.surge.model import DynamicSurgeModel, _melt_alien_objects
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("vcr.proxy", phase="LLM_INTER")
 

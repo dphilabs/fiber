@@ -12,7 +12,7 @@ from fiber.llm.compat.secret.redact import (
     configure_redaction,
 )
 from xphi.node.space.bind.resolver import resolve_path
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log_redact = get_emitter("redact.registry")
 

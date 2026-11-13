@@ -1,5 +1,4 @@
 # fiber.node.finops.watcher
-## @lineage: fiber.node.infra.finops.watcher
 """
 Glossary:
 - fuel_budget: Fixed spending quota limit assigned via policy/Mandate (immutable until upgraded).
@@ -28,7 +27,7 @@ from fiber.llm.model.types.provider.general import ModelInfo
 from xphi.arch.contract.config.env import config as global_config
 from xphi.arch.contract.event.next import LogEvent
 from xphi.node.space.tunnel.factory import TunnelFactory
-from xphi.watcher.plane.emitter import flow_scope, get_emitter, register_interceptor
+from fiber.gateway.bridge.emitter import flow_scope, get_emitter, register_interceptor
 
 finops_emitter = get_emitter("watcher.finops", phase="BILLING")
 

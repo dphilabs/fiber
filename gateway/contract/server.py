@@ -18,7 +18,7 @@ from starlette.types import Scope, Receive, Send, ASGIApp
 from mcp_types import TextContent
 from mcp.server.mcpserver.server import MCPServer
 
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 from xphi.watcher.observer.span import start_active_span, end_active_span
 from fiber.studio.base.workflow.chaos import SpecValidator
 from xphi.arch.bound.adapter.pta import NodeSigner

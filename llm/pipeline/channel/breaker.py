@@ -20,7 +20,7 @@ from fiber.llm.model.token.encoder import encode
 
 from fiber.node.auth.payload import BrokerKey, NodeAuthPayload
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
-from xphi.watcher.plane.emitter import get_emitter
+from fiber.gateway.bridge.emitter import get_emitter
 
 log_pipeline = get_emitter("channel.fuel", phase="BILLING")
 
