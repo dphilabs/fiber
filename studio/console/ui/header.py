@@ -8,14 +8,14 @@ import tarfile
 import urllib.request
 from nicegui import ui
 
-from fiber.node.infra.account.state import (
+from fiber.node.auth.account.state import (
     STATE_FILE_PATH,
     load_or_init_state,
     refs,
     save_state_to_disk,
     state,
 )
-from fiber.node.infra.finops.console import finops_manager
+from fiber.node.finops.console import finops_manager
 import fiber.studio.console.ui.diag as diag
 from fiber.studio.console.ui.guide import open_guide_modal
 import fiber.studio.console.ui.kit as kit

@@ -1,4 +1,5 @@
-# fiber.node.infra.finops.exchange
+# fiber.node.finops.exchange
+## @lineage: fiber.node.infra.finops.exchange
 """
 @desc: Canonical Micro-Dollar Fuel Exchange & Dynamic Registry Sampler.
 - Supply Par:  $1.00 USD = 1,000,000 Fuel (`DEFAULT_USD_TO_FUEL_RATE = 1_000_000`, 1 Fuel = 1 micro-USD)
@@ -10,8 +11,8 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional
 
-from fiber.node.infra.finops.model.filter import CORE_KEYWORDS
-from fiber.node.infra.finops.cost.registry import ModelCostRegistry
+from fiber.node.finops.model.filter import CORE_KEYWORDS
+from fiber.node.finops.cost.registry import ModelCostRegistry
 from xphi.arch.model.surge.model import SurgeBaseModel
 
 # 1 USD = 1,000,000 Fuel (1M Fuel) / 1 Token = 1 Fuel (Base Fallback)

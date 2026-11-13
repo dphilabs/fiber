@@ -8,7 +8,7 @@ import httpx
 from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT
 from xphi.arch.bound.client.http import VerifiedHttpClient
 from xphi.arch.model.schema.audit import AuditLogRequest, AuditEvent, ExportLogsServiceRequest, ResourceLogs, ScopeLogs, LogRecord, KeyValue
-from xphi.node.schema.receipt import EdgeHeader
+from xphi.node.rpc.schema.receipt import EdgeHeader
 
 class Endpoints:
     """Backend routing prefixes and endpoints for Edge Gateway"""

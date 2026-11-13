@@ -15,7 +15,7 @@ from fiber.gateway.bridge.action.schema import (
     McpTopologyScanResult,
     McpWorkerInfo,
 )
-from fiber.node.infra.account.state import state
+from fiber.node.auth.account.state import state
 import fiber.studio.console.ui.diag as diag
 
 logging.getLogger("httpx").setLevel(logging.WARNING)

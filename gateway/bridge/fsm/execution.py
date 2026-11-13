@@ -7,10 +7,10 @@ import httpx
 from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver
-from fiber.node.infra.finops.watcher import default_finops_watcher, default_tenant_eco
+from fiber.node.finops.watcher import default_finops_watcher, default_tenant_eco
 
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
-from xphi.node.schema.auth import NodeAuthPayload
+from fiber.node.auth.payload import NodeAuthPayload
 from xphi.watcher.plane.emitter import get_emitter
 from xphi.arch.contract.fsm import (
     CompactKey,

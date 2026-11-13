@@ -18,7 +18,7 @@ from xphi.watcher.receptor.warden import SecretAuditor
 from xphi.watcher.plane.emitter import get_emitter
 
 from xphi.node.runtime.wasm.broker import WasmBroker
-from xphi.node.schema.auth import NodeAuthPayload
+from fiber.node.auth.payload import NodeAuthPayload
 from xphi.arch.bound.adapter.pta import NodeSigner, SignStateAdapter
 
 from xphi.state.settlement.mandate import (
@@ -27,7 +27,7 @@ from xphi.state.settlement.mandate import (
     Ap2Authorization,
     Ap2MandateResult
 )
-from fiber.node.infra.finops.watcher import default_finops_watcher
+from fiber.node.finops.watcher import default_finops_watcher
 
 log = get_emitter(__name__)
 

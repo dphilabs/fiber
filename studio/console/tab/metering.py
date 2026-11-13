@@ -4,10 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 from nicegui import ui
 
-from fiber.node.infra.finops.console import finops_manager
+from fiber.node.finops.console import finops_manager
 import fiber.studio.console.ui.kit as kit
 from fiber.studio.console.ui.kit import StudioTab
-from fiber.node.infra.account.state import state, refs, USD_TO_FUEL_RATE
+from fiber.node.auth.account.state import state, refs, USD_TO_FUEL_RATE
 from xphi.node.space.bind.resolver import resolve_path
 
 FINOPS_ACTION_LABELS = {
@@ -19,7 +19,7 @@ FINOPS_ACTION_LABELS = {
 
 def _resolve_accounts_registry_path() -> Path:
     try:
-        from fiber.node.infra.account.registry import LocalAccountRegistry
+        from fiber.node.auth.account.registry import LocalAccountRegistry
         return Path(LocalAccountRegistry.get_registry_path())
     except Exception:
         return resolve_path("anchor") / "sign" / "local_accounts.json"

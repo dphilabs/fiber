@@ -1,4 +1,5 @@
-# fiber.node.infra.account.registry
+# fiber.node.auth.account.registry
+## @lineage: fiber.node.infra.account.registry
 from __future__ import annotations
 
 import json

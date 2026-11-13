@@ -1,4 +1,5 @@
-# fiber.node.infra.finops.cost.schema
+# fiber.node.finops.cost.schema
+## @lineage: fiber.node.infra.finops.cost.schema
 from typing import Dict, Optional
 from dataclasses import dataclass, asdict
 

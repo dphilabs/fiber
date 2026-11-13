@@ -1,4 +1,5 @@
-# fiber.node.infra.account.manager
+# fiber.node.auth.account.manager
+## @lineage: fiber.node.infra.account.manager
 from __future__ import annotations
 
 import asyncio
@@ -13,8 +14,8 @@ from fiber.gateway.contract.token.gen import (
     FinOpsTokenGenerator,
 )
 from fiber.gateway.security import TokenTranslator
-from fiber.node.infra.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
-from fiber.node.infra.finops.watcher import default_finops_watcher
+from fiber.node.auth.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
+from fiber.node.finops.watcher import default_finops_watcher
 from fiber.gateway.bridge.action.schema import (
     AccountAllocateResult,
     AccountMandateResult,

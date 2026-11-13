@@ -27,14 +27,14 @@ from typing import Optional
 
 from fiber.gateway.contract.token.gen import FinOpsOpType
 from fiber.gateway.security import TokenTranslator
-from fiber.node.infra.account.manager import (
+from fiber.node.auth.account.manager import (
     DEFAULT_INITIAL_FUEL,
     AllocateCommand,
     LocalAccountManager,
     RevokeCommand,
     SyncQuotaCommand,
 )
-from fiber.node.infra.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
+from fiber.node.auth.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
 from fiber.gateway.bridge.action.schema import (
     AccountAllocateResult,
     AccountListResult,

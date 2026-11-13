@@ -17,7 +17,7 @@ from fiber.studio.console.observer.signal import (
     UISlot,
     UISlotStatus,
 )
-from fiber.node.infra.account.state import state, refs
+from fiber.node.auth.account.state import state, refs
 import fiber.studio.console.ui.diag as diag
 from xphi.arch.contract.config.tunnel import TUNNEL_SOCK_PATH
 from xphi.arch.contract.event.next import EventObserver, LogEvent
