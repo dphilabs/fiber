@@ -9,7 +9,7 @@ from nicegui import ui
 
 from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
 import fiber.studio.console.observer.plane as plane
-from fiber.node.infra.account.state import state, refs
+from fiber.node.auth.account.state import state, refs
 
 
 def _extract_json_payload(raw_out: str) -> dict | None:
@@ -65,7 +65,7 @@ async def _sync_after_cli_success(raw_out: str, args: tuple[str, ...]) -> None:
 
     from fiber.studio.console.bridge.sign import oob
     from fiber.studio.console.bridge.mcp import mcp
-    from fiber.node.infra.finops.console import finops_manager
+    from fiber.node.finops.console import finops_manager
 
     domain_cmd = args[0]
     if domain_cmd == "connect":

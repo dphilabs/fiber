@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from fiber.node.infra.account.state import state, refs
+from fiber.node.auth.account.state import state, refs
 from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.env import get_slack_status
 from fiber.studio.console.ui.guide import open_guide_modal

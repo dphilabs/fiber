@@ -32,7 +32,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from fiber.gateway.bridge.channel.slack import SlackHitlBridge
-from fiber.node.infra.account.state import load_or_init_state, state
+from fiber.node.auth.account.state import load_or_init_state, state
 
 SLACK_MANIFEST_DICT: Dict[str, Any] = {
     "display_information": {

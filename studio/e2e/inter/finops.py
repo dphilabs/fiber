@@ -35,9 +35,9 @@ from fiber.llm.vcr.manager import (
 from fiber.llm.vcr.injector import VCRInjector
 from fiber.studio.base.workflow.builder import create_e2e_parser, build_e2e_context
 import fiber.node.mcp.worker.finops as worker_finops
-from fiber.node.infra.finops.watcher import default_finops_watcher, default_tenant_eco
+from fiber.node.finops.watcher import default_finops_watcher, default_tenant_eco
 
-from xphi.node.schema.auth import NodeAuthPayload
+from fiber.node.auth.payload import NodeAuthPayload
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.arch.bound.adapter.pta import PtaAdapter, PtaTransaction, PtaOutput

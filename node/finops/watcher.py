@@ -1,4 +1,5 @@
-# fiber.node.infra.finops.watcher
+# fiber.node.finops.watcher
+## @lineage: fiber.node.infra.finops.watcher
 """
 Glossary:
 - fuel_budget: Fixed spending quota limit assigned via policy/Mandate (immutable until upgraded).
@@ -18,10 +19,10 @@ from pydantic import BaseModel
 
 from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
 from fiber.llm.model.usage import Usage
-from fiber.node.infra.finops.exchange import FuelExchange, default_exchange
-from fiber.node.infra.finops.cost.policy import CostPolicy
-from fiber.node.infra.finops.cost.registry import ModelCostRegistry
-from fiber.node.infra.finops.model.calculator import UnitCostCalculator
+from fiber.node.finops.exchange import FuelExchange, default_exchange
+from fiber.node.finops.cost.policy import CostPolicy
+from fiber.node.finops.cost.registry import ModelCostRegistry
+from fiber.node.finops.model.calculator import UnitCostCalculator
 from fiber.llm.model.types.provider.general import ModelInfo
 
 from xphi.arch.contract.config.env import config as global_config

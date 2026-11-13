@@ -1,4 +1,5 @@
-# fiber.node.infra.finops.console
+# fiber.node.finops.console
+## @lineage: fiber.node.infra.finops.console
 """
 Glossary:
 - fuel_budget: Fixed spending quota limit assigned via policy/Mandate (immutable until upgraded).
@@ -19,7 +20,7 @@ from fiber.gateway.bridge.action.account import (
     issue_account_mandate,
     revoke_account_mandate
 )
-from fiber.node.infra.account.state import state, refs, save_state_to_disk
+from fiber.node.auth.account.state import state, refs, save_state_to_disk
 import fiber.studio.console.ui.diag as diag
 
 USD_TO_FUEL_RATE = 1_000_000
@@ -57,13 +58,13 @@ class FinOpsConsoleManager:
         return val / USD_TO_FUEL_RATE
 
     def _next_policy_ver(self) -> int:
-        from fiber.node.infra.finops.watcher import default_finops_watcher
+        from fiber.node.finops.watcher import default_finops_watcher
 
         curr_watcher_ver = default_finops_watcher.policy_versions.get(self.f.tenant_id, 0)
         return max(curr_watcher_ver, self.f.policy_ver) + 1
 
     def _update_watcher_cache(self, balance: float, policy_ver: int | None = None) -> None:
-        from fiber.node.infra.finops.watcher import default_finops_watcher
+        from fiber.node.finops.watcher import default_finops_watcher
 
         default_finops_watcher.local_budget_cache[self.f.tenant_id] = float(balance)
         if policy_ver is not None:

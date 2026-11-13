@@ -1,6 +1,7 @@
-# fiber.node.infra.finops.cost.adapter
+# fiber.node.finops.cost.adapter
+## @lineage: fiber.node.infra.finops.cost.adapter
 from typing import Dict, Any
-from fiber.node.infra.finops.cost.schema import ModelCostSchema
+from fiber.node.finops.cost.schema import ModelCostSchema
 from fiber.llm.model.adapter.openrouter import OpenRouterModelData
 from xphi.watcher.plane.emitter import get_emitter
 

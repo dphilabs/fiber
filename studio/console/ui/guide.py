@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional
 from nicegui import ui
 
-from fiber.node.infra.account.state import refs
+from fiber.node.auth.account.state import refs
 from fiber.studio.console.ui.kit import ModalTemplate
 
 LLM_GATEWAY_YAML = """models:

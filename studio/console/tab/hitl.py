@@ -7,7 +7,7 @@ from typing import Dict, List
 from nicegui import ui
 import orjson
 
-from fiber.node.infra.account.state import state, refs
+from fiber.node.auth.account.state import state, refs
 from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.env import get_slack_status
 from fiber.studio.console.ui.guide import open_guide_modal
@@ -110,9 +110,9 @@ class ModelCatalogModal(ModalTemplate):
 
     def compose(self, dialog: ui.dialog) -> None:
         setattr(refs, "model_catalog_dialog", dialog)
-        from fiber.node.infra.finops.exchange import default_exchange
-        from fiber.node.infra.finops.model.filter import CORE_KEYWORDS
-        from fiber.node.infra.finops.cost.registry import (
+        from fiber.node.finops.exchange import default_exchange
+        from fiber.node.finops.model.filter import CORE_KEYWORDS
+        from fiber.node.finops.cost.registry import (
             ModelCostRegistry,
             REGISTRY_ROOT,
             DEFAULT_REGISTRY_FILENAME,
@@ -304,7 +304,7 @@ class HitlNSettingTab(StudioTab):
 
     def compose_right(self) -> None:
         s = state.security
-        from fiber.node.infra.finops.cost.registry import ModelCostRegistry, REGISTRY_ROOT, DEFAULT_REGISTRY_FILENAME
+        from fiber.node.finops.cost.registry import ModelCostRegistry, REGISTRY_ROOT, DEFAULT_REGISTRY_FILENAME
 
         slk = get_slack_status()
         if slk["channel"]:

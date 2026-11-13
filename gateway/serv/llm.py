@@ -17,10 +17,10 @@ from fiber.llm.gateway.stream.wrapper import StreamWrapper
 from fiber.gateway.security import NodeAuthenticator, NodeAuthPayload
 from fiber.gateway.contract.router import ContractRouter
 from fiber.llm.vcr.manager import VCRIdentityRule
-from fiber.node.infra.account.state import state, STATE_FILE_PATH, load_or_init_state
+from fiber.node.auth.account.state import state, STATE_FILE_PATH, load_or_init_state
 
 from xphi.arch.contract.event.next import next_trace_id
-from xphi.node.schema.auth import BrokerKey, BrokerAction
+from fiber.node.auth.payload import BrokerKey, BrokerAction
 from xphi.watcher.plane.emitter import get_emitter, flow_scope
 
 log = get_emitter("serv.llm")
