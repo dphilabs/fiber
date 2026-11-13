@@ -13,11 +13,11 @@ from fiber.llm.pipeline.interceptor.guardrail import (
     PayloadSanitizationGuardrail,
     ActiveBlockingGuardrail,
 )
-from fiber.gateway.llm.stream.wrapper import StreamWrapper
+from fiber.llm.gateway.stream.wrapper import StreamWrapper
 from fiber.gateway.security import NodeAuthenticator, NodeAuthPayload
 from fiber.gateway.contract.router import ContractRouter
-from fiber.plane.vcr.manager import VCRIdentityRule
-from fiber.plane.infra.account.state import state, STATE_FILE_PATH, load_or_init_state
+from fiber.llm.vcr.manager import VCRIdentityRule
+from fiber.node.infra.account.state import state, STATE_FILE_PATH, load_or_init_state
 
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.node.schema.auth import BrokerKey, BrokerAction

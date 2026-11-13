@@ -7,7 +7,7 @@ from typing import Any, List, Dict, AsyncGenerator
 import httpx
 
 from fiber.llm.pipeline.bootstrap import PipelineBootstrap
-from fiber.gateway.llm.stream.wrapper import StreamWrapper
+from fiber.llm.gateway.stream.wrapper import StreamWrapper
 from fiber.llm.model.types.provider.general import EmbeddingResponse
 from fiber.llm.exception.eco import UnsupportedParamsError
 from fiber.llm.response import ModelResponse

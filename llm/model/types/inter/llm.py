@@ -2,8 +2,8 @@
 ## @lineage: fiber.llm.types.inter.llm
 from abc import abstractmethod
 from typing import Any, List, Optional, Sequence
-from fiber.gateway.llm.state.pydantic import ConfigDict, Field, model_validator
-from fiber.gateway.llm.inter.callback.manager import CallbackManager
+from fiber.llm.gateway.state.pydantic import ConfigDict, Field, model_validator
+from fiber.llm.gateway.inter.callback.manager import CallbackManager
 
 from fiber.llm.model.types.inter.block import TextBlock
 from fiber.llm.model.types.inter.response import (

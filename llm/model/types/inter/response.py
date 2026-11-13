@@ -10,7 +10,7 @@ try:
 except ImportError:
     from typing_extensions import Self
 
-from fiber.gateway.llm.state.pydantic import (
+from fiber.llm.gateway.state.pydantic import (
     BaseModel,
     ConfigDict,
     Field,

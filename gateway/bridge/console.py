@@ -7,9 +7,9 @@ import os
 import sys
 from nicegui import ui
 
-from fiber.dev.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
-import fiber.dev.console.observer.plane as plane
-from fiber.plane.infra.account.state import state, refs
+from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
+import fiber.studio.console.observer.plane as plane
+from fiber.node.infra.account.state import state, refs
 
 
 def _extract_json_payload(raw_out: str) -> dict | None:
@@ -32,7 +32,7 @@ async def run_fiber_cli(*args: str) -> None:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "fiber.dev.cli",
+            "fiber.console.cli.main",
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
@@ -63,9 +63,9 @@ async def _sync_after_cli_success(raw_out: str, args: tuple[str, ...]) -> None:
     if not args:
         return
 
-    from fiber.dev.console.bridge.sign import oob
-    from fiber.dev.console.bridge.mcp import mcp
-    from fiber.plane.infra.finops.console import finops_manager
+    from fiber.studio.console.bridge.sign import oob
+    from fiber.studio.console.bridge.mcp import mcp
+    from fiber.node.infra.finops.console import finops_manager
 
     domain_cmd = args[0]
     if domain_cmd == "connect":
@@ -110,8 +110,8 @@ async def _sync_after_cli_success(raw_out: str, args: tuple[str, ...]) -> None:
 
 
 async def _simulate_cli_fallback(args: tuple[str, ...]) -> None:
-    from fiber.dev.console.bridge.sign import oob
-    from fiber.dev.console.bridge.mcp import mcp
+    from fiber.studio.console.bridge.sign import oob
+    from fiber.studio.console.bridge.mcp import mcp
 
     f, s = state.finops, state.security
     await asyncio.sleep(0.15)

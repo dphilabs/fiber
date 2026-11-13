@@ -33,7 +33,7 @@ from deprecated import deprecated
 from typing_extensions import Self
 from PIL import Image
 
-from fiber.gateway.llm.state.pydantic import (
+from fiber.llm.gateway.state.pydantic import (
     AnyUrl,
     BaseModel,
     ConfigDict,
@@ -49,8 +49,8 @@ from fiber.gateway.llm.state.pydantic import (
     field_validator,
     model_serializer,
 )
-from fiber.gateway.llm.state.pydantic import CoreSchema
-from fiber.gateway.llm.inter.handler.util import truncate_text
+from fiber.llm.gateway.state.pydantic import CoreSchema
+from fiber.llm.gateway.inter.handler.util import truncate_text
 
 if TYPE_CHECKING:
     from haystack.schema import Document as HaystackDocument

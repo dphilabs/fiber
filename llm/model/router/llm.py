@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, Set, List
 from dataclasses import dataclass, field, asdict
 
 from fiber.llm.model.types.inter.llm import LLMBase
-import fiber.gateway.llm.inter as llm_pkg 
+import fiber.llm.gateway.inter as llm_pkg 
 from xphi.watcher.plane.emitter import get_emitter
 
 registry_log = get_emitter("router.llm")

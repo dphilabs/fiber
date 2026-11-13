@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Dict, AsyncGenerator, Any, List, Union
 
 from fiber.llm.response import ModelResponse
-from fiber.gateway.llm.context.metadata import CompletionContext, EmbeddingContext
+from fiber.llm.gateway.context.metadata import CompletionContext, EmbeddingContext
 from fiber.llm.model.router.llm import LLMRouter
 from fiber.llm.model.router.embedding import EmbeddingRouter
 from fiber.llm.model.resolver import get_llm_provider
 
 from fiber.llm.exception.mapping import exception_type
-from fiber.gateway.llm.state.traverser import StateMapper
-from fiber.gateway.llm.stream.parser.chunk import StreamChunkParser
+from fiber.llm.gateway.state.traverser import StateMapper
+from fiber.llm.gateway.stream.parser.chunk import StreamChunkParser
 from fiber.llm.compat.param import PROVIDER_PARAM_RULES
 
 from xphi.arch.bound.client.http import get_client

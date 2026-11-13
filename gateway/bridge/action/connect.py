@@ -6,8 +6,8 @@ from typing import Dict, Optional, List, Any
 
 import orjson
 import typer
-from fiber.plane.mcp.connector import MCPServerConnector
-from fiber.plane.mcp.mapper.spec import (
+from fiber.node.mcp.connector import MCPServerConnector
+from fiber.node.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     STANDALONE_ATTACHED_TUNNEL_KEY,
     ANCHOR_ROOT,

@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from typing import Any, List
 
-from fiber.dev.console.observer.signal import UIKey, UISlot, UISlotStatus
+from fiber.studio.console.observer.signal import UIKey, UISlot, UISlotStatus
 from fiber.llm.pipeline.bootstrap import PipelineSlot
 from fiber.llm.compat.secret.redact import redact_string, sanitize_payload, FastRegexRedactionEngine
 
