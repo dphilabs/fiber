@@ -78,6 +78,10 @@ The **Fiber Connect CLI** (`fiber`) is the single entrypoint for the local contr
 
 Most AI agents (Claude Code, Cursor, VSCode, Zed) launch MCP servers directly on your machine through point-to-point pipes—with your filesystem, databases, and credentials in reach, and nothing in between to absorb retries or demand approval. Fiber's **Local MCP Gateway** runs as a loopback daemon on the same host, absorbs your existing agent configurations and exposes them through a single stateless endpoint (`/v1/mcp-gateway/invoke`, `/tools`, or per-target `/v1/mcp-gateway/{target_id}/invoke`). Local stdio servers are spawned and supervised by the daemon itself, and remote HTTP/SSE servers can be registered behind the same gate—so every tool call passes through one control point on your machine.
 
+<p align="center">
+  <img src="./studio/abc/asset/diagram/mcp-gateway.jpg" alt="Local MCP Gateway Architecture" width="820" />
+</p>
+
 **Why a Local Gateway?**
 Standard MCP clients treat tool calls as fire-and-forget pipes: on network timeouts, agents blindly retry or hallucinate parameters, causing duplicate database writes or runaway API charges. Fiber’s MCP Gateway interposes a deterministic control plane between the agent and the tool:
 
@@ -166,6 +170,11 @@ While the Local MCP Gateway (**1**) governs tool execution, Fiber's duplex LLM p
 > **Unlike passive callbacks, this event-driven pipeline empowers interceptors to actively mutate payloads in-place, short-circuit physical I/O, and abort unauthorized streams in sub-millisecond time.**
 
 > **In-Process SDK vs. Gateway Daemon:** While the Python SDK runs explicit `interceptors=[...]` in-process without a daemon, routing requests through `fiber daemon` (`/v1/chat/completions`) enforces both `PRE_TRANSLATE` masking and `POST_TRANSLATE` secret blocking by default—with live On/Off slot toggles persisted in `~/.anchor/state.json` via Console Studio (`fiber console`).
+
+<p align="center">
+  <img src="./studio/abc/asset/diagram/llm-pipeline.jpg" alt="Fiber LLM Pipeline Architecture" width="820" />
+</p>
+
 
 **1. Two-Track Guardrails & Slot Interceptors (`PRE_TRANSLATE` vs. `POST_TRANSLATE`):**
 Production guardrails are built into `fiber.llm.pipeline.interceptor.guardrail` and ready to mount directly in **Step 2**; under the hood, each interceptor implements `DuplexChannel` for its target execution slot:
