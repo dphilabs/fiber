@@ -18,7 +18,7 @@ from xphi.watcher.receptor.warden import SecretAuditor
 from fiber.gateway.bridge.emitter import get_emitter
 
 from xphi.node.runtime.wasm.broker import WasmBroker
-from fiber.node.auth.payload import NodeAuthPayload
+from fiber.node.account.auth.payload import NodeAuthPayload
 from xphi.arch.bound.adapter.pta import NodeSigner, SignStateAdapter
 
 from xphi.state.settlement.mandate import (

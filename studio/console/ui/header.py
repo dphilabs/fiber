@@ -8,7 +8,7 @@ import tarfile
 import urllib.request
 from nicegui import ui
 
-from fiber.node.auth.account.state import (
+from fiber.node.account.state import (
     STATE_FILE_PATH,
     load_or_init_state,
     refs,

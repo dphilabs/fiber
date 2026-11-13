@@ -6,7 +6,7 @@ from pathlib import Path
 from nicegui import ui
 import orjson
 
-from fiber.node.auth.account.state import state, refs
+from fiber.node.account.state import state, refs
 from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.bridge.mcp import mcp
 

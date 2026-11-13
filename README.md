@@ -157,7 +157,7 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
-> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./studio/abc/spec/infra/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber kyoc channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./studio/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
 
 ---
 
@@ -327,7 +327,7 @@ $ curl -X POST http://127.0.0.1:8356/v1/chat/completions -H "Content-Type: appli
   }'
 
 # Verify live HTTP Gateway roundtrip (Unary, SSE Stream, and Dynamic Record -> Replay)
-$ fiber ops tester.gateway
+$ fiber kyoc tester.gateway
 ```
 
 **VCR Control Parameters**
@@ -340,7 +340,7 @@ The runtime resolves options per request (via JSON payload or `metadata`), envir
 | **`vcr_speed` / `VCR_SPEED`** | `"max"` \| `"real"` | Immediate execution (`~0ms`) or emulated historical latency pacing (`ttfb_ms`, `delta_ms`). |
 | **`vcr_chaos` / `vcr_tick`** | Float | Injects synthetic replay jitter (ms) or sets the SSE chunk coalescing window (default `100.0` ms). |
 
-> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./studio/abc/spec/infra/vcr/test.md)** · **[Fixture Format Spec](./studio/abc/spec/infra/vcr/fixture.format.md)**
+> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./studio/abc/spec/llm/vcr/test.md)** · **[Fixture Format Spec](./studio/abc/spec/llm/vcr/fixture.format.md)**
 
 ---
 
@@ -399,7 +399,7 @@ Fiber loads this registry exactly once at boot-time. It performs strict Pydantic
 | Command | Role | Function & Lifecycle | Example |
 | --- | --- | --- | --- |
 | **`init`** | **[Bootstrap]** | Initializes workspace topology (`~/.anchor/bound.json`) and local node keys. | `fiber init` |
-| **`ops`** | **[Plane & Ops]** | Runs operational provisioning, channel setup, and gateway verification suites (`flare.deploy`, `channel.slack`, `tester.gateway`, `brew.verify`). | `fiber ops flare.deploy`, `fiber ops channel.slack guide --open` |
+| **`kyoc`** | **[Plane & Ops]** | Runs operational provisioning, channel setup, and gateway verification suites (`flare.deploy`, `channel.slack`, `tester.gateway`, `brew.verify`). | `fiber kyoc flare.deploy`, `fiber kyoc channel.slack guide --open` |
 | **`console`** | **[Web Studio]** | Launches the Console Studio web UI (`MCP Gateway`, `Guardrail`, `Metering`, `VCR`, `Setting`) for HITL approvals and live telemetry. | `fiber console` |
 | **`sign`** | **[Identity & TOTP]** | Inspects local node key status and manages AES-GCM encrypted Admin TOTP secrets in SQLite. | `fiber sign enroll -u fiber` |
 | **`connect`** | **[Config Sync]** | Explicitly scans and registers IDE configs (`fiber connect claude`, `fiber connect all`) or third-party servers into `~/.anchor/mcp.json`. | `fiber connect all`, `fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:DELETE"` |
@@ -492,7 +492,7 @@ fiber init
 brew services start dphilabs/fiber/fiber
 
 ## Verify install, bootstrap, and gateway
-fiber ops brew.verify
+fiber kyoc brew.verify
 ```
 
 ## 4. Execution Planes & Pipeline Benchmarks
@@ -519,10 +519,10 @@ While the core runtime retains final state Merkle rollups, fuel metering, and po
 
 ```bash
 # Live Edge Provisioning & 3-Stage Smoke Verification (Deploys Dual Workers to Cloudflare)
-$ fiber ops flare.deploy
+$ fiber kyoc flare.deploy
 
 # Verify, Inspect, or Teardown Remote Edge Workers (Reverse Dependency Order)
-$ fiber ops flare.deploy teardown  # or `verify --url https://...`, `status`
+$ fiber kyoc flare.deploy teardown  # or `verify --url https://...`, `status`
 
 # Full Local Dual-Isolate E2E Suite (23 Scenarios: Bridge Routing, Isolation & State Rollup)
 $ fiber e2e infra.plane.flare --mode dev

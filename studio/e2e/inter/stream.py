@@ -22,7 +22,7 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from fiber.studio.base.workflow.builder import build_e2e_context, create_e2e_parser
 from fiber.studio.base.workflow.pipeline import log
 from fiber.llm.gateway.state.traverser import StateTraverser
-from fiber.node.auth.account.registry import DEFAULT_TENANT_ID
+from fiber.node.account.registry import DEFAULT_TENANT_ID
 from fiber.llm.vcr.injector import VCRInjector
 from fiber.llm.vcr.manager import (
     VCRIdentityRule,
@@ -36,7 +36,7 @@ from fiber.llm.pipeline.channel.observer import MeteringObserver
 
 from xphi.arch.bound.adapter.pta import PtaAdapter
 from xphi.arch.contract.event.next import next_trace_id
-from fiber.node.auth.payload import NodeAuthPayload
+from fiber.node.account.auth.payload import NodeAuthPayload
 from xphi.node.runtime.wasm.broker import WasmBroker
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.phase.reactor import PhaseReactor

@@ -57,11 +57,11 @@ $ fiber sign verify -u spiffe://self/fiber # Test AES-GCM decryption & 6-digit R
 
 ### 3.1. 1-Click App Provisioning via Manifest CLI
 
-Instead of configuring Socket Mode, Interactivity, and OAuth scopes manually, use the built-in manifest provisioner (`fiber.node.ops.channel.slack`), which pre-configures `socket_mode_enabled: true`, `interactivity: true`, and required bot scopes (`chat:write`, `chat:write.public`, `channels:read`, `channels:join`):
+Instead of configuring Socket Mode, Interactivity, and OAuth scopes manually, use the built-in manifest provisioner (`kyoc.channel.slack`), which pre-configures `socket_mode_enabled: true`, `interactivity: true`, and required bot scopes (`chat:write`, `chat:write.public`, `channels:read`, `channels:join`):
 
 ```bash
 # Print 3-step setup guide & open pre-populated Slack App Manifest URL in browser (or `json` for raw manifest)
-$ fiber ops channel.slack guide --open
+$ fiber kyoc channel.slack guide --open
 ```
 
 1. **Create App:** Select your workspace in the opened browser tab and click **Create**.
@@ -82,16 +82,16 @@ $ fiber ops channel.slack guide --open
 
 ## 4. Verification & E2E Testing
 
-### 4.1. Isolated Channel & Token Smoke Test (`ops.channel.slack`)
+### 4.1. Isolated Channel & Token Smoke Test (`kyoc.channel.slack`)
 
 Verifies Slack Socket Mode connectivity, auto-corrects swapped `xoxb`/`xapp` tokens, interactively discovers and joins public channels (`conversations.list` / `conversations.join`), and validates local RFC-6238 TOTP against `deploy_audit.sqlite` without booting full MCP workers:
 
 ```bash
 # Interactive 1-Click Button round-trip test (auto-discovers & joins channel if --channel is omitted)
-$ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..."
+$ fiber kyoc channel.slack test --bot-token "xoxb-..." --app-token "xapp-..."
 
 # Interactive 6-Digit TOTP verification round-trip test
-$ fiber ops channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." --totp
+$ fiber kyoc channel.slack test --bot-token "xoxb-..." --app-token "xapp-..." --totp
 
 ```
 

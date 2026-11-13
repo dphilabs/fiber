@@ -101,25 +101,25 @@ def run_init(
     print(json.dumps(info, indent=2, ensure_ascii=False))
 
 
-@app.command("ops", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command("kyoc", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def run_ops(
     ctx: typer.Context,
-    target: Annotated[str, typer.Argument(help="Target ops module (e.g., flare.deploy, tester.gateway, brew.verify, channel.slack)")],
+    target: Annotated[str, typer.Argument(help="Target ops module (e.g., flare.deploy, brew.verify, channel.slack)")],
     env_file: EnvFileOpt = None,
 ):
-    """Executes operational, provisioning, and verification utilities under fiber.node.ops."""
+    """Executes operational, provisioning, and verification utilities under fiber.node.kyoc."""
     _load_env(env_file)
-    module_path = f"fiber.node.ops.{target.strip().replace('/', '.')}"
+    module_path = f"fiber.node.kyoc.{target.strip().replace('/', '.')}"
 
     def _invoke():
         try:
             mod = importlib.import_module(module_path)
         except ImportError as e:
-            log.error(f"[Fiber] Ops module not found: {module_path} ({e})")
+            log.error(f"[Fiber] Kyoc module not found: {module_path} ({e})")
             raise typer.Exit(1)
 
         # sys.argv 패스스루: 하위 모듈이 argparse, typer, sys.argv[1:] 무엇을 쓰든 호환 보장
-        sys.argv = [f"fiber ops {target}", *ctx.args]
+        sys.argv = [f"fiber kyoc {target}", *ctx.args]
         if hasattr(mod, "main"):
             return mod.main(ctx.args) if inspect.signature(mod.main).parameters else mod.main()
         if hasattr(mod, "app") and callable(mod.app):
@@ -127,7 +127,7 @@ def run_ops(
 
         import runpy
         runpy.run_module(module_path, run_name="__main__", alter_sys=True)
-    _run_guarded(f"Ops [{target}]", _invoke)
+    _run_guarded(f"Kyoc [{target}]", _invoke)
 
 @app.command("daemon")
 def run_daemon(

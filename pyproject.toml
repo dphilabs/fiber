@@ -29,7 +29,7 @@ fiber = "fiber.studio.cli.main:app"
 dev = ["pytest", "pytest-asyncio"]
 
 [tool.hatch.metadata.hooks.custom]
-path = "node/ops/hatch.py"
+path = "studio/cli/hatch.py"
 base_dependencies = [
     "uvloop", "psutil", "fastapi", "valkeylite==9.1.*; sys_platform != 'win32'", "redis==8.0.1", "pyyaml", "orjson", "typer", "canonicaljson", "aiohttp", "requests",
     "watchdog", "rocksdict", "filetype", "openai", "anthropic", "google-genai", "mcp==2.3.0", "pydantic", "pydantic_settings", "httpx", "wasmtime",

@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Optional
 from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
 from fiber.llm.pipeline.channel.breaker import extract_usage_info
 
-from fiber.node.auth.payload import BrokerKey
+from fiber.node.account.auth.payload import BrokerKey
 from xphi.state.phase.channel import ChannelContext, DuplexChannel
 from fiber.gateway.bridge.emitter import get_emitter
 
