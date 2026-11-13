@@ -20,8 +20,8 @@ import filetype
 from tinytag import TinyTag, UnsupportedFormatError
 from typing_extensions import Self
 
-from fiber.gateway.llm.inter.handler.util import asyncio_run
-from fiber.gateway.llm.state.pydantic import (
+from fiber.llm.gateway.inter.handler.util import asyncio_run
+from fiber.llm.gateway.state.pydantic import (
     AnyUrl,
     BaseModel,
     ConfigDict,
@@ -32,7 +32,7 @@ from fiber.gateway.llm.state.pydantic import (
     model_validator,
 )
 from fiber.llm.model.types.inter.component import ImageDocument
-from fiber.gateway.llm.inter.handler.util import resolve_binary
+from fiber.llm.gateway.inter.handler.util import resolve_binary
 from fiber.llm.model.token.encoder import get_tokenizer
 from xphi.arch.contract.config.constants import DEFAULT_CONTEXT_WINDOW, DEFAULT_NUM_OUTPUTS
 
@@ -102,7 +102,7 @@ class BaseBlock(ABC, BaseModel):
             return str(attribute)
 
     def get_template_vars(self) -> list[str]:
-        from fiber.gateway.llm.inter.handler.util import get_template_vars
+        from fiber.llm.gateway.inter.handler.util import get_template_vars
 
         for attribute_name in self.templatable_attributes:
             attribute = getattr(self, attribute_name, None)
@@ -112,7 +112,7 @@ class BaseBlock(ABC, BaseModel):
         return []
 
     def format_vars(self, **kwargs: Any) -> "BaseBlock":
-        from fiber.gateway.llm.inter.handler.util import format_string
+        from fiber.llm.gateway.inter.handler.util import format_string
 
         formatted_attrs: Dict[str, Any] = {}
         for attribute_name in self.templatable_attributes:

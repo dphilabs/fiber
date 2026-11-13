@@ -153,7 +153,7 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
-> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./dev/abc/spec/infra/mcp.connector.md)** · **[Slack HITL Spec](./dev/abc/spec/gateway/hitl.slack.md)**
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./studio/abc/spec/infra/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
 
 ---
 
@@ -281,9 +281,9 @@ To add custom credential patterns, override existing rules, or disable specific 
 
 > **Note:** Out of the box, Fiber ships with **33 built-in credential regex rules** (`BASE_SECRET_RULES`) and **14 sensitive key/URL tokens** that already cover standard cloud providers (`AKIA...`, `AIza...`), auth headers (`Bearer`, `JWT`, `PEM`), and major LLM/SaaS vendor keys (`sk-...`, `ghp_...`, `xoxb-...`) with zero configuration.
 > For most deployments, mounting `ActiveBlockingGuardrail()` and `PayloadSanitizationGuardrail()` as-is provides complete baseline protection without maintaining a custom registry file.
-> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./dev/abc/spec/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
+> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./studio/abc/spec/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
 
-> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./dev/abc/spec/llm/entry.md)** · **[Interceptor Spec](./dev/abc/spec/llm/interceptor.md)** · **[Token Counter Spec](./dev/abc/spec/llm/token.counter.md)**
+> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./studio/abc/spec/llm/entry.md)** · **[Interceptor Spec](./studio/abc/spec/llm/interceptor.md)** · **[Token Counter Spec](./studio/abc/spec/llm/token.counter.md)**
 
 ---
 
@@ -331,7 +331,7 @@ The runtime resolves options per request (via JSON payload or `metadata`), envir
 | **`vcr_speed` / `VCR_SPEED`** | `"max"` \| `"real"` | Immediate execution (`~0ms`) or emulated historical latency pacing (`ttfb_ms`, `delta_ms`). |
 | **`vcr_chaos` / `vcr_tick`** | Float | Injects synthetic replay jitter (ms) or sets the SSE chunk coalescing window (default `100.0` ms). |
 
-> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./dev/abc/spec/infra/vcr/test.md)** · **[Fixture Format Spec](./dev/abc/spec/infra/vcr/fixture.format.md)**
+> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./studio/abc/spec/infra/vcr/test.md)** · **[Fixture Format Spec](./studio/abc/spec/infra/vcr/fixture.format.md)**
 
 ---
 
@@ -551,7 +551,7 @@ fiber e2e inter.concurrency --vcr replay --concurrency 200
 
 Fiber enforces execution determinism and runtime safety through automated CI gates (on every PR and release tag) alongside targeted end-to-end validation suites across each subsystem:
 
-- **[hitl.slack.log](./dev/abc/log/gateway/hitl/slack.20261107.log):** Validates zero-code pre-flight HITL governance over live Slack Socket Mode, confirming instant safe-call passthrough, pre-I/O `HTTP 202` parking with 6-digit TOTP attestation on multiplexed network streams (`Context7`), and strict Zero-Spawn 1-Click button resumption on ephemeral `npx` stdio sandboxes.
-- **[llm.guardrail.log](./dev/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection (DIP), and chained `[Mask -> Block]` defense with fallback shielding.
-- **[llm.vcr.log](./dev/abc/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
-- **[infra.plane.flare.log](./dev/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming `PHASE`/Pyodide Service Binding parity, zero-leakage host isolation, bit-exact compute determinism, and `X-XPHI-Canonical-Hash` sealing into local state Merkle roots.
+- **[hitl.slack.log](./studio/abc/log/gateway/hitl/slack.20261107.log):** Validates zero-code pre-flight HITL governance over live Slack Socket Mode, confirming instant safe-call passthrough, pre-I/O `HTTP 202` parking with 6-digit TOTP attestation on multiplexed network streams (`Context7`), and strict Zero-Spawn 1-Click button resumption on ephemeral `npx` stdio sandboxes.
+- **[llm.guardrail.log](./studio/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection (DIP), and chained `[Mask -> Block]` defense with fallback shielding.
+- **[llm.vcr.log](./studio/abc/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
+- **[infra.plane.flare.log](./studio/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming `PHASE`/Pyodide Service Binding parity, zero-leakage host isolation, bit-exact compute determinism, and `X-XPHI-Canonical-Hash` sealing into local state Merkle roots.

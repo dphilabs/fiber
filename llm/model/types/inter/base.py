@@ -23,12 +23,12 @@ from typing import (
 
 from fiber.llm.model.types.inter.block import MessageRole, TextBlock
 from fiber.llm.model.types.inter.response import ChatMessage
-from fiber.gateway.llm.state.pydantic import (
+from fiber.llm.gateway.state.pydantic import (
     BaseModel,
     GetCoreSchemaHandler,
     GetJsonSchemaHandler,
 )
-from fiber.gateway.llm.state.pydantic import CoreSchema, core_schema
+from fiber.llm.gateway.state.pydantic import CoreSchema, core_schema
 
 Model = TypeVar("Model", bound=BaseModel)
 

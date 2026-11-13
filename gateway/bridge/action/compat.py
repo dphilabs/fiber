@@ -8,15 +8,15 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 
 import fiber.llm.entry as llm_entry
-from fiber.gateway.llm.state.traverser import StateMapper
-from fiber.gateway.llm.stream.parser.chunk import StreamChunkParser
-from fiber.plane.vcr.fixture.schema import (
+from fiber.llm.gateway.state.traverser import StateMapper
+from fiber.llm.gateway.stream.parser.chunk import StreamChunkParser
+from fiber.llm.vcr.fixture.schema import (
     DEFAULT_SYNTH_TOOLS,
     SynthContext,
     VCRTargetInfo,
 )
-from fiber.plane.vcr.injector import VCRInjector
-from fiber.plane.vcr.manager import VCRPlaybackConfig
+from fiber.llm.vcr.injector import VCRInjector
+from fiber.llm.vcr.manager import VCRPlaybackConfig
 from xphi.watcher.plane.emitter import get_emitter
 
 log = get_emitter("action.compat")

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 
 from fiber.llm.model.types.inter.block import ContentBlock, TextBlock
-from fiber.gateway.llm.state.pydantic import BaseModel, PrivateAttr
+from fiber.llm.gateway.state.pydantic import BaseModel, PrivateAttr
 from deprecated import deprecated
 
 

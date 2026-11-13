@@ -16,9 +16,9 @@ from typing import Dict, Any, Optional, List
 
 from fiber.llm.pipeline.tracer import DebugTracer
 from fiber.llm.pipeline.interceptor.router import OnnxSemanticRouter
-from fiber.plane.vcr.manager import VCRPlaybackConfig
-from fiber.plane.vcr.injector import VCRInjector
-from fiber.gateway.llm.state.traverser import StateTraverser
+from fiber.llm.vcr.manager import VCRPlaybackConfig
+from fiber.llm.vcr.injector import VCRInjector
+from fiber.llm.gateway.state.traverser import StateTraverser
 from fiber.llm.entry import acompletion
 
 class MockOnnxRouter(OnnxSemanticRouter):

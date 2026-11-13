@@ -9,9 +9,9 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
-from fiber.gateway.llm.context.metadata import ExecutionMetadata
+from fiber.llm.gateway.context.metadata import ExecutionMetadata
 from fiber.llm.pipeline.bootstrap import PipelineSlot
-from fiber.gateway.llm.state.traverser import StateTraverser
+from fiber.llm.gateway.state.traverser import StateTraverser
 from fiber.llm.response import ModelResponse
 from fiber.llm.model.types.provider.core import Usage
 from xphi.state.phase.channel import ChannelContext, DuplexChannel

@@ -5,7 +5,7 @@ import asyncio
 import inspect
 from typing import Any, Callable, Dict, Optional
 
-from fiber.dev.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
+from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
 from fiber.llm.pipeline.channel.breaker import extract_usage_info
 
 from xphi.node.schema.auth import BrokerKey

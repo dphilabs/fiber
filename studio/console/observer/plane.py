@@ -1,0 +1,356 @@
+# fiber.studio.console.observer.plane
+from __future__ import annotations
+
+import asyncio
+from collections import deque
+from contextvars import ContextVar
+import json
+import time
+from typing import Any, Dict, Union
+from nicegui import ui
+
+from fiber.studio.console.observer.signal import (
+    RoutedSurfaceMeta,
+    SurfaceFilter,
+    UIKey,
+    UIMetric,
+    UISlot,
+    UISlotStatus,
+)
+from fiber.node.infra.account.state import state, refs
+import fiber.studio.console.ui.diag as diag
+from xphi.arch.contract.config.tunnel import TUNNEL_SOCK_PATH
+from xphi.arch.contract.event.next import EventObserver, LogEvent
+from xphi.node.space.tunnel.factory import TunnelFactory
+from xphi.watcher.plane.regulator import default_plane
+
+surface_filter = SurfaceFilter(min_level="INFO")
+_seen_fp: deque[str] = deque(maxlen=256)
+
+# 동기적 재진입(Re-entrancy) 차단 락: ingest() 도중 발생한 파생 로그가 다시 ingest()를 부르는 것 방지
+_IN_INGEST: ContextVar[bool] = ContextVar("_in_ingest", default=False)
+_SELF_SOURCE_PREFIXES = ("console.ui", "console.diag", "nicegui", "uvicorn")
+_last_kill_notify_ts: float = 0.0
+
+SLOT_INDEX: Dict[UISlot, int] = {
+    UISlot.FUEL: 0,
+    UISlot.GUARDRAIL: 1,
+    UISlot.ROUTER: 2,
+    UISlot.CACHE: 3,
+}
+
+SLOT_STYLES: Dict[UISlotStatus, str] = {
+    UISlotStatus.HIT: "bg-emerald-950 border-2 border-emerald-400",
+    UISlotStatus.PASS: "bg-sky-950 border-2 border-sky-400",
+    UISlotStatus.BLOCK: "bg-red-950 border-2 border-red-500 animate-pulse",
+    UISlotStatus.SEVER: "bg-red-950 border-2 border-red-500 animate-pulse",
+}
+
+
+def _is_self_diagnostic(payload: Dict[str, Any]) -> bool:
+    """콘솔 자신이 발행한 UI 진단 로그이거나 재진입 호출인지 판별"""
+    if _IN_INGEST.get():
+        return True
+    ctx = payload.get("context")
+    if isinstance(ctx, dict):
+        if ctx.get("ui_internal") is True or str(ctx.get("phase") or "").upper() == "UI_DIAG":
+            return True
+    src = str(payload.get("source_id") or "").strip().lower()
+    return src.startswith(_SELF_SOURCE_PREFIXES)
+
+
+def _format_line(payload: Dict[str, Any], meta: RoutedSurfaceMeta) -> str:
+    p_mark = "🔥" if meta.is_bursting else ""
+    gain = payload.get("gain")
+    g_str = f"[G:{float(gain):.1f}]" if isinstance(gain, (int, float)) and float(gain) < 1.0 else ""
+    acc = meta.ui_payload.get("acceleration")
+    a_str = f"[Acc:{float(acc):.1f}]" if isinstance(acc, (int, float)) and float(acc) > 0.0 else ""
+    fold = payload.get("fold_count")
+    f_str = f" (x{int(fold)})" if isinstance(fold, (int, float)) and int(fold) > 1 else ""
+    tags = f"{p_mark}{g_str}{a_str}"
+    msg = str(payload.get("message") or "").strip()
+    return f"[{meta.level}] {tags + ' ' if tags else ''}{msg}{f_str}"
+
+
+def _apply_meta(meta: RoutedSurfaceMeta, payload: Dict[str, Any], raw_msg: str = "") -> None:
+    """`signal.SurfaceClassifier`가 분류한 `RoutedSurfaceMeta`를 소비하여 State 및 UI 반영"""
+    global _last_kill_notify_ts
+    f, s, p, d = state.finops, state.security, state.pipeline, meta.ui_payload
+
+    # 0. PlaneRegulator 압력(Density) 및 가속도(Acceleration) 실시간 반영
+    if (density := payload.get("density")) is not None:
+        s.plane_density = float(density)
+    if (accel := d.get("acceleration")) is not None:
+        s.plane_acceleration = float(accel)
+    s.plane_bursting = bool(meta.is_bursting)
+
+    # 1. Pipeline X-Ray 4-Slot 상태 점등 및 서브밀리초 레이턴시 갱신
+    if meta.ui_slot is not None:
+        if card := refs.slot_cards.get(meta.ui_slot.value):
+            cls_str = SLOT_STYLES.get(meta.ui_slot_status, "bg-slate-800 border border-slate-700")
+            card.classes(replace=f"{cls_str} p-2 w-36 text-center")
+        if (lat := d.get(UIKey.LATENCY_MS.value)) is not None and (idx := SLOT_INDEX.get(meta.ui_slot)) is not None:
+            s.xray_latencies[idx] = float(lat)
+            s.xray_chart_dirty = True
+
+    # 2. EdgeCache & FinOps 할인 토큰/비용 절감액 누적 (독립 반영)
+    tok = d.get(UIKey.SAVED_TOKENS.value)
+    usd = d.get(UIKey.SAVED_USD.value)
+    if tok is not None or usd is not None:
+        if tok is not None:
+            f.saved_tokens += int(tok)
+        if usd is not None:
+            f.saved_usd += float(usd)
+    elif meta.ui_slot is UISlot.CACHE and meta.ui_slot_status is UISlotStatus.HIT:
+        f.saved_tokens += 250
+        f.saved_usd += 0.004
+
+    # 다른 테넌트의 FinOps/Kill 시그널이 현재 선택된 테넌트 UI 상태를 오염시키지 않도록 방어
+    ev_tenant = d.get(UIKey.TENANT_ID.value)
+    is_target_tenant = (not ev_tenant) or (ev_tenant == f.tenant_id)
+
+    if is_target_tenant and meta.ui_metric in (UIMetric.LEDGER_SYNC, UIMetric.FUEL_TICK):
+        ev_ver = d.get(UIKey.POLICY_VER.value)
+        has_newer_ver = ev_ver is not None and int(ev_ver) >= f.policy_ver
+        if has_newer_ver:
+            f.policy_ver = int(ev_ver)
+
+        # REVOKE 또는 Stream Break 카운트다운 도중에는 구세대 워커의 지연 정산/틱이 잔액을 덮어쓰지 못하도록 방어
+        is_frozen_state = (
+            f.last_op == "REVOKE" or str(getattr(f, "stream_status_text", "")).startswith("[FAIL]")
+        ) and not (has_newer_ver and int(d.get(UIKey.FUEL_BUDGET.value) or d.get(UIKey.LEDGER_BALANCE.value) or 0) > 0)
+
+        if not is_frozen_state:
+            if (budget_val := d.get(UIKey.FUEL_BUDGET.value)) is not None and int(float(budget_val)) > 0:
+                f.fuel_budget = int(float(budget_val))
+
+            if (bal_val := d.get(UIKey.LEDGER_BALANCE.value)) is not None:
+                f.set_balance(int(float(bal_val)))
+
+            if f.ledger_balance > getattr(f, "fuel_budget", 0):
+                f.fuel_budget = f.ledger_balance
+
+        if meta.ui_metric is UIMetric.FUEL_TICK:
+            active_cnt = int(d.get("active_streams", getattr(s, "active_streams", 0)))
+            s.active_streams = active_cnt
+
+            if (cps := d.get("throughput_cps")) is not None:
+                s.throughput_cps = float(cps)
+            elif active_cnt == 0:
+                s.throughput_cps = 0.0
+
+            if (chunks := d.get(UIKey.CHUNKS.value)) is not None:
+                chunk_val = int(chunks)
+                s.live_stream_tokens = chunk_val
+                prev_chunks = getattr(s, "_last_stream_chunks", 0)
+                delta = chunk_val if chunk_val < prev_chunks else (chunk_val - prev_chunks)
+                pos_delta = max(0, delta)
+                s.total_processed_tokens = getattr(s, "total_processed_tokens", 0) + pos_delta
+                s._last_stream_chunks = 0 if active_cnt == 0 else chunk_val
+
+                if not is_frozen_state and pos_delta > 0 and UIKey.LEDGER_BALANCE.value not in d:
+                    f.set_balance(max(0, f.ledger_balance - pos_delta))
+
+            # Break/Sever 상태가 아닐 때만 스트림 상태 텍스트 갱신
+            if not is_frozen_state:
+                if active_cnt > 0:
+                    f.stream_active = True
+                    f.stream_status_text = f"LIVE STREAMING ({active_cnt} active | {s.throughput_cps:,.1f} c/s)"
+                else:
+                    f.stream_active = False
+                    f.stream_status_text = "STREAM COMPLETE"
+
+            s.xray_chart_dirty = True
+
+        if not is_frozen_state:
+            f.push_chart_point()
+
+    elif meta.ui_metric is UIMetric.VCR_REPLAY and UIKey.ELAPSED_MS.value in d:
+        p.vcr_bench_replay_ms = float(d[UIKey.ELAPSED_MS.value])
+        p.vcr_chart_dirty = True
+    elif meta.ui_metric is UIMetric.VCR_LIVE and UIKey.ELAPSED_MS.value in d:
+        p.vcr_bench_live_ms = float(d[UIKey.ELAPSED_MS.value])
+        p.vcr_chart_dirty = True
+
+    # 실시간 Kill-Switch (HTTP 402 절단) 인터럽트 처리
+    if is_target_tenant and meta.is_kill_signal:
+        ev_ver = d.get(UIKey.POLICY_VER.value)
+        if ev_ver is not None and int(ev_ver) >= f.policy_ver:
+            f.set_balance(0)
+            f.policy_ver = int(ev_ver)
+            f.last_op = "REVOKE"
+            f.push_chart_point()
+
+        # 이미 복구(AUTO_RESTORE)나 수동 충전으로 잔액이 양수(greater than 0)로 복원된 상태라면 지연 도착한 차단 로그는 무시
+        if f.ledger_balance > 0:
+            return
+
+        s.active_streams = int(d.get("active_streams", 0))
+        s.throughput_cps = 0.0
+        s._last_stream_chunks = 0
+        f.stream_active = False
+
+        if not str(getattr(f, "stream_status_text", "")).startswith("[BREAK]"):
+            f.stream_status_text = "SEVERED MID-FLIGHT (HTTP 402)"
+
+        # 다중 VU 동시 절단 시 동일한 토스트 알림 및 스트림 로그가 수백 번 중복 실행되는 것을 방지 (2초 쿨다운)
+        now_ts = time.monotonic()
+        if (now_ts - _last_kill_notify_ts) >= 2.0:
+            _last_kill_notify_ts = now_ts
+            if refs.live_stream_log:
+                refs.live_stream_log.push("\n[FUEL BREAKER] Stream physically severed via aclose()!")
+                refs.live_stream_log.push("Agent Response: 'HTTP 402: Remaining fuel exhausted. Halted safely.'")
+            ui.notify("Kill-Switch Activated! Active stream severed.", type="negative", position="top")
+
+
+# Public Ingestion API (In-Memory / CLI / Tunnel)
+def ingest(event_or_dict: Union[LogEvent, Dict[str, Any]]) -> bool:
+    """모든 플레인 이벤트가 통과하는 단일 진입점 (자기 진단 로그 루프 차단 내장)"""
+    payload = event_or_dict if isinstance(event_or_dict, dict) else event_or_dict.__dict__
+    if _is_self_diagnostic(payload):
+        return False
+
+    token = _IN_INGEST.set(True)
+    try:
+        passed, meta = surface_filter.match(payload)
+        if not passed:
+            return False
+
+        raw_msg = str(payload.get("message") or "").strip()
+        is_raw_tick = meta.ui_payload.get("mode") == "RAW"
+
+        # UI 메트릭, 킬 시그널, RAW 스트림 틱이 아닌 일반 로그에 대해서만 2초 윈도우 중복 제거 수행
+        if meta.ui_metric is None and not meta.is_kill_signal and not is_raw_tick:
+            ev_id = payload.get("id") or payload.get("event_id")
+            fp = f"id:{ev_id}" if ev_id else f"t:{int(time.time() // 2)}:{payload.get('source_id')}:{raw_msg}"
+            if fp in _seen_fp:
+                return False
+            _seen_fp.append(fp)
+
+        refs.push_pubsub(meta.channel, _format_line(payload, meta))
+        _apply_meta(meta, payload=payload, raw_msg=raw_msg)
+        return True
+    except Exception as exc:
+        if hasattr(diag, "exception"):
+            diag.exception("plane.ingest error", exc=exc, silent=True)
+        elif hasattr(diag, "log_ui_exception"):
+            diag.log_ui_exception("plane.ingest", exc)
+        return False
+    finally:
+        _IN_INGEST.reset(token)
+
+
+def emit(source_id: str, message: str, level: str = "INFO", **ctx: Any) -> None:
+    ingest({"source_id": source_id, "message": message, "level": level, "context": ctx})
+
+
+def emit_ledger(source_id: str, message: str, fuel: int, core: int, ver: int, level: str = "INFO") -> None:
+    emit(
+        source_id,
+        message,
+        level,
+        **{
+            "mode": "RAW",
+            UIKey.METRIC.value: UIMetric.LEDGER_SYNC.value,
+            UIKey.LEDGER_BALANCE.value: fuel,
+            UIKey.POLICY_VER.value: ver,
+        },
+    )
+
+
+def bridge_cli_line(line: str) -> None:
+    """CLI stdout의 `LOG | PHASE | LEVEL | src: msg` 포맷을 파싱하여 ingest로 연결"""
+    if "|" not in line or ":" not in line:
+        return
+    parts = [p.strip() for p in line.split("|")]
+    if len(parts) >= 4 and ":" in parts[3]:
+        if parts[1].upper() == "UI_DIAG":
+            return
+        src, msg = parts[3].split(":", 1)
+        emit(src.split()[-1], msg.strip(), parts[2], phase=parts[1])
+
+
+class StudioPlaneObserver(EventObserver):
+    def update(self, event: LogEvent) -> None:
+        ingest(event)
+
+
+_studio_observer: StudioPlaneObserver | None = None
+
+
+def mount_studio_plane() -> None:
+    """콘솔(Studio UI) 시작 시에만 명시적으로 호출하여 default_plane에 옵저버를 연결합니다."""
+    global _studio_observer
+    if _studio_observer is None:
+        _studio_observer = StudioPlaneObserver()
+        default_plane.attach(_studio_observer)
+
+
+async def check_tunnel_health() -> bool:
+    p = state.pipeline
+    if not TUNNEL_SOCK_PATH.exists():
+        p.tunnel_online = False
+        return False
+
+    tunnel = None
+    try:
+        tunnel = await TunnelFactory.get_isolated(max_connections=2, socket_timeout=0.5)
+        await asyncio.wait_for(tunnel.ping(), timeout=0.4)
+        p.tunnel_online = True
+    except Exception:
+        p.tunnel_online = False
+    finally:
+        if tunnel is not None:
+            try:
+                await tunnel.aclose()
+            except Exception:
+                pass
+    return p.tunnel_online
+
+
+async def tunnel_pubsub_worker() -> None:
+    mount_studio_plane()
+    p = state.pipeline
+    while True:
+        if not await check_tunnel_health():
+            await asyncio.sleep(3.0)
+            continue
+
+        tunnel = None
+        pubsub = None
+        try:
+            # socket_timeout=None 필수: 유휴 구간에서 pubsub.listen()이 5초마다 끊기는 것 방지
+            tunnel = await TunnelFactory.get_isolated(max_connections=4, socket_timeout=None)
+            pubsub = tunnel.pubsub()
+            await pubsub.psubscribe("log:*", "finops:*", "mcp:*", "sign:*", "vcr:*", "node:*")
+            refs.push_pubsub("plane:bus", "Subscribed to TunnelSurface ('log:*') & Control Channels")
+            async for msg in pubsub.listen():
+                if msg.get("type") != "pmessage":
+                    continue
+                ch, data = str(msg.get("channel") or ""), str(msg.get("data") or "")
+                if ch.startswith("log:"):
+                    try:
+                        if isinstance(ev := json.loads(data), dict):
+                            ingest(ev)
+                            continue
+                    except Exception:
+                        pass
+                ingest({"source_id": ch.replace(":", "."), "message": data, "level": "INFO"})
+            p.tunnel_online = False
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            p.tunnel_online = False
+            refs.push_pubsub("plane:bus", f"Tunnel offline ({e}) -> In-Memory StudioPlaneObserver Active")
+            await asyncio.sleep(2.0)
+        finally:
+            if pubsub is not None:
+                try:
+                    await pubsub.close()
+                except Exception:
+                    pass
+            if tunnel is not None:
+                try:
+                    await tunnel.aclose()
+                except Exception:
+                    pass

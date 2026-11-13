@@ -15,9 +15,9 @@ from fiber.llm.response import ModelResponse
 from fiber.llm.model.types.provider.general import EmbeddingResponse
 from fiber.llm.model.router.adapter import AdapterRegistry
 from fiber.llm.exception.mapping import exception_type
-from fiber.gateway.llm.stream.wrapper import StreamWrapper
-from fiber.gateway.llm.stream.param.processor import CompletionProcessor, EmbeddingProcessor
-from fiber.gateway.llm.context.metadata import ExecutionMetadata
+from fiber.llm.gateway.stream.wrapper import StreamWrapper
+from fiber.llm.gateway.stream.param.processor import CompletionProcessor, EmbeddingProcessor
+from fiber.llm.gateway.context.metadata import ExecutionMetadata
 
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.node.schema.auth import BrokerKey, NodeAuthPayload

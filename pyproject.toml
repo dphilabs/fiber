@@ -23,13 +23,13 @@ Homepage = "https://github.com/dphilabs/fiber"
 Repository = "https://github.com/dphilabs/fiber.git"
 
 [project.scripts]
-fiber = "fiber.dev.cli:app"
+fiber = "fiber.studio.cli.main:app"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
 
 [tool.hatch.metadata.hooks.custom]
-path = "plane/ops/hatch.py"
+path = "node/ops/hatch.py"
 base_dependencies = [
     "uvloop", "psutil", "fastapi", "valkeylite==9.1.*; sys_platform != 'win32'", "redis==8.0.1", "pyyaml", "orjson", "typer", "canonicaljson", "aiohttp", "requests",
     "watchdog", "rocksdict", "filetype", "openai", "anthropic", "google-genai", "mcp==2.3.0", "pydantic", "pydantic_settings", "httpx", "wasmtime",
@@ -47,7 +47,7 @@ pythonpath = [".."]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.force-include]
-"dev" = "fiber/dev"
 "gateway" = "fiber/gateway"
 "llm" = "fiber/llm"
-"plane" = "fiber/plane"
+"node" = "fiber/node"
+"studio" = "fiber/studio"

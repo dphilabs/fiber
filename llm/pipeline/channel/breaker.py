@@ -13,9 +13,9 @@ import os
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from fiber.dev.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
-from fiber.gateway.llm.state.traverser import StateMapper
-from fiber.gateway.llm.stream.parser.chunk import StreamChunkParser
+from fiber.studio.console.observer.signal import UIKey, UIMetric, UISlot, UISlotStatus
+from fiber.llm.gateway.state.traverser import StateMapper
+from fiber.llm.gateway.stream.parser.chunk import StreamChunkParser
 from fiber.llm.model.token.encoder import encode
 
 from xphi.node.schema.auth import BrokerKey, NodeAuthPayload

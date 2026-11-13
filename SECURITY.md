@@ -1,4 +1,4 @@
-# Security Policy
+# SECURITY
 
 Fiber is a local runtime harness. It runs on your machine and in your own cloud account, and DphiLabs holds no user credentials or account access. A vulnerability in Fiber is therefore a vulnerability in infrastructure you operate yourself, so we treat reports as a priority.
 
