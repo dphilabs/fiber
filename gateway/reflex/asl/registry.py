@@ -1,5 +1,4 @@
 # fiber.gateway.reflex.asl.registry
-## @lineage: fiber.studio.base.fsm.registry
 import copy
 import json
 from dataclasses import dataclass, field
@@ -14,7 +13,6 @@ BUILTIN_SCHEMA_FILES: Dict[str, str] = {
     "multiverse_ref": "multiverse_ref.json",
     "polyglot_dag": "polyglot_dag.json",
 }
-
 
 @dataclass(frozen=True)
 class ASLEntry:

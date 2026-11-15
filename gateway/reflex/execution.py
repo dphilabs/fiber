@@ -12,7 +12,7 @@ from fiber.node.finops.watcher import default_finops_watcher, default_tenant_eco
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 from fiber.node.account.auth.payload import NodeAuthPayload
 from fiber.gateway.bridge.emitter import get_emitter
-from xphi.arch.contract.fsm import (
+from xphi.arch.contract.reflex.fsm import (
     CompactKey,
     NodeType,
     apply_projection,

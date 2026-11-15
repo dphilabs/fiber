@@ -1,5 +1,4 @@
 # fiber.node.kyoc.channel.slack
-## @lineage: fiber.node.ops.channel.slack
 """
 Slack App Manifest & Socket Mode E2E Tester.
 
