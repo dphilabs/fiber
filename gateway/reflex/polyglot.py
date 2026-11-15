@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from fiber.gateway.reflex.execution import FiberExecutionBridge
 from fiber.gateway.bridge.emitter import get_emitter
-from xphi.arch.contract.fsm import (
+from xphi.arch.contract.reflex.fsm import (
     CompactKey,
     NodeType,
     ParsedResource,
