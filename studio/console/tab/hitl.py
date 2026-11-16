@@ -110,9 +110,9 @@ class ModelCatalogModal(ModalTemplate):
 
     def compose(self, dialog: ui.dialog) -> None:
         setattr(refs, "model_catalog_dialog", dialog)
-        from fiber.node.finops.exchange import default_exchange
-        from fiber.node.finops.model.filter import CORE_KEYWORDS
-        from fiber.node.finops.cost.registry import (
+        from fiber.node.account.finops.exchange import default_exchange
+        from fiber.node.account.finops.model.filter import CORE_KEYWORDS
+        from fiber.node.account.finops.cost.registry import (
             ModelCostRegistry,
             REGISTRY_ROOT,
             DEFAULT_REGISTRY_FILENAME,
@@ -304,7 +304,7 @@ class HitlNSettingTab(StudioTab):
 
     def compose_right(self) -> None:
         s = state.security
-        from fiber.node.finops.cost.registry import ModelCostRegistry, REGISTRY_ROOT, DEFAULT_REGISTRY_FILENAME
+        from fiber.node.account.finops.cost.registry import ModelCostRegistry, REGISTRY_ROOT, DEFAULT_REGISTRY_FILENAME
 
         slk = get_slack_status()
         if slk["channel"]:

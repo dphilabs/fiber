@@ -19,7 +19,7 @@ from fiber.node.account.state import (
     save_state_to_disk,
     state,
 )
-from fiber.node.finops.console import finops_manager
+from fiber.node.account.finops.console import finops_manager
 from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.bridge.mcp import mcp
 

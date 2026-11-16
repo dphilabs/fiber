@@ -15,7 +15,7 @@ from fiber.node.account.state import (
     save_state_to_disk,
     state,
 )
-from fiber.node.finops.console import finops_manager
+from fiber.node.account.finops.console import finops_manager
 import fiber.studio.console.ui.diag as diag
 from fiber.studio.console.ui.guide import open_guide_modal
 import fiber.studio.console.ui.kit as kit

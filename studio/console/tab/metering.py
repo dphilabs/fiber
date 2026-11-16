@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from nicegui import ui
 
-from fiber.node.finops.console import finops_manager
+from fiber.node.account.finops.console import finops_manager
 import fiber.studio.console.ui.kit as kit
 from fiber.studio.console.ui.kit import StudioTab
 from fiber.node.account.state import state, refs, USD_TO_FUEL_RATE

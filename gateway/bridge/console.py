@@ -65,7 +65,7 @@ async def _sync_after_cli_success(raw_out: str, args: tuple[str, ...]) -> None:
 
     from fiber.studio.console.bridge.sign import oob
     from fiber.studio.console.bridge.mcp import mcp
-    from fiber.node.finops.console import finops_manager
+    from fiber.node.account.finops.console import finops_manager
 
     domain_cmd = args[0]
     if domain_cmd == "connect":

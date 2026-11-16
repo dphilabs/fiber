@@ -8,14 +8,14 @@ import json
 import time
 from typing import Any, Dict, Optional, Protocol
 
-from fiber.node.finops.token.gen import (
+from fiber.node.account.finops.token.gen import (
     DEFAULT_EXCHANGE_RATE,
     FinOpsOpType,
     FinOpsTokenGenerator,
 )
 from fiber.gateway.security import TokenTranslator
 from fiber.node.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
-from fiber.node.finops.watcher import default_finops_watcher
+from fiber.node.account.finops.watcher import default_finops_watcher
 from fiber.gateway.bridge.action.schema import (
     AccountAllocateResult,
     AccountMandateResult,

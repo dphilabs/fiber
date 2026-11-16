@@ -29,7 +29,7 @@ from fiber.llm.vcr.manager import (
     VCRPlaybackConfig,
     add_vcr_arguments,
 )
-from fiber.node.finops.watcher import default_finops_watcher, default_tenant_eco
+from fiber.node.account.finops.watcher import default_finops_watcher, default_tenant_eco
 from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver

@@ -17,7 +17,7 @@ from fiber.gateway.bridge.action.sign import (
 from fiber.gateway.bridge.action.schema import SlackOobDispatchResult
 from fiber.node.account.state import state, refs
 import fiber.studio.console.ui.diag as diag
-from fiber.node.finops.console import (
+from fiber.node.account.finops.console import (
     FinOpsConsoleManager,
     finops_manager,
 )
