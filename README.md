@@ -4,7 +4,7 @@
 Fiber is a local runtime harness that sits between AI agents and everything they call—tools and models alike. A single loopback daemon (`127.0.0.1:8356`) fronts your MCP servers as a **Local MCP Gateway** with idempotent execution and pre-flight human approval (**1**), unified under a zero-boilerplate CLI for config sync and quota governance (**3.1**). 
 As the counterpart on the model path, the same engine normalizes heterogeneous provider schemas declaratively (2.3)—via an OpenAI-compatible endpoint or in-process Python harness—to govern live traffic with two-track DLP guardrails and mid-stream kill-switches (2.1) while accelerating offline testing (pytest) via zero-cost, 3ms deterministic VCR replay (2.2), all without changing your agent configs or business logic.
 
-**KYOC (Keep Your Own Cloud):** Fiber runs only on infrastructure you control—your machine or your own Cloudflare account. API keys resolve from your host, state stays in your local ledger, and edge workers are deployed from your machine ([4.1](#41-edge-v8-execution-plane-planeflare)); DphiLabs never holds your credentials or access.
+**KYOC (Keep Your Own Cloud):** Fiber runs only on infrastructure you control—your machine or your own Cloudflare account. API keys resolve from your host, state stays in your local ledger, and edge workers are deployed from your machine ([4.1](#41-edge-v8-execution-plane-planeflare)).
 
 | Section | Target Focus & Key Capabilities | Quick Jump |
 | :--- | :--- | :--- |
@@ -157,7 +157,7 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
-> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber kyoc channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./studio/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./studio/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
 
 ---
 
@@ -327,7 +327,7 @@ $ curl -X POST http://127.0.0.1:8356/v1/chat/completions -H "Content-Type: appli
   }'
 
 # Verify live HTTP Gateway roundtrip (Unary, SSE Stream, and Dynamic Record -> Replay)
-$ fiber kyoc tester.gateway
+$ fiber ops tester.gateway
 ```
 
 **VCR Control Parameters**
@@ -399,7 +399,7 @@ Fiber loads this registry exactly once at boot-time. It performs strict Pydantic
 | Command | Role | Function & Lifecycle | Example |
 | --- | --- | --- | --- |
 | **`init`** | **[Bootstrap]** | Initializes workspace topology (`~/.anchor/bound.json`) and local node keys. | `fiber init` |
-| **`kyoc`** | **[Plane & Ops]** | Runs operational provisioning, channel setup, and gateway verification suites (`flare.deploy`, `channel.slack`, `tester.gateway`, `brew.verify`). | `fiber kyoc flare.deploy`, `fiber kyoc channel.slack guide --open` |
+| **`ops`** | **[Plane & Ops]** | Runs operational provisioning, channel setup, and gateway verification suites (`flare.deploy`, `channel.slack`, `tester.gateway`, `brew.verify`). | `fiber ops flare.deploy`, `fiber ops channel.slack guide --open` |
 | **`console`** | **[Web Studio]** | Launches the Console Studio web UI (`MCP Gateway`, `Guardrail`, `Metering`, `VCR`, `Setting`) for HITL approvals and live telemetry. | `fiber console` |
 | **`sign`** | **[Identity & TOTP]** | Inspects local node key status and manages AES-GCM encrypted Admin TOTP secrets in SQLite. | `fiber sign enroll -u fiber` |
 | **`connect`** | **[Config Sync]** | Explicitly scans and registers IDE configs (`fiber connect claude`, `fiber connect all`) or third-party servers into `~/.anchor/mcp.json`. | `fiber connect all`, `fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:DELETE"` |
@@ -492,7 +492,7 @@ fiber init
 brew services start dphilabs/fiber/fiber
 
 ## Verify install, bootstrap, and gateway
-fiber kyoc brew.verify
+fiber ops brew.verify
 ```
 
 ## 4. Execution Planes & Pipeline Benchmarks
@@ -507,22 +507,22 @@ Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edg
 # Flare Local Dev Plane: Auto-provisions local Dual V8 Isolates (:8787/:8788) on demand
 $ XPHI_WASM_PLANE=flare fiber daemon
 
-# Flare Global Edge Plane (KYOC): Routes directly to a self-hosted Cloudflare Worker
+# Flare Global Edge Plane: Routes directly to a self-hosted Cloudflare Worker
 $ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev fiber daemon
 
 ```
 
-**Autonomous Blueprint Synthesis & Self-Hosted (KYOC) Provisioning**
-To prevent cross-tenant state exposure and metering exhaustion, Fiber operates strictly on a **Self-Hosted (KYOC)** basis rather than routing traffic to a shared public endpoint. During provisioning, the Edge Controller synthesizes an ephemeral two-tier microservice workspace comprising an upstream **WASM Gateway (`xphi-gateway-node`)** and a downstream **Pyodide Engine (`xphi-python-node`)** linked via internal Cloudflare Service Bindings (`PYTHON_ENGINE`).
+**Autonomous Blueprint Synthesis & Self-Hosted Provisioning**
+To prevent cross-tenant state exposure and metering exhaustion, Fiber operates strictly on a Self-Hosted basis rather than routing traffic to a shared public endpoint. During provisioning, the Edge Controller synthesizes an ephemeral two-tier microservice workspace comprising an upstream **WASM Gateway (`xphi-gateway-node`)** and a downstream **Pyodide Engine (`xphi-python-node`)** linked via internal Cloudflare Service Bindings (`PYTHON_ENGINE`).
 
 While the core runtime retains final state Merkle rollups, fuel metering, and policy locks on the local host (Host-Sovereign mode), both the transport facade (`EdgeStateAnchor`) and synthesized manifests (`edge_state_bindings`) expose open extension slots for external **Cloudflare Durable Objects, D1, or Queues** integrations:
 
 ```bash
 # Live Edge Provisioning & 3-Stage Smoke Verification (Deploys Dual Workers to Cloudflare)
-$ fiber kyoc flare.deploy
+$ fiber ops flare.deploy
 
 # Verify, Inspect, or Teardown Remote Edge Workers (Reverse Dependency Order)
-$ fiber kyoc flare.deploy teardown  # or `verify --url https://...`, `status`
+$ fiber ops flare.deploy teardown  # or `verify --url https://...`, `status`
 
 # Full Local Dual-Isolate E2E Suite (23 Scenarios: Bridge Routing, Isolation & State Rollup)
 $ fiber e2e infra.plane.flare --mode dev

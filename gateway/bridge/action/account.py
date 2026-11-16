@@ -25,7 +25,7 @@ import asyncio
 import json
 from typing import Optional
 
-from fiber.node.finops.token.gen import FinOpsOpType
+from fiber.node.account.finops.token.gen import FinOpsOpType
 from fiber.gateway.security import TokenTranslator
 from fiber.node.account.manager import (
     DEFAULT_INITIAL_FUEL,
