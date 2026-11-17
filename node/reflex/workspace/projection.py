@@ -1,7 +1,4 @@
 # fiber.node.reflex.runtime.projection
-## @lineage: fiber.reflex.runtime.projection
-## @lineage: reflexor.workspace.projection
-## @lineage: reflexor.runtime.workspace.projection
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,8 +7,8 @@ from typing import Any
 
 from xphi.arch.contract.registry.flow import FlowRegistry
 from xphi.arch.contract.reflex.auth import missing_credentials, resolve_accounts
-from fiber.node.reflex.runtime.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
-from fiber.node.reflex.runtime.inspector import (
+from fiber.node.reflex.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from fiber.node.reflex.workspace.inspector import (
     block_auth,
     emit_flow_dsl,
     emit_step_dsl,

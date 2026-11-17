@@ -1,6 +1,4 @@
 # fiber.node.reflex.flow.viewport
-## @lineage: fiber.reflex.flow.viewport
-## @lineage: reflexor.runtime.flow.viewport
 from __future__ import annotations
 
 from dataclasses import replace
@@ -12,15 +10,15 @@ from fiber.node.reflex.unit.indexer import UnitsIndexer
 from fiber.node.reflex.unit.loader import UnitsLoader
 from xphi.arch.contract.reflex.auth import missing_credentials, unit_auth
 from fiber.node.reflex.flow.engine import DispatcherFn, FlowEngine
-from fiber.node.reflex.runtime.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
-from fiber.node.reflex.runtime.inspector import (
+from fiber.node.reflex.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from fiber.node.reflex.workspace.inspector import (
     emit_flow_dsl,
     emit_unit_dsl,
     format_llm_catalog,
     format_llm_diagnostic,
     inspect_flow,
 )
-from fiber.node.reflex.runtime.projection import (
+from fiber.node.reflex.workspace.projection import (
     SynthesisReport,
     TelemetryEvent,
     TopologyProjector,

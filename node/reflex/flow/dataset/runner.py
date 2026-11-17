@@ -11,7 +11,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fiber.gateway.bridge.fsm.polyglot import PolyglotExecutionBridge
+from fiber.node.reflex.bridge.polyglot import PolyglotExecutionBridge
 from fiber.node.reflex.flow.dataset.extract import extract_dataset, package_tiers
 from fiber.node.reflex.flow.dataset.template import (
     extract_topology_lock,

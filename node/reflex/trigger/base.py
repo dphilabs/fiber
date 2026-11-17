@@ -16,11 +16,11 @@ import time
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fiber.node.reflex.runtime.trigger.cron import compile_cron
+from fiber.node.reflex.trigger.cron import compile_cron
 from xphi.arch.contract.reflex.fsm import extract_json_path
 
 if TYPE_CHECKING:
-    from fiber.node.reflex.runtime.projection import ViewportSnapshot
+    from fiber.node.reflex.workspace.projection import ViewportSnapshot
 
 TriggerKind = Literal["manual", "cron", "event"]
 MissedPolicy = Literal["skip", "run_once"]
