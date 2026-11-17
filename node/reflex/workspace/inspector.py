@@ -15,8 +15,8 @@ from xphi.arch.contract.reflex.flow import FlowContract, Shape, StepSpec, UnitCo
 from xphi.arch.xor.fsm.parser import parse_if_ast
 
 if TYPE_CHECKING:
-    from fiber.node.reflex.runtime.trigger.base import TriggerSpec
-    from fiber.node.reflex.runtime.projection import SynthesisReport, ViewportSnapshot
+    from fiber.node.reflex.trigger.base import TriggerSpec
+    from fiber.node.reflex.workspace.projection import SynthesisReport, ViewportSnapshot
 
 # Canonical DSL Emitter (Contract Object -> DSL String)
 def _format_arg_items(

@@ -6,7 +6,7 @@ import json
 import shlex
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fiber.gateway.bridge.fsm.execution import FiberExecutionBridge
+from fiber.node.reflex.bridge.execution import FiberExecutionBridge
 from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.reflex.fsm import (
     CompactKey,

@@ -1,6 +1,4 @@
 # fiber.node.reflex.flow.engine
-## @lineage: fiber.reflex.flow.engine
-## @lineage: reflexor.runtime.flow.engine
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -41,10 +39,8 @@ from xphi.node.runtime.reflex.event import (
 
 DispatcherFn = Callable[[str, str, dict[str, Any]], dict[str, Any] | None]
 
-
 class FlowExecutionError(EngineError):
     """Raised when an event flow encounters an unhandled failure or deadlock."""
-
 
 class FlowEngine:
     """Compact FSM & ASL Workflow Engine."""

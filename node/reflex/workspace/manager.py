@@ -1,7 +1,4 @@
 # fiber.node.reflex.runtime.manager
-## @lineage: fiber.reflex.runtime.manager
-## @lineage: reflexor.workspace.manager
-## @lineage: reflexor.runtime.workspace.manager
 from __future__ import annotations
 
 import json
@@ -9,15 +6,15 @@ from pathlib import Path
 import time
 from typing import Any
 
-from fiber.node.reflex.runtime.trigger.base import (
+from fiber.node.reflex.trigger.base import (
     DEFAULT_TRIGGERS,
     TriggerGate,
     TriggerKind,
     TriggerSpec,
 )
-from fiber.node.reflex.runtime.inspector import emit_flow_dsl, emit_unit_dsl
-from fiber.node.reflex.runtime.projection import SynthesisReport, ViewportSnapshot
-from fiber.node.reflex.flow.viewport import WorkflowViewport
+from fiber.node.reflex.workspace.inspector import emit_flow_dsl, emit_unit_dsl
+from fiber.node.reflex.workspace.projection import SynthesisReport, ViewportSnapshot
+from fiber.node.reflex.workspace.viewport import WorkflowViewport
 
 from xphi.arch.contract.reflex.flow import Shape, UnitContract
 from xphi.node.space.bind.resolver import resolve_path
