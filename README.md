@@ -1,18 +1,21 @@
 # README
-**Agent Runtime Harness**
+**Local Runtime Harness for AI Agents**
 
-Fiber is a local runtime harness that sits between AI agents and everything they call—tools and models alike. A single loopback daemon (`127.0.0.1:8356`) fronts your MCP servers as a **Local MCP Gateway** with idempotent execution and pre-flight human approval (**1**), unified under a zero-boilerplate CLI for config sync and quota governance (**3.1**). 
-As the counterpart on the model path, the same engine normalizes heterogeneous provider schemas declaratively (2.3)—via an OpenAI-compatible endpoint or in-process Python harness—to govern live traffic with two-track DLP guardrails and mid-stream kill-switches (2.1) while accelerating offline testing (pytest) via zero-cost, 3ms deterministic VCR replay (2.2), all without changing your agent configs or business logic.
+Fiber is a local runtime harness that sits between AI agents and everything they call—tools and models alike. Your agents already run on your machine; Fiber governs every tool call and model stream they make, while they happen: routing them through one local endpoint, asking a human before risky actions, keeping secrets from leaving, cutting off runaway spend mid-stream, and replaying traffic deterministically for tests—all without changing your agent configs or business logic.
 
-**KYOC (Keep Your Own Cloud):** Fiber runs only on infrastructure you control—your machine or your own Cloudflare account. API keys resolve from your host, state stays in your local ledger, and edge workers are deployed from your machine ([4.1](#41-edge-v8-execution-plane-planeflare)).
+Under the hood, one loopback daemon (`127.0.0.1:8356`) serves both paths: a Local MCP Gateway for tools, and an OpenAI-compatible endpoint—or an in-process Python harness—for models.
+
+Fiber is a local-first alternative to cloud-hosted AI gateways and agent platforms: instead of routing every tool call and prompt through someone else's infrastructure, the harness runs where your agents already do. It doesn't host your agents—it governs what they touch.
+
+**KYOC (Keep Your Own Cloud):** Fiber runs only on infrastructure you control—your machine or your own Cloudflare account. API keys resolve from your host, state stays in your local ledger, and edge workers are deployed from your machine. No shared control plane, ever.
 
 | Section | Target Focus & Key Capabilities | Quick Jump |
 | :--- | :--- | :--- |
-| **1. Local MCP Gateway** | Loopback Daemon for Agents & IDEs, Pre-Flight HITL Locks, Zero-Key LLM Routing, Config Sync | **[1. Local MCP Gateway](#1-local-mcp-gateway)** |
-| **2. LLM Guardrails & Replay** | In-Flight DLP Guardrails, Mid-Stream Kill-Switch, Deterministic VCR Replay, Schema Traverser | **[2.1 LLM Guardrails](#21-llm-guardrails)** · **[2.2 VCR](#22-deterministic-replay-llm-vcr--fixtures)** · **[2.3 Schema Traverser](#23-schema-traverser--compat-registry)** |
-| **3. CLI & Installation** | Connect CLI, Account & Quota Governance, Sandbox Provisioning (`uv pip`), Node Identity (`fiber init`) & Homebrew | **[3.1 Connect CLI](#31-fiber-connect-cli)** · **[3.2 Python & CLI](#32-python-environment-via-uv-pip-recommended-for-sdk--local-control-plane)** · **[3.3 Homebrew](#33-macos-homebrew-tap-for-local-daemon--mcp-gateway)** |
-| **4. Edge Plane & Benchmarks** | Edge V8 Isolate Offload, KYOC Provisioning & 200-Stream Concurrency Metrics | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane-planeflare)** · **[4.2 Benchmarks](#42-pipeline-performance-benchmarks-apple-m2-32gb-ram)** |
-| **5. System Validation Logs** | End-to-End Security, Guardrail & Edge Cryptographic Audit Logs | **[5. System Validation Logs](#5-system-validation-logs)** |
+| **1. Local MCP Gateway** | Loopback Daemon for Agents & IDEs, Pre-Flight Human Approval, Zero-Key LLM Routing, Config Sync | **[1. Local MCP Gateway](#1-local-mcp-gateway)** |
+| **2. LLM Guardrails & Replay** | In-Flight DLP Guardrails, Mid-Stream Kill-Switch, Deterministic VCR Replay, Multi-Provider Schema Normalization | **[2.1 LLM Guardrails](#21-llm-guardrails)** · **[2.2 VCR](#22-deterministic-replay-llm-vcr--fixtures)** · **[2.3 Schema Traverser](#23-schema-traverser--compat-registry)** |
+| **3. CLI & Installation** | Connect CLI, Spend Limits & Quota, Sandbox Provisioning (`uv pip`), Node Identity (`fiber init`) & Homebrew | **[3.1 Connect CLI](#31-fiber-connect-cli)** · **[3.2 Python & CLI](#32-python-environment-via-uv-pip-recommended-for-sdk--local-control-plane)** · **[3.3 Homebrew](#33-macos-homebrew-tap-for-local-daemon--mcp-gateway)** |
+| **4. Execution Planes & Benchmarks** | Optional Self-Hosted Edge Offload, Pipeline Benchmarks | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane)** · **[4.2 Benchmarks](#42-pipeline-performance-benchmarks-apple-m2-32gb-ram)** |
+| **5. System Validation Logs** | End-to-End Validation Logs (HITL, Guardrail, VCR, Edge) | **[5. System Validation Logs](#5-system-validation-logs)** |
 
 ---
 
@@ -23,12 +26,12 @@ uv pip install git+https://github.com/dphilabs/fiber.git@v1.1.5.0
 ```
 
 **1. Boot the Local Control Plane**
-Initialize your workspace, harvest existing IDE MCP definitions into Fiber's host registry (`~/.anchor/mcp.json`) without mutating your original IDE files, and launch the gateway daemon:
+Initialize your workspace, import existing IDE MCP definitions into Fiber's host registry (`~/.anchor/mcp.json`) without mutating your original IDE files, and launch the gateway daemon:
 
 ```bash
 $ fiber init          # Provision workspace (~/.anchor) & local node keys
-$ fiber connect all   # Non-invasively harvest local IDE MCP configs into ~/.anchor/mcp.json
-$ fiber console       # Auto-spawn gateway daemon (:8356) & Studio UI (:8357) (or `fiber daemon` for headless)
+$ fiber connect all   # Non-invasively import local IDE MCP configs into ~/.anchor/mcp.json
+$ fiber console       # Start gateway daemon (:8356) & Console Studio (:8357) (or `fiber daemon` for headless)
 ```
 
 **2. Point External Agents & IDEs to the Gateway (Zero-Key MCP & LLM)**
@@ -83,22 +86,22 @@ Most AI agents (Claude Code, Cursor, VSCode, Zed) launch MCP servers directly on
 </p>
 
 **Why a Local Gateway?**
-Standard MCP clients treat tool calls as fire-and-forget pipes: on network timeouts, agents blindly retry or hallucinate parameters, causing duplicate database writes or runaway API charges. Fiber’s MCP Gateway interposes a deterministic control plane between the agent and the tool:
+Standard MCP clients treat tool calls as fire-and-forget pipes: on network timeouts, agents blindly retry or hallucinate parameters, causing duplicate database writes or runaway API charges. Fiber’s MCP Gateway interposes a single local control point between the agent and the tool—on your machine, not in a cloud relay:
 
   - **Idempotent Execution & Lineage**: Maps every invocation to a deterministic transaction handle backed by a local state ledger. Duplicate agent retries immediately return cached resolutions without re-executing the underlying tool, while upstream timeouts trigger automatic rollbacks.
 
-  - **Pre-Flight HITL & Approval Gate (`HTTP 202`)**: On high-risk operations—detected either natively by the worker or zero-code prior to worker I/O via pre-flight regex traps (`--preflight`, guaranteeing Zero-I/O on persistent workers and Zero-Spawn on ephemeral sandboxes until approved)—the gateway parks the transaction via a stateless multi-round-trip yield (`YIELD` / `HTTP 202`) and awaits **human attestation** via **TOTP** (default) or **1-Click Approve/Reject buttons** (`button:<regex>`) across Slack Socket Mode, CLI, or Control Studio before resuming.
+  - **Pre-Flight Human-in-the-Loop (HITL) Approval (`HTTP 202`)**: On high-risk operations—detected either natively by the worker or zero-code prior to worker I/O via pre-flight regex traps (`--preflight`, guaranteeing Zero-I/O on persistent workers and Zero-Spawn on ephemeral sandboxes until approved)—the gateway parks the transaction via a stateless multi-round-trip yield (`YIELD` / `HTTP 202`) and awaits **human attestation** via **TOTP** (default) or **1-Click Approve/Reject buttons** (`button:<regex>`) across Slack Socket Mode, CLI, or Console Studio before resuming.
 
   - **Host-Local Trust Boundary**: Upstream API keys are resolved from the daemon's host environment (`.env` or OS variables) and never appear in client configs; node identity and server registry (`~/.anchor/mcp.json`) stay on the machine.
 
-  - **Hold/Fuel Reservation**: Translates signed quota mandates into linear state transitions: each mandate is consumed exactly once to produce the next quota state. Version fencing rejects stale or replayed policies, and the same mandate can never be consumed twice or drive a balance below zero.
+  - **Spend & Quota Limits**: Each tenant runs against a signed budget recorded in the local ledger. Budgets can't be replayed, double-spent, or driven below zero, and revoking one cuts active streams immediately.
 
 **LLM & MCP Routing for IDEs**
 Alongside the MCP endpoint, the same local daemon serves the LLM Gateway (`/v1/chat/completions`)—the HTTP face of the pipeline described in [2.1](#21-llm-guardrails).
 By configuring your IDE's (e.g., Continue.dev, Cursor) API base URL to `http://127.0.0.1:8356/v1`, you can route all model requests through Fiber's guardrails. This eliminates the need to expose upstream provider API keys in client configs, as authentication is securely resolved by the daemon's host environment (`.env` files or local OS variables).
 
 **Example: continue.dev LLM Config (config.yaml)**
-By setting the client provider to `openai`, Fiber enables IDEs to seamlessly interface with models they may not natively support. Simply append the target infrastructure prefix (e.g., `cohere/`, `cerebras/`, `llama_server/`) to the model string, and Fiber autonomously orchestrates the schema translation and OS credentials.
+By setting the client provider to `openai`, Fiber enables IDEs to seamlessly interface with models they may not natively support. Simply append the target infrastructure prefix (e.g., `cohere/`, `cerebras/`, `llama_server/`) to the model string, and Fiber handles the schema translation and OS credentials.
 
 ```yaml
 models:
@@ -157,7 +160,7 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
-> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For `HTTP 202` parking, `ApprovalStateEnvelope` wire contracts, and OOB attestation specs, refer to: **[MCP Connector Spec](./studio/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For the approval protocol and wire format, refer to: **[MCP Connector Spec](./studio/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
 
 ---
 
@@ -178,6 +181,9 @@ While the Local MCP Gateway (**1**) governs tool execution, Fiber's duplex LLM p
 
 **1. Two-Track Guardrails & Slot Interceptors (`PRE_TRANSLATE` vs. `POST_TRANSLATE`):**
 Production guardrails are built into `fiber.llm.pipeline.interceptor.guardrail` and ready to mount directly in **Step 2**; under the hood, each interceptor implements `DuplexChannel` for its target execution slot:
+
+<details>
+<summary><b>How built-in guardrails are implemented</b></summary>
 
 ```python
 from fiber.llm.pipeline.bootstrap import PipelineSlot
@@ -234,7 +240,9 @@ class CustomRegexBlockingGuardrail(DuplexChannel):
 
 ```
 
-**Built-in Guardrails & Reference Templates**: `fiber.llm.pipeline.interceptor.guardrail` provides the four two-track DLP interceptors above out of the box, alongside extensible hooks (`tracer.BaseLLMTracer`) and reference templates (`cache.EdgeRedisCache`, `router.OnnxSemanticRouter`) demonstrating how to short-circuit I/O (`ctx.fire_channel_read`) or dynamically route models in `PRE_TRANSLATE`.
+</details>
+
+**Built-in Guardrails & Reference Templates**: `fiber.llm.pipeline.interceptor.guardrail` provides the four two-track DLP interceptors above out of the box, alongside extension hooks and reference templates for tracing, caching, and dynamic model routing (see Interceptor Spec).
 
 **2. Execute Chained Guardrails (`PRE_TRANSLATE` -> `POST_TRANSLATE`):**
 
@@ -246,7 +254,7 @@ from fiber.llm.pipeline.interceptor.guardrail import (
     ActiveBlockingGuardrail,
 )
 
-# Fiber autonomously sorts the flat list into deterministic execution slots:
+# Fiber sorts the flat list into deterministic execution slots:
 # [Sanitize -> Masking (PRE_TRANSLATE)] -> [Translator] -> [Blocking (POST_TRANSLATE)]
 response = await acompletion(
     model="lm_studio/qwen-3.5-9b", # ex: cerebras/qwen-3.8-27b, gemini/gemini-3.1-flash-lite, ollama/gemma:2b
@@ -260,17 +268,23 @@ response = await acompletion(
 )
 ```
 
-> **Node Quota & Mid-Stream Kill-Switch Binding:** To enforce real-time stream termination on quota exhaustion or `fiber account ... kill` signals, bind the `StreamBreaker` and local state ledger adapters (`PtaAdapter`, `NodeAuthPayload`) to the call:
-> ```python
-> from fiber.llm.pipeline.channel.breaker import StreamBreaker
-> from fiber.llm.pipeline.channel.observer import MeteringObserver
-> from xphi.arch.model.auth import NodeAuthPayload
-> 
-> # Pass into acompletion(...) alongside interceptors:
-> stream_breaker=StreamBreaker(finops_watcher=default_finops_watcher),
-> metering_observer=MeteringObserver(tenant_eco=default_tenant_eco, pta_adapter=pta_adapter),
-> metadata={"node_auth": NodeAuthPayload(tenant_id="accounting_dept", fuel_budget=50000, is_enforced=True)}
-> ```
+> **Node Quota & Mid-Stream Kill-Switch Binding:** To enforce real-time stream termination on quota exhaustion or `fiber account ... kill` signals, bind the kill-switch and metering observer to the call:
+
+<details>
+<summary><b>Kill-switch & metering binding example</b></summary>
+
+```python
+from fiber.llm.pipeline.channel.breaker import StreamBreaker
+from fiber.llm.pipeline.channel.observer import MeteringObserver
+from xphi.arch.model.auth import NodeAuthPayload
+
+# Pass into acompletion(...) alongside interceptors:
+stream_breaker=StreamBreaker(finops_watcher=default_finops_watcher),
+metering_observer=MeteringObserver(tenant_eco=default_tenant_eco, pta_adapter=pta_adapter),
+metadata={"node_auth": NodeAuthPayload(tenant_id="accounting_dept", fuel_budget=50000, is_enforced=True)}
+```
+
+</details>
 
 
 **3. Declarative Secret Registry (`FIBER_REDACT_RULES_PATH`):**
@@ -349,9 +363,8 @@ The runtime resolves options per request (via JSON payload or `metadata`), envir
 Enforcing identical in-flight guardrails (**2.1**) and deterministic VCR replay (**2.2**) across heterogeneous LLM providers requires a unified normalization boundary inside the harness. Fiber eliminates brittle `if/elif` provider parsing through its **Rule-based Traverser**—using declarative dot-notation and **Path Fallbacks** to normalize request parameters, unary responses, and async stream chunks into a single canonical schema.
 
 **Zero-Config Defaults & Provider Extension:**
-Built-in rules already normalize standard providers (`openai`, `gemini`, `cohere`, `cerebras`, `ollama`, `llama_server`) out of the box with zero configuration. When integrating a proprietary internal model or overriding existing extraction paths without modifying Python code, supply an external JSON file via the `FIBER_COMPAT_RULES_PATH` environment variable.
+Built-in rules already normalize standard providers (`openai`, `gemini`, `cohere`, `cerebras`, `ollama`, `llama_server`) out of the box with zero configuration. When integrating a proprietary internal model or overriding existing extraction paths without modifying Python code, supply an external JSON file via the `FIBER_COMPAT_RULES_PATH` environment variable. Each rule is validated at boot; invalid rules are skipped with a warning while valid ones are merged.
 
-Fiber loads this registry exactly once at boot-time. It performs strict Pydantic schema validation (Fail-Fast) and deep-merges the rules into the base registry. Invalid formats are safely ignored with a warning (Partial Update).
 
 ```json
 {
@@ -388,7 +401,7 @@ Fiber loads this registry exactly once at boot-time. It performs strict Pydantic
 }
 ```
 
-**Autonomous Rule Synthesis & Validation**: Because rules are purely declarative, even lightweight LLMs can one-shot synthesize new provider bindings from raw API payloads using existing rules as a reference—forming a closed, hallucination-free self-healing loop when paired with `fiber compat fixture --vcr replay` for instant offline verification.
+**LLM-Assisted Provider Bindings**: Because rules are declarative, even lightweight LLMs can draft new provider bindings from raw payloads—which you then verify offline with `fiber compat fixture --vcr replay`.
 
 ---
 
@@ -406,7 +419,7 @@ Fiber loads this registry exactly once at boot-time. It performs strict Pydantic
 | **`connect --standalone`** | **[Standalone Sidecar]** | Runs MCP servers directly in the foreground without writing to `~/.anchor/mcp.json`. | `fiber connect --standalone -t prod-db -e "npx -y @modelcontextprotocol/server-postgres"` |
 | **`daemon`** | **[Local Gateway]** | Ignites the local gateway daemon, automatically booting and hot-reloading all MCP servers registered in `~/.anchor/mcp.json`. | `fiber daemon` |
 | **`compat`** | **[Compat & VCR]** | Records raw provider payloads (`record`) and verifies declarative extraction rules offline (`replay`) for schema parity. | `fiber compat fixture -m gemini/gemini-3.1-flash-lite --vcr record` |
-| **`account`** | **[Account & Quota]** | Manages tenant quotas, binds optional tenant identities, issues signed execution mandates, and triggers real-time stream kill-switches. | `fiber account --tenant accounting_dept --spiffe fiber jwt --usd 50 --op PROVISION --sync` |
+| **`account`** | **[Spend & Quota]** | Manages tenant quotas, binds optional tenant identities, issues signed budgets, and triggers real-time stream kill-switches. | `fiber account --tenant accounting_dept --spiffe fiber jwt --usd 50 --op PROVISION --sync` |
 
 **MCP Server Provisioning & Sidecar (`fiber connect`)**
 `fiber connect` hot-reloads updated configs into `fiber daemon` (inferring transport, concurrency, and `-p` HITL guards); add option `--standalone` to run any worker as a standalone foreground sidecar:
@@ -434,8 +447,8 @@ $ fiber sign status
 $ fiber sign enroll -u fiber
 ```
 
-**Account & Quota Governance (`fiber account`)**
-Commits signed quota mandates to the linear state chain and broadcasts real-time `REVOKE` kill-switches (optional `--spiffe` bindings log a non-blocking warning if unenrolled):
+**Spend Limits & Quota (`fiber account`)**
+Records signed budgets in the local ledger and broadcasts real-time `REVOKE` kill-switches (optional `--spiffe` bindings log a non-blocking warning if unenrolled):
 
 ```bash
 # Run full lifecycle walkthrough (Provision -> TopUp -> Stale Replay Check -> Revoke)
@@ -444,7 +457,7 @@ $ fiber account demo
 # List all tracked local accounts and their bound SPIFFE identities from the registry
 $ fiber account list
 
-# Provision $50.0 (50,000,000 Fuel), bind an optional identity ID, and commit as a linear state transition
+# Provision a $50 budget, bind an optional identity, and record it in the local ledger
 $ fiber account --tenant accounting_dept --spiffe fiber jwt --usd 50.0 --op PROVISION --ver 1 --sync
 
 # Trigger a Pub/Sub REVOKE kill-switch to sever active streams
@@ -452,7 +465,7 @@ $ fiber account --tenant accounting_dept kill --ver 99
 ```
 
 **Console Studio**
-Console Studio is a unified web console for the local daemon featuring **MCP Gateway, Guardrail, Metering, VCR, and Setting** tabs—allowing you to approve parked HITL transactions, toggle gateway `PRE_TRANSLATE` masking and `POST_TRANSLATE` blocking slots On/Off (`state.json`) alongside custom secret rules (`redact_rules.json`), monitor real-time token velocity and fuel budgets, and inspect VCR fixtures. Launch with `fiber console`.
+Console Studio is a unified web console for the local daemon featuring **MCP Gateway, Guardrail, Metering, VCR, and Setting** tabs—allowing you to approve parked HITL transactions, toggle gateway `PRE_TRANSLATE` masking and `POST_TRANSLATE` blocking slots On/Off (`state.json`) alongside custom secret rules (`redact_rules.json`), monitor real-time token usage and spend, and inspect VCR fixtures. Launch with `fiber console`.
 
 ---
 
@@ -497,11 +510,11 @@ fiber ops brew.verify
 
 ## 4. Execution Planes & Pipeline Benchmarks
 
-Beyond the default host loopback runtime (`XPHI_WASM_PLANE=local`), Fiber extends its execution governance to **Cloudflare Edge V8 Isolates** for isolated-level sandbox offload.
+Beyond the default host loopback runtime (`XPHI_WASM_PLANE=local`), Fiber extends its execution governance to **Cloudflare Edge V8 Isolates** for isolate-level sandbox offload.
 
 ### 4.1. Edge V8 Execution Plane
 
-Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edge V8 Plane** without modifying local agent or gateway logic. Fiber dispatches compiled WASM kernels (`phase`, `fsm`) and sandboxed Python (`Pyodide`) across an HTTP/1.1 JSON-RPC bridge—enforcing runtime-enforced CPU/Wall-Time limits (`Error 1102`) and returning cryptographic execution receipts (`X-XPHI-Canonical-Hash`) to the local state ledger:
+Setting `XPHI_WASM_PLANE` dynamically re-binds the execution broker to the **Edge V8 Plane** without modifying local agent or gateway logic. Fiber dispatches sandboxed compute (WASM and Python via `Pyodide`) across an HTTP/1.1 JSON-RPC bridge—enforcing runtime-enforced CPU/Wall-Time limits (`Error 1102`) and returning signed execution receipts to the local state ledger:
 
 ```bash
 # Flare Local Dev Plane: Auto-provisions local Dual V8 Isolates (:8787/:8788) on demand
@@ -512,10 +525,10 @@ $ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev fiber 
 
 ```
 
-**Autonomous Blueprint Synthesis & Self-Hosted Provisioning**
-To prevent cross-tenant state exposure and metering exhaustion, Fiber operates strictly on a Self-Hosted basis rather than routing traffic to a shared public endpoint. During provisioning, the Edge Controller synthesizes an ephemeral two-tier microservice workspace comprising an upstream **WASM Gateway (`xphi-gateway-node`)** and a downstream **Pyodide Engine (`xphi-python-node`)** linked via internal Cloudflare Service Bindings (`PYTHON_ENGINE`).
+**Self-Hosted Provisioning**
+To prevent cross-tenant state exposure and metering exhaustion, Fiber operates strictly on a Self-Hosted basis rather than routing traffic to a shared public endpoint. During provisioning, Fiber deploys two workers to your own Cloudflare account—a WASM gateway and a Python (Pyodide) engine—linked by Service Bindings.
 
-While the core runtime retains final state Merkle rollups, fuel metering, and policy locks on the local host (Host-Sovereign mode), both the transport facade (`EdgeStateAnchor`) and synthesized manifests (`edge_state_bindings`) expose open extension slots for external **Cloudflare Durable Objects, D1, or Queues** integrations:
+Final state, metering, and policy always stay on your host; the edge only executes. Extension points for Cloudflare Durable Objects, D1, or Queues are available (see spec).
 
 ```bash
 # Live Edge Provisioning & 3-Stage Smoke Verification (Deploys Dual Workers to Cloudflare)
@@ -532,7 +545,7 @@ $ fiber e2e infra.plane.flare --mode dev
 | --- | --- | --- | --- |
 | **Host Native** | `local` (Default) | Local Stream Store | Executes over native host streams and local WASM workers while anchoring the loopback control plane (`:8356`). |
 | **Flare Local Dev** | `flare` or `flare:dev` | `http://127.0.0.1:8787` | Auto-spawns local Dual V8 Isolates (`:8787` Gateway / `:8788` Pyodide) on first dispatch for offline parity and E2E verification. |
-| **Flare Global Edge** | `flare:https://<worker>.<subdomain>.workers.dev` | Cloudflare Global Edge | Offloads WASM/Pyodide compute to self-hosted V8 Isolates; enforces `Error 1102` cutoffs and seals `X-XPHI-Canonical-Hash` into the local state ledger while leaving `EdgeStateAnchor` open for stateful bindings. |
+| **Flare Global Edge** | `flare:https://<worker>.<subdomain>.workers.dev` | Cloudflare Global Edge | Offloads WASM/Pyodide compute to self-hosted V8 Isolates; enforces CPU/wall-time cutoffs and returns signed receipts to the local ledger; stateful bindings optional. |
 
 ---
 
@@ -561,6 +574,6 @@ fiber e2e inter.concurrency --vcr replay --concurrency 200
 Fiber enforces execution determinism and runtime safety through automated CI gates (on every PR and release tag) alongside targeted end-to-end validation suites across each subsystem:
 
 - **[hitl.slack.log](./studio/abc/log/gateway/hitl/slack.20261107.log):** Validates zero-code pre-flight HITL governance over live Slack Socket Mode, confirming instant safe-call passthrough, pre-I/O `HTTP 202` parking with 6-digit TOTP attestation on multiplexed network streams (`Context7`), and strict Zero-Spawn 1-Click button resumption on ephemeral `npx` stdio sandboxes.
-- **[llm.guardrail.log](./studio/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection (DIP), and chained `[Mask -> Block]` defense with fallback shielding.
+- **[llm.guardrail.log](./studio/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection, and chained `[Mask -> Block]` defense with fallback shielding.
 - **[llm.vcr.log](./studio/abc/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
-- **[infra.plane.flare.log](./studio/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming `PHASE`/Pyodide Service Binding parity, zero-leakage host isolation, bit-exact compute determinism, and `X-XPHI-Canonical-Hash` sealing into local state Merkle roots.
+- **[infra.plane.flare.log](./studio/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming WASM/Pyodide parity, zero-leakage host isolation, bit-exact compute determinism, and signed receipts sealed into the local ledger.
