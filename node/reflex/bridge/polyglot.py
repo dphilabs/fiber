@@ -1,13 +1,17 @@
-# fiber.gateway.bridge.fsm.polyglot
+# fiber.node.reflex.bridge.polyglot
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import importlib
 import inspect
 import json
 import shlex
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import httpx
 
-from fiber.node.reflex.bridge.execution import FiberExecutionBridge
 from fiber.gateway.bridge.emitter import get_emitter
+from fiber.node.reflex.bridge.execution import FiberExecutionBridge
+from fiber.node.reflex.unit.loader import UnitsLoader
+from xphi.arch.bound.adapter.pta import PtaPointer
 from xphi.arch.contract.reflex.fsm import (
     CompactKey,
     NodeType,
@@ -18,15 +22,19 @@ from xphi.arch.contract.reflex.fsm import (
 )
 from xphi.watcher.reflex.controller import BranchController, BranchCursor
 
-log = get_emitter("fsm.bridge.polyglot", phase="POLYGLOT_BRIDGE")
+log = get_emitter("reflex.bridge.polyglot", phase="POLYGLOT_BRIDGE")
 
 LocalCallable = Callable[..., Any]
 
-
 class PolyglotExecutionBridge(FiberExecutionBridge):
+    """
+    Unified L3 Actuator Bridge supporting two sibling control planes:
+    - Async Ledger/FSM Plane (`BranchController` / `GraphTraverser`) via `await bridge(cursor, node_spec, task_io)`
+    - Sync Workflow Plane (`FlowEngine` / `WorkflowViewport`) via `bridge.dispatch_sync(scheme, target, payload)`
+    """
     def __init__(
         self,
-        runtime: BranchController,
+        runtime: Optional[BranchController] = None,
         tenant_id: str = "default_tenant",
         mcp_gateway_url: str = "http://127.0.0.1:8356/v1/mcp-gateway",
         interceptors: Optional[List[Any]] = None,
@@ -35,6 +43,7 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
         allow_py_import: bool = True,
         allow_exec_subprocess: bool = False,
         exec_timeout: float = 30.0,
+        loader: Optional[UnitsLoader] = None,
     ):
         super().__init__(
             runtime=runtime,
@@ -43,6 +52,8 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
             interceptors=interceptors,
             http_timeout=http_timeout,
         )
+        self._http_timeout = http_timeout
+        self.loader = loader or UnitsLoader()
         self._fn_registry: Dict[str, LocalCallable] = {}
         for k, v in (local_handlers or {}).items():
             self.register_fn(k, v)
@@ -56,6 +67,7 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
         self._fn_registry[parsed.target or parsed.target_id] = handler
         return self
 
+    # Entrypoint 1: Async Ledger / FSM Control Plane (`BranchController`)
     async def __call__(
         self,
         cursor: BranchCursor,
@@ -71,6 +83,61 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
 
         return await super().__call__(cursor, node_spec, task_io)
 
+    # Entrypoint 2: Sync Workflow Control Plane (`FlowEngine` / `Viewport`)
+    def dispatch_sync(self, scheme: str, target: str, payload: Dict[str, Any]) -> Dict[str, Any] | None:
+        """Synchronous `DispatcherFn` adapter for `FlowEngine`."""
+        # Fast-path: local `pass`, `exec`, and file-backed `py` units go directly through `UnitsLoader`
+        if scheme in ("pass", "exec"):
+            return self.loader.dispatch(scheme, target, payload)
+        if scheme == "py":
+            mod_part, sep, _ = target.rpartition(":")
+            if sep and (mod_part.endswith(".py") or "/" in mod_part or not self._fn_registry):
+                return self.loader.dispatch(scheme, target, payload)
+
+        async def _invoke_on_fresh_client() -> Dict[str, Any] | None:
+            cursor = BranchCursor(
+                stream_id=str(payload.get("_stream_id", "flow_engine")),
+                pointer=PtaPointer(tx_hash="flow_sync", output_index=0),
+                active_blob_hash="flow_memory",
+                curr_node=target,
+                fuel=int(payload.get("_fuel", 10000)),
+                owner_pubkey="local",
+                meta_ctx=dict(payload),
+                tick=int(payload.get("_tick", 1)),
+            )
+            raw_uri = target if "://" in target else f"{scheme}://{target}"
+            task_io: Dict[str, Any] = {
+                "resource_uri": raw_uri,
+                "call_params": dict(payload),
+                "projection": None,  # `FlowEngine` applies its own projection after dispatch
+            }
+
+            # Bind a fresh AsyncClient to the current event loop to prevent closed-loop errors across sync steps
+            prev_client = self._http_client
+            self._http_client = httpx.AsyncClient(timeout=self._http_timeout)
+            try:
+                if scheme == "llm":
+                    meta_updates, _, _ = await self._execute_llm_node(cursor, task_io)
+                    return meta_updates
+                if scheme == "mcp":
+                    meta_updates, _, _ = await self._execute_mcp_node(cursor, task_io)
+                    return meta_updates
+                parsed = parse_resource_uri(raw_uri)
+                meta_updates, _, _ = await self._execute_polyglot_node(cursor, task_io, parsed)
+                return meta_updates
+            finally:
+                await self._http_client.aclose()
+                self._http_client = prev_client
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(_invoke_on_fresh_client())
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(lambda: asyncio.run(_invoke_on_fresh_client())).result()
+
+    # Polyglot Actuator Implementations
     async def _execute_polyglot_node(
         self,
         cursor: BranchCursor,
@@ -108,7 +175,7 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
             raise KeyError(f"[PolyglotBridge:{cursor.stream_id}] Unregistered handler '{parsed.raw_uri}'")
         return await self._call_flexible_signature(handler, resolved_args, cursor.meta_ctx, ckpt_handle)
 
-    # Dynamic Python Module Callable (`py://<package.module>:<callable_name>`)
+    # Dynamic Python Module or `fiber-units` Script (`py://<path_or_module>:<callable_name>`)
     async def _invoke_dynamic_py(
         self,
         parsed: ParsedResource,
@@ -120,6 +187,11 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
             raise PermissionError(f"[PolyglotBridge:{cursor.stream_id}] Dynamic 'py://' import is disabled.")
 
         target = parsed.target
+        mod_part, sep, _ = target.rpartition(":")
+        if sep and (mod_part.endswith(".py") or "/" in mod_part):
+            out = await asyncio.to_thread(self.loader.run_py, target, resolved_args)
+            return out if isinstance(out, dict) else {"data": out}
+
         if ":" in target:
             mod_path, attr_name = target.split(":", 1)
         elif "." in target:
@@ -181,15 +253,23 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
         ckpt_handle: str,
         extras: Dict[str, Any],
     ) -> Dict[str, Any]:
+        argv = shlex.split(parsed.target)
+        if not argv:
+            raise ValueError(f"[PolyglotBridge] Empty command in '{parsed.raw_uri}'")
+
+        cmd_head = argv[0]
+        if "/" in cmd_head and not cmd_head.startswith("/") and (self.allow_exec_subprocess or self.loader.local_repo_dir):
+            try:
+                return await asyncio.to_thread(self.loader.run_exec, parsed.target, resolved_args)
+            except Exception:
+                if not self.allow_exec_subprocess:
+                    raise
+
         if not self.allow_exec_subprocess:
             raise PermissionError(
                 f"[PolyglotBridge:{cursor.stream_id}] Direct 'exec://' subprocess execution is disabled. "
                 f"Mount via 'fiber connect' as 'mcp://<target>' or enable allow_exec_subprocess=True."
             )
-
-        argv = shlex.split(parsed.target)
-        if not argv:
-            raise ValueError(f"[PolyglotBridge] Empty command in '{parsed.raw_uri}'")
 
         stdin_envelope = json.dumps(
             {
@@ -253,19 +333,16 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
         has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
         has_pos_only = any(p.kind == inspect.Parameter.POSITIONAL_ONLY for p in params)
 
-        # If `resolved_args` keys directly match the function's named parameters (e.g., `a`, `b` or `p`), unpack as **kwargs
         if resolved_args and not has_pos_only and (
             set(resolved_args.keys()).issubset(param_names) or has_var_kw
         ):
             res = fn(**resolved_args)
-        # If single positional-only arg (e.g. C-builtins or single-arg stdlib) and 1 key in resolved_args, pass the value
         elif len(pos_params) == 1 and len(resolved_args) == 1 and next(iter(resolved_args.keys())) not in ("args", "params", "data"):
             first_param_name = pos_params[0].name
             if first_param_name not in ("args", "resolved_args", "params", "payload", "data"):
                 res = fn(next(iter(resolved_args.values())))
             else:
                 res = fn(resolved_args)
-        # Otherwise, dispatch as FSM-aware handler: (args, meta_ctx, ckpt_handle) / (args, meta_ctx) / (args)
         elif len(pos_params) >= 3:
             res = fn(resolved_args, meta_ctx, ckpt_handle)
         elif len(pos_params) == 2:
@@ -296,7 +373,6 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
                 0,
             )
 
-        # Delegates extraction & offloading directly to `contract.apply_projection`
         meta_updates, offload_payload = apply_projection(
             raw_output=payload_dict,
             projection=projection,

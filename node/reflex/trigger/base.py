@@ -1,4 +1,5 @@
-# fiber.node.reflex.runtime.trigger.base
+# fiber.node.reflex.trigger.base
+## @lineage: fiber.node.reflex.runtime.trigger.base
 ## @lineage: fiber.reflex.runtime.trigger.base
 ## @lineage: reflexor.runtime.trigger.base
 ## @lineage: reflexor.workflow.trigger.base
