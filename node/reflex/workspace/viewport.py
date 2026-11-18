@@ -1,4 +1,5 @@
-# fiber.node.reflex.flow.viewport
+# fiber.node.reflex.workspace.viewport
+## @lineage: fiber.node.reflex.flow.viewport
 from __future__ import annotations
 
 from dataclasses import replace
@@ -230,12 +231,16 @@ class WorkflowViewport:
         candidate_dsl = emit_flow_dsl(replace(flow, steps=updated_steps, cfg_values=merged_cfg))
         return self._synthesize_on_registry(shadow_reg, flow_name, candidate_dsl, desc=flow.desc, commit=True)
 
-    # Runtime Execution & Telemetry
     def _default_dispatch(self, scheme: str, target: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         if scheme == "flow":
             _, sub_ctx = self.execute_with_trace(target, initial_context=payload)
             return sub_ctx
-        return self.loader.dispatch(scheme, target, payload)
+        if scheme in ("pass", "py", "exec"):
+            return self.loader.dispatch(scheme, target, payload)
+        if not hasattr(self, "_polyglot_bridge") or self._polyglot_bridge is None:
+            from fiber.node.reflex.bridge.polyglot import PolyglotExecutionBridge
+            self._polyglot_bridge = PolyglotExecutionBridge(loader=self.loader)
+        return self._polyglot_bridge.dispatch_sync(scheme, target, payload)
 
     def execute_with_trace(
         self,
@@ -269,7 +274,8 @@ class WorkflowViewport:
 
             seq += 1
             is_dry_skip = isinstance(out, dict) and out.pop("__dry_run_skipped__", False)
-            ev_kind = "dry_run_skip" if is_dry_skip else "step_ok"
+            is_hitl = isinstance(out, dict) and out.get("_hitl_yield") is True
+            ev_kind = "dry_run_skip" if is_dry_skip else ("hitl_parked" if is_hitl else "step_ok")
             score = out.get("_score") if isinstance(out, dict) else None
             emitted = tuple(out.keys()) if isinstance(out, dict) else ()
             snap.trace.append(TelemetryEvent(seq=seq, timestamp=time.time(), state=current_node, event=ev_kind, score=score, emitted_keys=emitted))
@@ -279,7 +285,7 @@ class WorkflowViewport:
         try:
             final_ctx = engine.invoke(initial_context)
             snap.active_state = engine.state
-            snap.status = "succeeded"
+            snap.status = "parked" if final_ctx.get("_hitl_yield") is True else "succeeded"
             return snap, final_ctx
         except BaseException as exc:
             seq += 1

@@ -1,41 +1,16 @@
 # fiber.node.reflex.flow.engine
 from __future__ import annotations
-
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
+from xphi.arch.contract.reflex.flow import CompiledChoice, CompiledNode, CompiledTask, CompiledTerminal
+from xphi.arch.contract.reflex.fsm import ASL_CHOICE_OP_MAP, END_TOKEN, EdgeMode, NodeType, parse_resource_uri
 from xphi.arch.contract.registry.flow import FlowDSL, FlowRegistry, load_sample_registry
-from xphi.arch.contract.reflex.flow import (
-    CompiledChoice,
-    CompiledNode,
-    CompiledTask,
-    CompiledTerminal,
-)
-from xphi.arch.contract.reflex.fsm import (
-    ASL_CHOICE_OP_MAP,
-    END_TOKEN,
-    EdgeMode,
-    NodeType,
-    parse_resource_uri,
-)
 from xphi.arch.xor.fsm.compiler import FSMCompiler
-from xphi.arch.xor.fsm.parser import (
-    ASLValidationError,
-    apply_projection,
-    bind_parameters,
-    eval_choice_rule,
-    verify_asl,
-)
-from xphi.node.runtime.reflex.event import (
-    EngineError,
-    Event,
-    EventData,
-    State,
-    Transition,
-    listify,
-)
+from xphi.arch.xor.fsm.parser import ASLValidationError, apply_projection, bind_parameters, eval_choice_rule, verify_asl
+from xphi.node.runtime.reflex.event import EngineError, Event, EventData, State, Transition, listify
 
 DispatcherFn = Callable[[str, str, dict[str, Any]], dict[str, Any] | None]
 
@@ -44,7 +19,6 @@ class FlowExecutionError(EngineError):
 
 class FlowEngine:
     """Compact FSM & ASL Workflow Engine."""
-
     def __init__(
         self,
         states: Any = None,
@@ -89,10 +63,7 @@ class FlowEngine:
         if transitions is not None:
             self.add_transitions(transitions)
 
-    # =====================================================================
-    # 1. ASL & Contract Graph Builders (FSMCompiler-backed)
-    # =====================================================================
-
+    # ASL & Contract Graph Builders
     @staticmethod
     def compile_asl_nodes(
         asl: dict[str, Any],
@@ -248,6 +219,11 @@ class FlowEngine:
                     iter_params, _, _ = bind_parameters(task.params, {**self.context, each_item: elem})
                     out = self._dispatcher(task.scheme, task.target, iter_params)
                     if isinstance(out, dict):
+                        if out.get("_hitl_yield") is True:
+                            self.context["_hitl_yield"] = True
+                            self.context["_hitl_ticket"] = out.get("_hitl_ticket", "")
+                            self.context["_parked_state"] = task.name
+                            break
                         for k in extract_keys or tuple(out.keys()):
                             clean = k.removeprefix("$.")
                             if clean in out:
@@ -256,6 +232,10 @@ class FlowEngine:
                 return
 
             out = self._dispatcher(task.scheme, task.target, bound_params)
+            if isinstance(out, dict) and out.get("_hitl_yield") is True:
+                self.context["_hitl_yield"] = True
+                self.context["_hitl_ticket"] = out.get("_hitl_ticket", "")
+                self.context["_parked_state"] = task.name
             apply_projection(self.context, out, task.extract_keys or dyn_extract)
 
         return _run
@@ -271,6 +251,11 @@ class FlowEngine:
             try:
                 if not self.dispatch("step"):
                     raise FlowExecutionError(f"Deadlock at state '{self.state}': no choice rule matched.")
+                if self.context.get("_hitl_yield") is True:
+                    parked = self.context.pop("_parked_state", None)
+                    if parked and parked in self.states:
+                        self.set_state(parked)
+                    return dict(self.context)
             except BaseException as exc:
                 self.last_error = exc
                 self.context["__error__"] = str(exc)
@@ -283,10 +268,7 @@ class FlowEngine:
             raise FlowExecutionError(f"Workflow terminated at Fail state '{self.state}'.") from self.last_error
         return dict(self.context)
 
-    # =====================================================================
-    # 2. Core FSM Mechanics
-    # =====================================================================
-
+    # Core FSM Mechanics
     @property
     def initial(self) -> str | None:
         return self._initial
