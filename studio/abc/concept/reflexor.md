@@ -1,9 +1,9 @@
-# fiber.studio.abc.spec.reflexor.concept
+# fiber.studio.abc.concept.reflexor
 @desc: Reflexor — Reflex workflow for AI: concept and terminology
 
 > **Agents explore. Reflexor repeat.**
 
-Component behavior: [MCP Connector Spec](../gateway/mcp.connector.md) · [Interceptor Spec](../llm/interceptor.md)
+Component behavior: [MCP Connector Spec](../spec/gateway/mcp.connector.md) · [Interceptor Spec](../spec/llm/interceptor.md)
 
 ---
 
