@@ -17,6 +17,7 @@ _FLOW_TAG_RE = re.compile(r"@flow:\s*(.+)")
 _DESC_TAG_RE = re.compile(r"@desc:\s*(.+)")
 _SIDE_EFFECT_TAG_RE = re.compile(r"@side_effect:\s*([A-Za-z0-9_]+)")
 
+
 class UnitsIndexer:
     INDEX_FILENAME = "index.json"
 
@@ -24,74 +25,72 @@ class UnitsIndexer:
         self.loader = loader
 
     @staticmethod
-    def build_repo_index(repo_root: str | Path, ref_prefix: str = "") -> dict[str, Any]:
-        """Statically scan `.py`/`.sh` script headers and `flow/*.json` specs under `repo_root`."""
+    def parse_script_header(raw_bytes: bytes, rel_path: str = "", ref_prefix: str = "") -> dict[str, Any] | None:
+        """스크립트 상단 주석(@unit, @flow, @desc)에서 계약 원본을 파싱한다."""
+        head = raw_bytes[:2048].decode("utf-8", errors="replace")
+        u_match, f_match = _UNIT_TAG_RE.search(head), _FLOW_TAG_RE.search(head)
+        if not (u_match and f_match):
+            return None
+        u_name = u_match.group(1).strip()
+        flow_dsl = f_match.group(1).strip()
+        if ref_prefix:
+            flow_dsl = re.sub(r"\b(py|exec)\((?!@)", rf"\1({ref_prefix}@", flow_dsl)
+        d_match = _DESC_TAG_RE.search(head)
+        s_match = _SIDE_EFFECT_TAG_RE.search(head)
+        return {
+            "unit": u_name,
+            "flow": flow_dsl,
+            "desc": d_match.group(1).strip() if d_match else f"Unit {u_name} ({rel_path})",
+            "isolated": "# /// script" in head[:512],
+            "side_effect": s_match.group(1).strip() if s_match else None,
+        }
+
+    @classmethod
+    def build_repo_index(cls, repo_root: str | Path, ref_prefix: str = "") -> dict[str, Any]:
+        """파일 탐색 가속용 위치/해시 인덱스만 생성한다 (스크립트 계약 문자열은 복사하지 않음)."""
         root = Path(repo_root)
         units_manifest: dict[str, dict[str, Any]] = {}
-        flows_manifest: dict[str, dict[str, Any]] = {}
-        prefix = f"{ref_prefix}@" if ref_prefix else ""
+        flows_manifest: dict[str, str] = {}
 
-        # 1. Load declarative units & flows from `flow/*.json` (e.g. base.json, presets.json)
-        flow_dir = root / "flow"
-        if flow_dir.is_dir():
-            for spec_path in sorted(flow_dir.glob("*.json")):
-                try:
-                    spec_data = json.loads(spec_path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                for u_name, u_meta in (spec_data.get("units") or {}).items():
-                    if isinstance(u_meta, dict) and "flow" in u_meta:
-                        units_manifest[u_name] = {
-                            "desc": u_meta.get("desc", ""),
-                            "flow": u_meta["flow"],
-                        }
-                for f_name, f_meta in (spec_data.get("flows") or {}).items():
-                    if isinstance(f_meta, dict) and "flow" in f_meta:
-                        flows_manifest[f_name] = {
-                            "desc": f_meta.get("desc", ""),
-                            "flow": f_meta["flow"],
-                        }
-
-        # 2. Scan executable `.py` and `.sh` unit scripts via unified @unit / @flow / @desc tags
+        # 1. Scan executable `.py` and `.sh` unit scripts (SSOT: path + sha256 locator only)
         for path in sorted(root.rglob("*")):
             if not path.is_file() or any(p.startswith(".") for p in path.relative_to(root).parts):
                 continue
             if path.suffix not in (".py", ".sh", ".bash") or path.name == "__init__.py":
                 continue
             rel_path = path.relative_to(root).as_posix()
-            if rel_path == UnitsIndexer.INDEX_FILENAME:
+            if rel_path == cls.INDEX_FILENAME:
                 continue
 
             raw_bytes = path.read_bytes()
-            file_sha = hashlib.sha256(raw_bytes).hexdigest()
-            head = raw_bytes[:2048].decode("utf-8", errors="replace")
-
-            u_match = _UNIT_TAG_RE.search(head)
-            f_match = _FLOW_TAG_RE.search(head)
-            if not (u_match and f_match):
+            hdr = cls.parse_script_header(raw_bytes, rel_path)
+            if not hdr:
                 continue
 
-            u_name = u_match.group(1).strip()
-            flow_dsl = f_match.group(1).strip()
-            d_match = _DESC_TAG_RE.search(head)
-            s_match = _SIDE_EFFECT_TAG_RE.search(head)
-            desc = d_match.group(1).strip() if d_match else f"Unit {u_name} ({rel_path})"
-
-            if prefix:
-                flow_dsl = re.sub(r"\b(py|exec)\((?!@)", rf"\1({prefix}", flow_dsl)
-
-            entry: dict[str, Any] = {
-                "desc": desc,
-                "flow": flow_dsl,
-                "path": rel_path,
-                "sha256": file_sha,
-            }
+            entry: dict[str, Any] = {"path": rel_path, "sha256": hashlib.sha256(raw_bytes).hexdigest()}
             if path.suffix == ".py":
-                entry["isolated"] = "# /// script" in head[:512]
-            if s_match:
-                entry["side_effect"] = s_match.group(1).strip()
+                entry["isolated"] = hdr["isolated"]
+            if hdr["side_effect"]:
+                entry["side_effect"] = hdr["side_effect"]
+            units_manifest[hdr["unit"]] = entry
 
-            units_manifest[u_name] = entry
+        # 2. Scan `flow/*.json` for flow file locations & script-less delegated units only
+        flow_dir = root / "flow"
+        if flow_dir.is_dir():
+            for spec_path in sorted(flow_dir.glob("*.json")):
+                if spec_path.name == "scenarios.json":
+                    continue
+                try:
+                    spec_data = json.loads(spec_path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                rel_spec = spec_path.relative_to(root).as_posix()
+                for u_name, u_meta in (spec_data.get("units") or {}).items():
+                    if u_name not in units_manifest and isinstance(u_meta, dict) and "flow" in u_meta:
+                        units_manifest[u_name] = {"source": rel_spec}
+                for f_name, f_meta in (spec_data.get("flows") or {}).items():
+                    if isinstance(f_meta, dict) and "flow" in f_meta:
+                        flows_manifest[f_name] = rel_spec
 
         result: dict[str, Any] = {"version": "1.0", "units": units_manifest}
         if flows_manifest:
@@ -100,7 +99,6 @@ class UnitsIndexer:
 
     @classmethod
     def write_repo_index(cls, repo_root: str | Path, ref_prefix: str = "") -> Path:
-        """Build and write `index.json` directly into the `repo_root` directory."""
         root = Path(repo_root)
         data = cls.build_repo_index(root, ref_prefix=ref_prefix)
         out_path = root / cls.INDEX_FILENAME
@@ -125,11 +123,10 @@ class UnitsIndexer:
                 cached_idx.write_bytes(raw_bytes)
                 index_data = json.loads(raw_bytes.decode("utf-8"))
 
-        # Push SHA256 locks into the loader for lazy verification upon execution
         hash_locks = {
             meta["path"]: meta["sha256"]
             for meta in index_data.get("units", {}).values()
-            if "path" in meta and "sha256" in meta
+            if isinstance(meta, dict) and "path" in meta and "sha256" in meta
         }
         self.loader.update_hash_locks(hash_locks)
         return index_data
@@ -141,15 +138,39 @@ class UnitsIndexer:
         *,
         force_refresh: bool = False,
     ) -> int:
-        """Register all units (and optional flows) from `index.json` into `FlowRegistry`."""
+        """index.json으로 파일 위치만 찾고, 실제 계약은 원본 스크립트 주석과 flow 파일에서 직접 읽는다."""
+        target_ref = ref or self.loader.default_ref
         idx = self.load_catalog_index(ref=ref, force_refresh=force_refresh)
-        units_dict = idx.get("units", {})
-        for u_name, u_meta in units_dict.items():
-            registry.register_unit(u_name, u_meta["flow"], u_meta.get("desc", ""))
-        for f_name, f_meta in idx.get("flows", {}).items():
-            if hasattr(registry, "register_flow"):
-                registry.register_flow(f_name, f_meta["flow"], f_meta.get("desc", ""))
-        return len(units_dict)
+        spec_cache: dict[str, dict[str, Any]] = {}
+
+        def _read_spec(rel_spec: str) -> dict[str, Any]:
+            if rel_spec not in spec_cache:
+                fp = self.loader.resolve_file(f"{target_ref}@{rel_spec}" if ref else rel_spec)
+                spec_cache[rel_spec] = json.loads(fp.read_text(encoding="utf-8"))
+            return spec_cache[rel_spec]
+
+        count = 0
+        for u_name, u_meta in idx.get("units", {}).items():
+            if "path" in u_meta:
+                fp = self.loader.resolve_file(f"{target_ref}@{u_meta['path']}" if ref else u_meta["path"])
+                hdr = self.parse_script_header(fp.read_bytes(), u_meta["path"], ref_prefix=ref or "")
+                if hdr:
+                    registry.register_unit(u_name, hdr["flow"], hdr["desc"])
+                    count += 1
+            elif "source" in u_meta:
+                d_meta = (_read_spec(u_meta["source"]).get("units") or {}).get(u_name)
+                if isinstance(d_meta, dict) and "flow" in d_meta:
+                    registry.register_unit(u_name, d_meta["flow"], d_meta.get("desc", ""))
+                    count += 1
+
+        if hasattr(registry, "register_flow"):
+            for f_name, f_entry in idx.get("flows", {}).items():
+                rel_spec = f_entry if isinstance(f_entry, str) else f_entry.get("source", "")
+                if rel_spec:
+                    f_meta = (_read_spec(rel_spec).get("flows") or {}).get(f_name)
+                    if isinstance(f_meta, dict) and "flow" in f_meta:
+                        registry.register_flow(f_name, f_meta["flow"], f_meta.get("desc", ""))
+        return count
 
     @staticmethod
     def search_catalog(
@@ -161,7 +182,6 @@ class UnitsIndexer:
         scheme: str | None = None,
         limit: int = 15,
     ) -> list[UnitContract]:
-        """Filter and rank units by keyword, scheme, input satisfiability, and output contract."""
         q_tokens = [t.lower() for t in query.split() if t.strip()]
         avail_set = set(available_inputs) if available_inputs is not None else None
         req_out_set = set(required_outputs) if required_outputs is not None else None
@@ -198,7 +218,6 @@ class UnitsIndexer:
         scheme: str | None = None,
         limit: int = 15,
     ) -> str:
-        """Format matched units into a compact LLM-ready catalog snippet."""
         matches = cls.search_catalog(
             registry,
             query=query,
