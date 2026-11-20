@@ -1,0 +1,35 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["fiber @ git+https://github.com/dphilabs/fiber.git"]
+# ///
+"""
+@unit: {unit_name}
+@flow: in(query: text) -> mcp({unit_name}/execute) -> out(result: obj, _score: num)
+@desc: {desc}
+"""
+from __future__ import annotations
+import asyncio
+import json
+import sys
+from typing import Any
+
+from xphi.arch.contract.protocol.worker import AsyncWorkerProtocol
+
+
+class UnitWorker(AsyncWorkerProtocol):
+    def __init__(self) -> None:
+        super().__init__(agent_name="{unit_name}.worker")
+
+    async def handle_tools_list(self, req_id: Any) -> None:
+        await self.send_response(req_id, {{"tools": [{{"name": "execute", "description": "{desc}"}}]}})
+
+    async def handle_tools_call(self, req_id: Any, tool_name: str, arguments: dict[str, Any], meta: dict[str, Any]) -> None:
+        out = {{"result": arguments, "_score": 1.0}}
+        await self.send_response(req_id, {{"content": [{{"type": "text", "text": json.dumps(out)}}], "isError": False}})
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(UnitWorker().serve_forever_async())
+    except KeyboardInterrupt:
+        sys.exit(0)

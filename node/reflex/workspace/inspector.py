@@ -1,5 +1,4 @@
 # fiber.node.reflex.workspace.inspector
-## @lineage: fiber.node.reflex.runtime.inspector
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,5 +1,6 @@
 # fiber.node.mcp.mapper.config
 import os
+import re
 import sys
 import copy
 import shlex
@@ -14,6 +15,11 @@ from fiber.gateway.bridge.emitter import get_emitter
 log = get_emitter("mcp.mapper.config")
 ANCHOR_ROOT = Path(resolve_path("anchor")).resolve()
 
+# Matches ${VAR}, ${VAR:-default}, and VSCode/Cursor-style ${env:VAR}
+_ENV_PLACEHOLDER_RE = re.compile(
+    r"\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}"
+)
+
 
 @dataclass(frozen=True)
 class MappedMcpEntry:
@@ -21,6 +27,11 @@ class MappedMcpEntry:
     exec_cmd: str
     env: Dict[str, str] = field(default_factory=dict)
     source_agent: str = "custom"
+    headers: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def is_remote_url(self) -> bool:
+        return self.exec_cmd.startswith(("http://", "https://"))
 
 
 DEFAULT_MCP_MAPPER_RULES: Dict[str, Any] = {
@@ -30,11 +41,17 @@ DEFAULT_MCP_MAPPER_RULES: Dict[str, Any] = {
         "cmd_substrings": ["/v1/mcp-gateway"],
     },
     "extraction_rules": {
-        "url": ["url", "serverUrl", "uri", "transport.url"],
+        "url": ["url", "serverUrl", "uri", "httpUrl", "transport.url", "transport.uri"],
         "command": ["command.path", "command.command", "command", "transport.command"],
         "args": ["command.args", "args", "transport.args"],
         "env": ["command.env", "env", "transport.env"],
-        "disabled": ["disabled"],
+        "headers": [
+            "headers",
+            "transport.headers",
+            "requestInit.headers",
+            "transport.requestInit.headers",
+        ],
+        "disabled": ["disabled", "transport.disabled"],
     },
     "agent_profiles": {
         "fiber": {
@@ -111,6 +128,10 @@ class McpConfigMapper:
         return cls._rules
 
     @classmethod
+    def reset_rules_cache(cls) -> None:
+        cls._rules = None
+
+    @classmethod
     def _deep_merge(cls, base: Dict[str, Any], override: Dict[str, Any]) -> None:
         for k, v in override.items():
             if isinstance(v, dict) and isinstance(base.get(k), dict):
@@ -131,6 +152,51 @@ class McpConfigMapper:
             if curr is not None and isinstance(curr, expected_type):
                 return curr
         return None
+
+    @staticmethod
+    def _expand_env_placeholders(
+        value: str, local_env: Optional[Dict[str, str]] = None
+    ) -> str:
+        if "${" not in value:
+            return value
+
+        def _replacer(match: re.Match[str]) -> str:
+            var_name = match.group(1)
+            default_val = match.group(2)
+            if local_env and var_name in local_env:
+                return local_env[var_name]
+            if var_name in os.environ:
+                return os.environ[var_name]
+            if default_val is not None:
+                return default_val
+            # Leave unresolved placeholder intact rather than silently blanking it out
+            return match.group(0)
+
+        return _ENV_PLACEHOLDER_RE.sub(_replacer, value)
+
+    @classmethod
+    def _clean_str_dict(
+        cls,
+        raw: Optional[Dict[str, Any]],
+        *,
+        expand_env: bool = False,
+        local_env: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
+        if not raw or not isinstance(raw, dict):
+            return {}
+
+        cleaned: Dict[str, str] = {}
+        for k, v in raw.items():
+            if v is None:
+                continue
+            key_str = str(k).strip()
+            if not key_str:
+                continue
+            val_str = str(v)
+            if expand_env:
+                val_str = cls._expand_env_placeholders(val_str, local_env=local_env)
+            cleaned[key_str] = val_str
+        return cleaned
 
     @classmethod
     def _is_ignored(cls, target_id: str, exec_cmd: str) -> bool:
@@ -175,7 +241,13 @@ class McpConfigMapper:
         return found
 
     @classmethod
-    def parse_file(cls, config_path: Path, agent_hint: Optional[str] = None) -> List[MappedMcpEntry]:
+    def parse_file(
+        cls,
+        config_path: Path,
+        agent_hint: Optional[str] = None,
+        *,
+        expand_env: bool = True,
+    ) -> List[MappedMcpEntry]:
         try:
             raw_data = orjson.loads(config_path.read_bytes())
         except Exception as e:
@@ -191,7 +263,12 @@ class McpConfigMapper:
         return [
             mapped
             for target_id, spec in servers_map.items()
-            if isinstance(spec, dict) and (mapped := cls._normalize_entry(str(target_id), spec, source))
+            if isinstance(spec, dict)
+            and (
+                mapped := cls._normalize_entry(
+                    str(target_id), spec, source, expand_env=expand_env
+                )
+            )
         ]
 
     @classmethod
@@ -199,17 +276,27 @@ class McpConfigMapper:
         cls,
         agent: Optional[str] = None,
         sync_to_anchor: bool = False,
+        *,
+        expand_env: bool = True,
     ) -> List[MappedMcpEntry]:
         merged: Dict[str, MappedMcpEntry] = {}
+        raw_for_sync: Dict[str, MappedMcpEntry] = {}
+        need_raw_sync = bool(sync_to_anchor and agent != "fiber")
+
         for ag_name, path in cls.discover_config_files(agent):
-            for entry in cls.parse_file(path, agent_hint=ag_name):
+            for entry in cls.parse_file(path, agent_hint=ag_name, expand_env=expand_env):
                 if entry.target_id not in merged:
                     merged[entry.target_id] = entry
                     log.debug(f"[ConfigMapper] Discovered [{entry.target_id}] from {ag_name} ({path})")
 
+            if need_raw_sync:
+                for raw_entry in cls.parse_file(path, agent_hint=ag_name, expand_env=False):
+                    if raw_entry.target_id not in raw_for_sync:
+                        raw_for_sync[raw_entry.target_id] = raw_entry
+
         results = list(merged.values())
-        if sync_to_anchor and results and agent != "fiber":
-            cls.sync_entries_to_anchor(results)
+        if need_raw_sync and raw_for_sync:
+            cls.sync_entries_to_anchor(list(raw_for_sync.values()))
         return results
 
     @classmethod
@@ -238,27 +325,41 @@ class McpConfigMapper:
             if cls._is_ignored(entry.target_id, entry.exec_cmd):
                 continue
 
-            existing_spec = servers.get(entry.target_id, {})
-            merged_env: Dict[str, str] = {}
-            if isinstance(existing_spec, dict) and isinstance(existing_spec.get("env"), dict):
-                merged_env.update({str(k): str(v) for k, v in existing_spec["env"].items()})
-            if entry.env:
-                merged_env.update({str(k): str(v) for k, v in entry.env.items()})
+            existing_spec = servers.get(entry.target_id)
+            spec_dict: Dict[str, Any] = (
+                dict(existing_spec) if isinstance(existing_spec, dict) else {}
+            )
 
-            if entry.exec_cmd.startswith(("http://", "https://")):
-                spec_dict: Dict[str, Any] = {"url": entry.exec_cmd}
+            merged_env: Dict[str, str] = cls._clean_str_dict(spec_dict.get("env"))
+            if entry.env:
+                merged_env.update(cls._clean_str_dict(entry.env))
+
+            merged_headers: Dict[str, str] = cls._clean_str_dict(spec_dict.get("headers"))
+            if entry.headers:
+                merged_headers.update(cls._clean_str_dict(entry.headers))
+
+            if entry.is_remote_url:
+                spec_dict.pop("command", None)
+                spec_dict.pop("args", None)
+                spec_dict["url"] = entry.exec_cmd
             else:
+                spec_dict.pop("url", None)
                 try:
                     parts = shlex.split(entry.exec_cmd)
                 except ValueError:
                     parts = entry.exec_cmd.split()
-                spec_dict = {
-                    "command": parts[0] if parts else entry.exec_cmd,
-                    "args": parts[1:] if len(parts) > 1 else [],
-                }
+                spec_dict["command"] = parts[0] if parts else entry.exec_cmd
+                spec_dict["args"] = parts[1:] if len(parts) > 1 else []
 
             if merged_env:
                 spec_dict["env"] = merged_env
+            else:
+                spec_dict.pop("env", None)
+
+            if merged_headers:
+                spec_dict["headers"] = merged_headers
+            else:
+                spec_dict.pop("headers", None)
 
             servers[entry.target_id] = spec_dict
             synced_count += 1
@@ -289,33 +390,62 @@ class McpConfigMapper:
         return data
 
     @classmethod
-    def _normalize_entry(cls, target_id: str, spec: Dict[str, Any], source: str) -> Optional[MappedMcpEntry]:
+    def _normalize_entry(
+        cls,
+        target_id: str,
+        spec: Dict[str, Any],
+        source: str,
+        *,
+        expand_env: bool = True,
+    ) -> Optional[MappedMcpEntry]:
+        tid = target_id.strip()
+        if not tid:
+            return None
+
         ext = cls.get_rules()["extraction_rules"]
 
         if cls._traverse(spec, ext.get("disabled", ["disabled"]), bool) is True:
             return None
 
-        raw_env = cls._traverse(spec, ext["env"], dict) or {}
-        env_map = {str(k): str(v) for k, v in raw_env.items()}
+        raw_env = cls._traverse(spec, ext.get("env", ["env"]), dict)
+        env_map = cls._clean_str_dict(raw_env, expand_env=expand_env)
 
-        url_val = cls._traverse(spec, ext["url"], str)
-        cmd_bin = cls._traverse(spec, ext["command"], str)
+        raw_headers = cls._traverse(spec, ext.get("headers", ["headers"]), dict)
+        headers_map = cls._clean_str_dict(
+            raw_headers, expand_env=expand_env, local_env=env_map
+        )
 
-        if url_val:
-            exec_cmd = url_val.strip()
-        elif cmd_bin:
-            raw_args = cls._traverse(spec, ext["args"], list) or []
-            exec_cmd = shlex.join([cmd_bin, *(str(a) for a in raw_args)])
+        url_val = cls._traverse(spec, ext.get("url", ["url"]), str)
+        cmd_bin = cls._traverse(spec, ext.get("command", ["command"]), str)
+
+        if url_val and url_val.strip():
+            raw_url = url_val.strip()
+            exec_cmd = (
+                cls._expand_env_placeholders(raw_url, local_env=env_map)
+                if expand_env
+                else raw_url
+            )
+        elif cmd_bin and cmd_bin.strip():
+            raw_args = cls._traverse(spec, ext.get("args", ["args"]), list) or []
+            norm_args = [
+                cls._expand_env_placeholders(str(a), local_env=env_map)
+                if expand_env
+                else str(a)
+                for a in raw_args
+                if a is not None
+            ]
+            exec_cmd = shlex.join([cmd_bin.strip(), *norm_args])
         else:
             return None
 
-        if cls._is_ignored(target_id, exec_cmd):
-            log.debug(f"[ConfigMapper] Skipped self-referential gateway entry: [{target_id}]")
+        if cls._is_ignored(tid, exec_cmd):
+            log.debug(f"[ConfigMapper] Skipped self-referential gateway entry: [{tid}]")
             return None
 
         return MappedMcpEntry(
-            target_id=target_id,
+            target_id=tid,
             exec_cmd=exec_cmd,
             env=env_map,
             source_agent=source,
+            headers=headers_map,
         )

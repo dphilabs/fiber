@@ -34,7 +34,7 @@ from fiber.node.account.manager import (
     RevokeCommand,
     SyncQuotaCommand,
 )
-from fiber.node.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
+from xphi.arch.bound.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
 from fiber.gateway.bridge.action.schema import (
     AccountAllocateResult,
     AccountListResult,

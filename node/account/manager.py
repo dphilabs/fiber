@@ -14,7 +14,7 @@ from fiber.node.account.finops.token.gen import (
     FinOpsTokenGenerator,
 )
 from fiber.gateway.security import TokenTranslator
-from fiber.node.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
+from xphi.arch.bound.account.registry import DEFAULT_TENANT_ID, LocalAccountRegistry
 from fiber.node.account.finops.watcher import default_finops_watcher
 from fiber.gateway.bridge.action.schema import (
     AccountAllocateResult,

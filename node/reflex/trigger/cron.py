@@ -1,8 +1,4 @@
 # fiber.node.reflex.trigger.cron
-## @lineage: fiber.node.reflex.runtime.trigger.cron
-## @lineage: fiber.reflex.runtime.trigger.cron
-## @lineage: reflexor.runtime.trigger.cron
-## @lineage: reflexor.workflow.trigger.cron
 """
 [Zero-Dependency POSIX/Vixie Cron Compiler & Slot Resolver]
 Distilled from proven open-source cron parsers (`cronsim` / Vixie standard):

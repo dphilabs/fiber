@@ -1,8 +1,4 @@
 # fiber.node.reflex.trigger.base
-## @lineage: fiber.node.reflex.runtime.trigger.base
-## @lineage: fiber.reflex.runtime.trigger.base
-## @lineage: reflexor.runtime.trigger.base
-## @lineage: reflexor.workflow.trigger.base
 """
 [Unified Tri-Modal Trigger Core & Runtime: Manual | Cron | Event]
 Consolidates `TriggerSpec`, `TriggerEnvelope`, `TriggerGate`, and `TriggerRuntime`

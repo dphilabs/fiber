@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# @unit: {unit_name}
+# @flow: in(target: text='.') -> exec({rel_path}) -> out(result: obj, _score: num)
+# @desc: {desc}
+set -euo pipefail
+
+PAYLOAD="$(cat)"
+jq -nc '{{"result": {{}}, "_score": 1.0}}'

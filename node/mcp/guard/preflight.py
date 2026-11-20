@@ -6,10 +6,10 @@ import re
 from typing import Any, Dict, Optional, Tuple
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from fiber.studio.console.observer.signal import UIKey, UIModal, UISlot, UISlotStatus
-
 from xphi.arch.bound.adapter.pta import NodeSigner
 from xphi.arch.bound.client.rpc import InternalRpcClient
+
+from fiber.studio.console.observer.signal import UIKey, UIModal, UISlot, UISlotStatus
 from fiber.gateway.bridge.emitter import get_emitter
 
 class PreflightGuard:

@@ -1,5 +1,4 @@
 # fiber.node.reflex.workspace.projection
-## @lineage: fiber.node.reflex.runtime.projection
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -8,6 +7,8 @@ from typing import Any
 
 from xphi.arch.contract.registry.flow import FlowRegistry
 from xphi.arch.contract.reflex.auth import missing_credentials, resolve_accounts
+from xphi.arch.contract.reflex.flow import FlowContract, StepSpec, UnitContract
+
 from fiber.node.reflex.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
 from fiber.node.reflex.workspace.inspector import (
     block_auth,
@@ -17,8 +18,6 @@ from fiber.node.reflex.workspace.inspector import (
     format_synthesis_feedback,
     inspect_flow,
 )
-from xphi.arch.contract.reflex.flow import FlowContract, StepSpec, UnitContract
-
 
 @dataclass(frozen=True, slots=True)
 class EdgeWiringView:

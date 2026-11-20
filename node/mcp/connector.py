@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, Protocol
 
 import orjson
 
-from fiber.node.mcp.mapper.registry import AdapterRegistry
+from fiber.node.mcp.quarantine import AdapterRegistry
 from fiber.studio.base.mcp.payload import McpPayloadBuilder
 from fiber.node.mcp.fsm import IntentLifecycleFSM, IntentState
 
@@ -36,6 +36,9 @@ class MCPServerConnector:
         mode: str = "ephemeral",
         transport_type: str = "stdio",
         preflight_pattern: Optional[str] = None,
+        *,
+        env: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ):
         self.target_id = target_id
         self.execution_target = execution_target.strip()
@@ -52,6 +55,7 @@ class MCPServerConnector:
             self.transport_type == "network"
             and self.execution_target.startswith(("http://", "https://"))
         )
+        self.target_env = dict(env) if env else None
 
         self.tunnel = None
         self.rpc = InternalRpcClient()
@@ -59,7 +63,12 @@ class MCPServerConnector:
         self.listen_channel = f"mcp.intent.queue.{self.target_id}"
         self.running = False
 
-        self.quarantine = AdapterRegistry.get_adapter(self.target_id)
+        self.quarantine = AdapterRegistry.get_adapter(
+            self.target_id,
+            is_remote=self.is_remote_url,
+            env=self.target_env,
+            headers=headers,
+        )
 
         self.active_sandboxes: Dict[str, MCPServerTransport] = {}
         self.shared_transport: Optional[MCPServerTransport] = None
@@ -440,7 +449,6 @@ def main():
     except KeyboardInterrupt:
         log.info("[Connector] Exiting gracefully...")
         sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

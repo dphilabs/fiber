@@ -1,16 +1,16 @@
 # fiber.node.reflex.bridge.execution
-## @lineage: fiber.gateway.bridge.fsm.execution
 import json
 import uuid
 from typing import Dict, Any, Optional, Tuple, List
 import httpx
 
+from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
+from xphi.watcher.reflex.controller import BranchCursor, BranchController
+
 from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver
 from fiber.node.account.finops.watcher import default_finops_watcher, default_tenant_eco
-
-from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
 from fiber.node.account.auth.payload import NodeAuthPayload
 from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.reflex.fsm import (
@@ -21,10 +21,8 @@ from xphi.arch.contract.reflex.fsm import (
     parse_resource_uri,
     resolve_dynamic_params,
 )
-from xphi.watcher.reflex.controller import BranchCursor, BranchController
 
 log = get_emitter("fsm.bridge.execution", phase="ACTUATOR_BRIDGE")
-
 
 class FiberExecutionBridge:
     def __init__(
