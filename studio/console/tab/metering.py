@@ -19,7 +19,7 @@ FINOPS_ACTION_LABELS = {
 
 def _resolve_accounts_registry_path() -> Path:
     try:
-        from fiber.node.account.registry import LocalAccountRegistry
+        from xphi.arch.bound.account.registry import LocalAccountRegistry
         return Path(LocalAccountRegistry.get_registry_path())
     except Exception:
         return resolve_path("anchor") / "sign" / "local_accounts.json"

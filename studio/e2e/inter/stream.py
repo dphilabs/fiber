@@ -22,7 +22,7 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from fiber.studio.base.workflow.builder import build_e2e_context, create_e2e_parser
 from fiber.studio.base.workflow.pipeline import log
 from fiber.llm.gateway.state.traverser import StateTraverser
-from fiber.node.account.registry import DEFAULT_TENANT_ID
+from xphi.arch.bound.account.registry import DEFAULT_TENANT_ID
 from fiber.llm.vcr.injector import VCRInjector
 from fiber.llm.vcr.manager import (
     VCRIdentityRule,

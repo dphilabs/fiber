@@ -14,7 +14,7 @@ import subprocess
 from typing import Any
 import urllib.request
 
-from fiber.node.reflex.unit.script import (
+from xphi.arch.contract.reflex.script import (
     has_uv,
     link_editable_package,
     run_unit_script,
@@ -35,10 +35,8 @@ BASELINE_DIRS: tuple[str, ...] = (
 )
 PACKAGE_ROOTS: tuple[str, ...] = ("core", "adapters")
 
-
 class UnitLoaderError(RuntimeError):
     """Raised when a unit artifact cannot be fetched, verified, or executed."""
-
 
 class UnitsLoader:
     """Manages local/remote unit repositories, SHA256 verification, scaffolding, and execution."""
@@ -80,8 +78,7 @@ class UnitsLoader:
     def update_hash_locks(self, locks: dict[str, str]) -> None:
         self._hash_lock.update(locks)
 
-    # ── Artifact Fetch & Resolution ──────────────────────────────────────────
-
+    # Artifact Fetch & Resolution
     @staticmethod
     def _parse_ref_and_path(raw_target: str, default_ref: str) -> tuple[str, str]:
         if "@" in raw_target and not raw_target.startswith("@"):

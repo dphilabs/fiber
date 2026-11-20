@@ -9,9 +9,10 @@ from typing import Optional
 from xphi.arch.contract.config.env import config as env_config
 from xphi.node.rpc.schema.receipt import EdgeHeader
 from xphi.node.runtime.wasm.broker import WasmBroker
-from fiber.gateway.bridge.emitter import get_emitter
 from xphi.watcher.plane.flare.tunnel import FlareTunnelFactory
 from xphi.watcher.plane.flare.controller import FlareController
+
+from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("ops.flare.deploy")
 

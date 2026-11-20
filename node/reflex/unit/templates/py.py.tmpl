@@ -1,0 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"""
+@unit: {unit_name}
+@flow: in(input: val) -> py({rel_path}:run) -> out(result: obj, _score: num)
+@desc: {desc}
+"""
+from __future__ import annotations
+from typing import Any
+
+
+def run(payload: dict[str, Any]) -> dict[str, Any]:
+    return {{"result": {{}}, "_score": 1.0}}

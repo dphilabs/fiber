@@ -1,5 +1,4 @@
 # fiber.node.reflex.workspace.viewport
-## @lineage: fiber.node.reflex.flow.viewport
 from __future__ import annotations
 
 from dataclasses import replace
@@ -7,10 +6,13 @@ import time
 from typing import Any
 
 from xphi.arch.contract.registry.flow import FlowDSL, FlowRegistry, load_sample_registry
+from xphi.arch.contract.reflex.auth import missing_credentials, unit_auth
+from xphi.node.runtime.reflex.engine import DispatcherFn, FlowEngine
+from xphi.arch.contract.reflex.flow import UnitContract
+from xphi.arch.xor.fsm.parser import verify_asl
+
 from fiber.node.reflex.unit.indexer import UnitsIndexer
 from fiber.node.reflex.unit.loader import UnitsLoader
-from xphi.arch.contract.reflex.auth import missing_credentials, unit_auth
-from fiber.node.reflex.flow.engine import DispatcherFn, FlowEngine
 from fiber.node.reflex.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
 from fiber.node.reflex.workspace.inspector import (
     emit_flow_dsl,
@@ -25,9 +27,6 @@ from fiber.node.reflex.workspace.projection import (
     TopologyProjector,
     ViewportSnapshot,
 )
-from xphi.arch.contract.reflex.flow import UnitContract
-from xphi.arch.xor.fsm.parser import verify_asl
-
 
 class WorkflowViewport:
     format_llm_diagnostic = staticmethod(format_llm_diagnostic)
