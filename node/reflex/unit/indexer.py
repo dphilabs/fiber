@@ -17,7 +17,6 @@ _FLOW_TAG_RE = re.compile(r"@flow:\s*(.+)")
 _DESC_TAG_RE = re.compile(r"@desc:\s*(.+)")
 _SIDE_EFFECT_TAG_RE = re.compile(r"@side_effect:\s*([A-Za-z0-9_]+)")
 
-
 class UnitsIndexer:
     INDEX_FILENAME = "index.json"
 
@@ -32,7 +31,7 @@ class UnitsIndexer:
         flows_manifest: dict[str, dict[str, Any]] = {}
         prefix = f"{ref_prefix}@" if ref_prefix else ""
 
-        # 1. Load declarative units & flows from `flow/*.json` (e.g. compliance.json, presets.json)
+        # 1. Load declarative units & flows from `flow/*.json` (e.g. base.json, presets.json)
         flow_dir = root / "flow"
         if flow_dir.is_dir():
             for spec_path in sorted(flow_dir.glob("*.json")):

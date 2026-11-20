@@ -5,12 +5,13 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
+from fiber.node.reflex.flow.event import EngineError, Event, EventData, State, Transition, listify
+
 from xphi.arch.contract.reflex.flow import CompiledChoice, CompiledNode, CompiledTask, CompiledTerminal
 from xphi.arch.contract.reflex.fsm import ASL_CHOICE_OP_MAP, END_TOKEN, EdgeMode, NodeType, parse_resource_uri
 from xphi.arch.contract.registry.flow import FlowDSL, FlowRegistry, load_sample_registry
 from xphi.arch.xor.fsm.compiler import FSMCompiler
 from xphi.arch.xor.fsm.parser import ASLValidationError, apply_projection, bind_parameters, eval_choice_rule, verify_asl
-from xphi.node.runtime.reflex.event import EngineError, Event, EventData, State, Transition, listify
 
 DispatcherFn = Callable[[str, str, dict[str, Any]], dict[str, Any] | None]
 
