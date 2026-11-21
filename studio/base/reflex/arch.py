@@ -1,6 +1,4 @@
 # fiber.studio.base.reflex.arch
-## @lineage: theoria.reflex.trace.arch
-## @lineage: reflexor.flow.trace.arch
 from __future__ import annotations
 
 import argparse

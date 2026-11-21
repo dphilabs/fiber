@@ -1,7 +1,4 @@
 # fiber.studio.base.reflex.compass
-## @lineage: theoria.reflex.trace.compass
-## @lineage: reflexor.flow.trace.compass
-## @lineage: reflexor.shell.compass
 """System architecture & runtime invariant checker (managed by `reflexor.shell.flow`)."""
 from __future__ import annotations
 

@@ -54,7 +54,7 @@ class IsolationAdapter:
         candidates: List[str] = []
         if tokens:
             head = tokens[0]
-            # Aligned with reflexunits.adapters.auth.token.PROVIDER_ENV_KEYS + legacy *_API_KEY
+            # Aligned with reflexor.units.adapters.auth.token.PROVIDER_ENV_KEYS + legacy *_API_KEY
             candidates.extend([
                 f"FIBER_{head}_TOKEN",
                 f"{head}_API_KEY",

@@ -1,15 +1,14 @@
-# fiber.studio.cli.reflex.flow
-## @lineage: theoria.reflex.flow
+# fiber.studio.cli.reflex
 """Single CLI entrypoint for `UnitsManager`, `BlueprintAnalyzer`, `context`, and `compass`.
 
 Usage:
-  python -m reflex.flow                     # [sync]    index gen + static wiring check
-  python -m reflex.flow verify [FLOW]       # [verify]  index gen + trace (--hybrid)
-  python -m reflex.flow pack <FLOW>         # [pack]    index gen + emit LLM markdown
-  python -m reflex.flow compass [--suite]   # [compass] L1-L5 layer + coverage check
-  python -m reflex.flow inspect [FLOW]      # [inspect] flow list or ASL node view
-  python -m reflex.flow new <PATH> [--kind py] [--name foo] [--desc "..."] [--force]
-  python -m reflex.flow build | fix | init | clean
+  python -m fiber.studio.cli.reflex                     # [sync]    index gen + static wiring check
+  python -m fiber.studio.cli.reflex verify [FLOW]       # [verify]  index gen + trace (--hybrid)
+  python -m fiber.studio.cli.reflex pack <FLOW>         # [pack]    index gen + emit LLM markdown
+  python -m fiber.studio.cli.reflex compass [--suite]   # [compass] L1-L5 layer + coverage check
+  python -m fiber.studio.cli.reflex inspect [FLOW]      # [inspect] flow list or ASL node view
+  python -m fiber.studio.cli.reflex new <PATH> [--kind py] [--name foo] [--desc "..."] [--force]
+  python -m fiber.studio.cli.reflex build | fix | init | clean
 """
 from __future__ import annotations
 
@@ -37,7 +36,7 @@ REPO_ACTIONS: dict[str, str] = {
     "new":   "신규 유닛/어댑터 스캐폴딩 생성 후 인덱스 갱신",
     "build": "인덱스 갱신 후 isolated 유닛 실행 환경 빌드",
     "fix":   "저장소 기본 디렉터리 레이아웃 보정",
-    "init":  "신규 reflexunits 저장소 초기화",
+    "init":  "신규 reflexor 저장소 초기화",
     "clean": "유닛 로더 로컬 실행 캐시 정리",
 }
 
@@ -97,13 +96,13 @@ def main(argv: list[str] | None = None) -> int:
     epilog = "\n".join(f"  {k:<10} {desc}" for k, desc in all_cmds.items())
 
     parser = argparse.ArgumentParser(
-        prog="python -m reflex.flow",
+        prog="python -m fiber.studio.cli.reflex",
         epilog=f"commands:\n{epilog}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("cmd", nargs="?", default="sync", choices=list(all_cmds))
     parser.add_argument("target", nargs="?", default="", help="Flow name/index or relative path (for 'new')")
-    parser.add_argument("--root", default="reflexunits", help="Path to reflexunits repository root")
+    parser.add_argument("--root", default="reflexor", help="Path to reflexor repository root")
     parser.add_argument("--spec", default="", help="External blueprint JSON override")
     parser.add_argument("--hybrid", action="store_true", help="Run real local py/exec units on 'verify'")
     parser.add_argument("--suite", action="store_true", help="Run FSM verification suites on 'compass'")

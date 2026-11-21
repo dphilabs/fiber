@@ -1,8 +1,5 @@
 # fiber.studio.base.reflex.context
-## @lineage: theoria.reflex.trace.context
-## @lineage: reflexor.flow.trace.context
-## @lineage: reflexor.flow.cli.context
-"""Collect flow-scoped source context from `reflexunits` for LLM prompts (managed by `reflexor.shell.flow`).
+"""Collect flow-scoped source context from `reflexor` for LLM prompts (managed by `reflexor.shell.flow`).
 
 Owns only what existing layers do not:
 - joining index meta (`path`) with registry contracts (`scheme`/`target`)
@@ -21,7 +18,7 @@ from fiber.node.reflex.unit.indexer import UnitsIndexer
 from fiber.node.reflex.unit.loader import UnitLoaderError, UnitsLoader
 from xphi.arch.contract.registry.flow import FlowRegistry
 
-_REPO_PKG_PREFIX = "reflexunits."
+_REPO_PKG_PREFIX = "reflexor."
 _REPO_TOP_PACKAGES = ("core", "adapters")
 _FATAL_NOTE_PREFIXES = ("[UNRESOLVED]", "[MISSING-FILE]", "[READ-ERR]", "[SYNTAX-ERR]")
 
@@ -80,7 +77,7 @@ class FlowContextCollector:
     def __init__(self, indexer: UnitsIndexer, *, live: bool = False) -> None:
         self.loader = indexer.loader
         if not (self.loader.local_repo_dir and self.loader.local_repo_dir.is_dir()):
-            raise ContextError("A local reflexunits checkout is required (set --root or FIBER_UNITS_DIR).")
+            raise ContextError("A local reflexor checkout is required (set --root or REFLEXOR_DIR).")
         self.root = self.loader.local_repo_dir
         self.idx = indexer.load_catalog_index(force_refresh=live)
         self.reg = FlowRegistry().load_dict(self.idx)

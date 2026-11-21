@@ -1,6 +1,4 @@
 # fiber.node.account.finops.cost.registry
-## @lineage: fiber.node.finops.cost.registry
-## @lineage: fiber.node.infra.finops.cost.registry
 from __future__ import annotations
 
 import json
@@ -8,7 +6,7 @@ from typing import Dict, Tuple, Optional, Union
 
 from xphi.arch.contract.config.env import config
 from xphi.node.space.bind.resolver import resolve_path 
-from fiber.gateway.bridge.emitter import get_emitter 
+from xphi.watcher.plane.emitter import get_emitter 
 
 log_cost = get_emitter("cost.registry")
 REGISTRY_ROOT = resolve_path("abc") / "registry"

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fiber.studio.base.mcp.payload import McpPayloadBuilder
+from fiber.studio.base.mcp.worker import E2EWorkerManager, _is_stale_module_cmd
 from fiber.studio.base.workflow.audit.context import AuditContext, MCPGatewayTestClient
 from fiber.studio.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
 from fiber.studio.base.workflow.pipeline import BasePipeline, log
@@ -24,7 +25,6 @@ from fiber.gateway.bridge.action.connect import (
     run_connect_copy,
 )
 from fiber.node.mcp.mapper.config import McpConfigMapper
-import fiber.node.mcp.worker.eco.finlib as worker_finlib
 
 try:
     from fiber.gateway.bridge.channel.discord import DiscordHitlBridge, DiscordInteractionType
@@ -107,6 +107,18 @@ class DiscordHitlGuardPipeline(BasePipeline):
         self.crypto_ctx.teardown()
         self.temp_dir.cleanup()
 
+    def _resolve_finlib_exec_cmd(self, anchor_spec: Optional[ResolvedTarget] = None) -> str:
+        if anchor_spec and anchor_spec.exec_cmd and not _is_stale_module_cmd(anchor_spec.exec_cmd):
+            return anchor_spec.exec_cmd
+        cmd, _, _ = E2EWorkerManager.resolve_worker_defaults(self.finlib_target_id)
+        if cmd:
+            return cmd
+        searched = E2EWorkerManager.get_worker_packages()
+        raise RuntimeError(
+            f"[DiscordGuard] Cannot locate '{self.finlib_target_id}' in worker packages {searched}. "
+            f"Set MCP_WORKER_PACKAGE or register '{self.finlib_target_id}' in {ANCHOR_MCP_JSON}."
+        )
+
     def _ensure_anchor_finlib_guard(self) -> Tuple[Optional[ResolvedTarget], bool]:
         def _parse_current() -> Optional[ResolvedTarget]:
             if not ANCHOR_MCP_JSON.is_file():
@@ -115,12 +127,20 @@ class DiscordHitlGuardPipeline(BasePipeline):
             return {s.target_id: s for s in _specs_from_mapped_entries(entries)}.get(self.finlib_target_id)
 
         existing = _parse_current()
-        if existing and existing.preflight == self.finlib_preflight_rule:
+        if (
+            existing
+            and existing.preflight == self.finlib_preflight_rule
+            and not _is_stale_module_cmd(existing.exec_cmd)
+        ):
             return existing, False
 
         try:
+            default_cmd, _, _ = E2EWorkerManager.resolve_worker_defaults(self.finlib_target_id)
             run_connect_copy(
-                exec_cmd="finlib", target=self.finlib_target_id, mode="linear", preflight=self.finlib_preflight_rule
+                exec_cmd=default_cmd or "finlib",
+                target=self.finlib_target_id,
+                mode="linear",
+                preflight=self.finlib_preflight_rule,
             )
             if ANCHOR_MCP_JSON.is_file():
                 os.utime(ANCHOR_MCP_JSON, None)
@@ -131,14 +151,7 @@ class DiscordHitlGuardPipeline(BasePipeline):
 
     async def setup_workers(self) -> None:
         anchor_spec, was_updated = self._ensure_anchor_finlib_guard()
-        active_daemon_ids = set()
-        try:
-            tunnel = await TunnelFactory.get_default()
-            raw = await tunnel.get(ACTIVE_TARGETS_TUNNEL_KEY)
-            if raw:
-                active_daemon_ids = set(json.loads(raw))
-        except Exception:
-            pass
+        active_daemon_ids = await E2EWorkerManager.get_active_daemon_ids()
 
         if self.finlib_target_id in active_daemon_ids:
             self._attached_to_daemon = True
@@ -146,7 +159,7 @@ class DiscordHitlGuardPipeline(BasePipeline):
             if was_updated:
                 await asyncio.sleep(2.0)
         else:
-            exec_cmd = anchor_spec.exec_cmd if anchor_spec else f"{sys.executable} -m {worker_finlib.__name__}"
+            exec_cmd = self._resolve_finlib_exec_cmd(anchor_spec)
             mode = anchor_spec.mode if anchor_spec else "linear"
             preflight = anchor_spec.preflight if anchor_spec else self.finlib_preflight_rule
             self.add_connector(self.finlib_target_id, exec_cmd, mode=mode, preflight=preflight)
@@ -162,8 +175,8 @@ class DiscordHitlGuardPipeline(BasePipeline):
     ) -> None:
         """
         Discord Gateway v10 INTERACTION_CREATE 로컬 에뮬레이션 (Slack의 인라인 Block-Kit 입력과 대비되는 2-Step 모달 구조):
-          - expect_totp=True: 1) MESSAGE_COMPONENT 클릭 -> MODAL_OPENED 확인 -> 2) MODAL_SUBMIT 제출 -> RESUMED
-          - expect_totp=False: 1) MESSAGE_COMPONENT 클릭 -> 즉시 RESUMED
+- expect_totp=True: 1) MESSAGE_COMPONENT 클릭 -> MODAL_OPENED 확인 -> 2) MODAL_SUBMIT 제출 -> RESUMED
+- expect_totp=False: 1) MESSAGE_COMPONENT 클릭 -> 즉시 RESUMED
         """
         yield_event = {
             "event": "MCP_PHASE_YIELD",
@@ -285,7 +298,14 @@ class DiscordHitlGuardPipeline(BasePipeline):
             if finlib_conn.mode != "linear" or finlib_conn.fsm.preflight.require_totp is not True:
                 raise RuntimeError("Local FinLib connector failed to arm as linear/TOTP.")
         else:
-            spec = resolve_connector_spec(target=self.finlib_target_id, exec_cmd="finlib", preflight=self.finlib_preflight_rule)
+            anchor_specs = E2EWorkerManager.load_anchor_specs()
+            resolved_cmd = self._resolve_finlib_exec_cmd(anchor_specs.get(self.finlib_target_id))
+            spec = resolve_connector_spec(
+                target=self.finlib_target_id,
+                exec_cmd=resolved_cmd,
+                mode="linear",
+                preflight=self.finlib_preflight_rule,
+            )
             if spec.mode != "linear" or spec.preflight != self.finlib_preflight_rule:
                 raise RuntimeError(f"Daemon FinLib spec mismatch: {spec}")
 
@@ -409,10 +429,8 @@ async def run_suite() -> None:
     ])
     print("\n".join(lines), flush=True)
 
-
 def main(args_list: Optional[List[str]] = None) -> None:
     PhaseReactor.ignite(main_coro_func=run_suite)
-
 
 if __name__ == "__main__":
     main()
