@@ -49,7 +49,7 @@ class UnitsManager:
             if "adapters" not in pyproject.read_text(encoding="utf-8"):
                 errors.append("[PKG-ADAPTER] `pyproject.toml` wheel include list does not cover `adapters/**`.")
         else:
-            errors.append("[PKG-ADAPTER] Missing `pyproject.toml` at repo root (required to import `reflexunits.adapters.*`).")
+            errors.append("[PKG-ADAPTER] Missing `pyproject.toml` at repo root (required to import `reflexor.units.adapters.*`).")
 
         for rel_files in adapters_map.values():
             for rel_py in rel_files:
@@ -77,7 +77,7 @@ class UnitsManager:
                         if mod_target.split(".", 1)[0] in _FORBIDDEN_ADAPTER_IMPORTS:
                             errors.append(
                                 f"[ARCH-BOUNDARY] '{rel_py}' imports `{mod_target}` — "
-                                "`reflexunits/adapters` must not depend on `reflexor`."
+                                "`reflexor/units/adapters` must not depend on `reflexor`."
                             )
 
         return errors
@@ -161,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="python -m reflexor.flow.units.manager")
     parser.add_argument("cmd", nargs="?", default="gen", choices=["gen", "check", "build", "fix", "init", "clean"])
-    parser.add_argument("--root", default="reflexunits")
+    parser.add_argument("--root", default="reflexor")
     args = parser.parse_args(argv)
 
     mgr = UnitsManager(args.root, allow_create=(args.cmd == "init"))

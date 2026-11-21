@@ -1,6 +1,4 @@
 # fiber.studio.base.reflex.blueprint
-## @lineage: theoria.reflex.trace.blueprint
-## @lineage: reflexor.flow.trace.blueprint
 from __future__ import annotations
 
 import json
@@ -40,7 +38,7 @@ def _task_steps(flow: FlowContract) -> list[str]:
 
 
 class BlueprintAnalyzer:
-    def __init__(self, repo_arg: str | Path = "reflexunits", spec_arg: str | Path = "", **_: Any) -> None:
+    def __init__(self, repo_arg: str | Path = "reflexor", spec_arg: str | Path = "", **_: Any) -> None:
         cand = Path(repo_arg).resolve()
         self.vp = WorkflowViewport(auto_sync_catalog=False)
         self.loader = UnitsLoader(local_repo_dir=cand if cand.is_dir() else None)
@@ -74,7 +72,8 @@ class BlueprintAnalyzer:
         return list(self.vp.registry.flows.keys())
 
     def _unit_path(self, unit_name: str, target_str: str = "") -> str | None:
-        meta = self.idx.get("units", {}).get(unit_name, {})
+        units_idx = self.idx.get("units", {})
+        meta = units_idx.get(unit_name) or units_idx.get(unit_name.split(":", 1)[0], {})
         if isinstance(meta, dict) and meta.get("path"):
             return str(meta["path"])
         cand = target_str.split(":", 1)[0].strip()
@@ -85,7 +84,10 @@ class BlueprintAnalyzer:
         root = self.loader.local_repo_dir
         if not root or not (fx_dir := root / "fixtures").is_dir():
             return None
-        for stem in filter(None, (unit_name, Path(rel_path).stem if rel_path else "")):
+        safe_full = unit_name.replace(":", "_") if ":" in unit_name else unit_name
+        base_unit = unit_name.split(":", 1)[0] if ":" in unit_name else ""
+        candidates = dict.fromkeys(filter(None, (safe_full, base_unit, Path(rel_path).stem if rel_path else "")))
+        for stem in candidates:
             if hits := sorted(fx_dir.rglob(f"*{stem}*.json")):
                 return hits[0]
         return None

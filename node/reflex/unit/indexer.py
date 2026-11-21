@@ -10,10 +10,14 @@ from typing import Any
 
 from fiber.node.reflex.unit.loader import UnitsLoader
 from xphi.arch.contract.reflex.flow import UnitContract
+from xphi.arch.contract.reflex.multiflow import (
+    collect_header_flows,
+    expand_entries,
+    is_flow_meta,
+)
 from xphi.arch.contract.registry.flow import FlowRegistry
 
 _UNIT_TAG_RE = re.compile(r"@unit:\s*([A-Za-z0-9_]+)")
-_FLOW_TAG_RE = re.compile(r"@flow:\s*(.+)")
 _DESC_TAG_RE = re.compile(r"@desc:\s*(.+)")
 _SIDE_EFFECT_TAG_RE = re.compile(r"@side_effect:\s*([A-Za-z0-9_]+)")
 
@@ -26,20 +30,18 @@ class UnitsIndexer:
 
     @staticmethod
     def parse_script_header(raw_bytes: bytes, rel_path: str = "", ref_prefix: str = "") -> dict[str, Any] | None:
-        """스크립트 상단 주석(@unit, @flow, @desc)에서 계약 원본을 파싱한다."""
+        """스크립트 상단 주석(@unit, @flow/@flow.<name>, @desc)에서 계약 원본을 파싱한다."""
         head = raw_bytes[:2048].decode("utf-8", errors="replace")
-        u_match, f_match = _UNIT_TAG_RE.search(head), _FLOW_TAG_RE.search(head)
-        if not (u_match and f_match):
+        rewrite = (lambda s: re.sub(r"\b(py|exec)\((?!@)", rf"\1({ref_prefix}@", s)) if ref_prefix else (lambda s: s)
+        u_match, flow_meta = _UNIT_TAG_RE.search(head), collect_header_flows(head, rewrite)
+        if not (u_match and flow_meta):
             return None
         u_name = u_match.group(1).strip()
-        flow_dsl = f_match.group(1).strip()
-        if ref_prefix:
-            flow_dsl = re.sub(r"\b(py|exec)\((?!@)", rf"\1({ref_prefix}@", flow_dsl)
         d_match = _DESC_TAG_RE.search(head)
         s_match = _SIDE_EFFECT_TAG_RE.search(head)
         return {
             "unit": u_name,
-            "flow": flow_dsl,
+            **flow_meta,
             "desc": d_match.group(1).strip() if d_match else f"Unit {u_name} ({rel_path})",
             "isolated": "# /// script" in head[:512],
             "side_effect": s_match.group(1).strip() if s_match else None,
@@ -86,7 +88,7 @@ class UnitsIndexer:
                     continue
                 rel_spec = spec_path.relative_to(root).as_posix()
                 for u_name, u_meta in (spec_data.get("units") or {}).items():
-                    if u_name not in units_manifest and isinstance(u_meta, dict) and "flow" in u_meta:
+                    if u_name not in units_manifest and isinstance(u_meta, dict) and is_flow_meta(u_meta):
                         units_manifest[u_name] = {"source": rel_spec}
                 for f_name, f_meta in (spec_data.get("flows") or {}).items():
                     if isinstance(f_meta, dict) and "flow" in f_meta:
@@ -155,13 +157,15 @@ class UnitsIndexer:
                 fp = self.loader.resolve_file(f"{target_ref}@{u_meta['path']}" if ref else u_meta["path"])
                 hdr = self.parse_script_header(fp.read_bytes(), u_meta["path"], ref_prefix=ref or "")
                 if hdr:
-                    registry.register_unit(u_name, hdr["flow"], hdr["desc"])
-                    count += 1
+                    for key, spec, desc in expand_entries(u_name, hdr):
+                        registry.register_unit(key, spec, desc)
+                        count += 1
             elif "source" in u_meta:
                 d_meta = (_read_spec(u_meta["source"]).get("units") or {}).get(u_name)
-                if isinstance(d_meta, dict) and "flow" in d_meta:
-                    registry.register_unit(u_name, d_meta["flow"], d_meta.get("desc", ""))
-                    count += 1
+                if is_flow_meta(d_meta):
+                    for key, spec, desc in expand_entries(u_name, d_meta):
+                        registry.register_unit(key, spec, desc)
+                        count += 1
 
         if hasattr(registry, "register_flow"):
             for f_name, f_entry in idx.get("flows", {}).items():

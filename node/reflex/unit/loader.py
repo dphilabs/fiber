@@ -24,16 +24,15 @@ from xphi.arch.contract.reflex.script import (
 log = logging.getLogger("ops.units")
 
 BASELINE_DIRS: tuple[str, ...] = (
-    "adapters",
-    "core/http",
-    "core/fiber",
-    "core/worker",
-    "core/transform",
-    "io",
+    "units/adapters",
+    "units/http",
+    "units/fiber",
+    "units/worker",
+    "units/transform",
     "fixtures",
     "flow",
 )
-PACKAGE_ROOTS: tuple[str, ...] = ("core", "adapters")
+PACKAGE_ROOTS: tuple[str, ...] = ("units",)
 
 class UnitLoaderError(RuntimeError):
     """Raised when a unit artifact cannot be fetched, verified, or executed."""
@@ -43,7 +42,7 @@ class UnitsLoader:
 
     def __init__(
         self,
-        repo: str = "dphilabs/fiber-units",
+        repo: str = "dphilabs/reflexor",
         default_ref: str = "main",
         cache_dir: str | Path | None = None,
         local_repo_dir: str | Path | None = None,
@@ -53,11 +52,11 @@ class UnitsLoader:
     ) -> None:
         self.repo = repo
         self.default_ref = default_ref
-        self.cache_dir = Path(cache_dir or Path.home() / ".cache" / "fiber-units")
+        self.cache_dir = Path(cache_dir or Path.home() / ".cache" / "reflexor")
         self.template_dir = Path(template_dir).resolve() if template_dir else None
         self._hash_lock: dict[str, str] = {}
 
-        raw_local = local_repo_dir or os.environ.get("FIBER_UNITS_DIR")
+        raw_local = local_repo_dir or os.environ.get("REFLEXOR_DIR")
         if raw_local:
             root = Path(raw_local).resolve()
             if not root.is_dir():
@@ -148,8 +147,7 @@ class UnitsLoader:
         cached_file.write_bytes(raw_bytes)
         return cached_file
 
-    # ── Execution Dispatch (`py` / `exec` / `pass`) ──────────────────────────
-
+    # Execution Dispatch (`py` / `exec` / `pass`)
     def run_py(self, target: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         mod_part, _, fn_name = target.rpartition(":")
         if not mod_part or not fn_name:
@@ -206,8 +204,7 @@ class UnitsLoader:
             return self.run_exec(target, payload)
         raise UnitLoaderError(f"Unsupported scheme '{scheme}://' in UnitsLoader.")
 
-    # ── Local Workspace & Repository Operations (Merged from UnitsRepo) ──────
-
+    # Local Workspace & Repository Operations (Merged from UnitsRepo)
     def ensure_layout(self) -> int:
         created = 0
         for rel in BASELINE_DIRS:
@@ -252,7 +249,7 @@ class UnitsLoader:
     fix_scripts = fix_repo
 
     def discover_adapters(self) -> dict[str, list[str]]:
-        if not self.local_repo_dir or not (adapters_dir := self.local_repo_dir / "adapters").is_dir():
+        if not self.local_repo_dir or not (adapters_dir := self.local_repo_dir / "units" / "adapters").is_dir():
             return {}
         found: dict[str, list[str]] = {}
         for sub in sorted(adapters_dir.iterdir()):
@@ -285,10 +282,10 @@ class UnitsLoader:
             stub = pkg_dir / "client.py"
             if not stub.exists() or overwrite:
                 stub.write_text(
-                    f'# reflexunits.adapters.{mod_name}.client\n"""{desc}"""\nfrom __future__ import annotations\n',
+                    f'# reflexor.units.adapters.{mod_name}.client\n"""{desc}"""\nfrom __future__ import annotations\n',
                     encoding="utf-8",
                 )
-            log.info(f"[NEW] Initialized adapter package 'reflexunits.adapters.{mod_name}' -> {pkg_dir}")
+            log.info(f"[NEW] Initialized adapter package 'reflexor.units.adapters.{mod_name}' -> {pkg_dir}")
             return pkg_dir
 
         target = self.root / rel_clean

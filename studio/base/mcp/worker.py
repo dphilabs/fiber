@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+from importlib.metadata import entry_points
+from importlib.util import find_spec
 import json
+import os
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
@@ -16,13 +20,12 @@ from fiber.gateway.bridge.action.connect import (
 )
 from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.config import McpConfigMapper
-import fiber.node.mcp.worker as worker_pkg
 import fiber.node.mcp.worker.reaper as worker_reaper
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.node.space.tunnel.factory import TunnelFactory
 
 ANCHOR_MCP_JSON: Path = resolve_path("anchor") / "mcp.json"
-WORKER_BASE_PKG: str = worker_pkg.__name__
+WORKER_BASE_PKG: str = "fiber.node.mcp.worker"
 _WORKER_OVERRIDES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "worker.eco.finlib": ("eco.finlib", "linear", r"normalize_order|pow\(|exp\("),
     "worker.deployer": ("deployer", "ephemeral", None),
@@ -31,9 +34,74 @@ _WORKER_OVERRIDES: Dict[str, Tuple[str, str, Optional[str]]] = {
 }
 
 
+def _module_exists(module_name: str) -> bool:
+    if not module_name:
+        return False
+    try:
+        return find_spec(module_name) is not None
+    except (ModuleNotFoundError, ValueError):
+        return False
+
+
+def _is_stale_module_cmd(cmd: Optional[str]) -> bool:
+    """Detect `-m <pkg.mod>` commands in cached mcp.json whose module was moved/deleted."""
+    if not cmd or cmd.startswith(("http://", "https://", "sse://", "ws://", "wss://")):
+        return False
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        parts = cmd.split()
+    if "-m" in parts:
+        idx = parts.index("-m")
+        if idx + 1 < len(parts):
+            return not _module_exists(parts[idx + 1])
+    return False
+
+
 class E2EWorkerManager:
     @staticmethod
-    def resolve_worker_defaults(lookup_id: str) -> Tuple[Optional[str], str, Optional[str]]:
+    def get_worker_packages(extra_packages: Optional[Sequence[str]] = None) -> Tuple[str, ...]:
+        candidates: List[str] = []
+        if extra_packages:
+            candidates.extend(p.strip() for p in extra_packages if p and p.strip())
+
+        env_raw = os.environ.get("MCP_WORKER_PACKAGE", "")
+        if env_raw.strip():
+            for chunk in env_raw.replace(":", ",").split(","):
+                if pkg := chunk.strip():
+                    candidates.append(pkg)
+
+        candidates.append(WORKER_BASE_PKG)
+
+        try:
+            for ep in entry_points(group="fiber.worker_packages"):
+                if ep.value and ep.value.strip():
+                    candidates.append(ep.value.strip())
+        except Exception:
+            pass
+
+        return tuple(dict.fromkeys(candidates))
+
+    @classmethod
+    def _resolve_worker_cmd(
+        cls,
+        sub_mod: str,
+        worker_packages: Optional[Sequence[str]] = None,
+    ) -> Optional[str]:
+        pkgs = cls.get_worker_packages(worker_packages)
+        for base_pkg in pkgs:
+            full_mod = f"{base_pkg}.{sub_mod}"
+            if _module_exists(full_mod):
+                return f"{sys.executable} -m {full_mod}"
+        return None
+
+    @classmethod
+    def resolve_worker_defaults(
+        cls,
+        lookup_id: str,
+        *,
+        worker_packages: Optional[Sequence[str]] = None,
+    ) -> Tuple[Optional[str], str, Optional[str]]:
         base_key = lookup_id
         if base_key not in _WORKER_OVERRIDES:
             for k in _WORKER_OVERRIDES:
@@ -43,13 +111,15 @@ class E2EWorkerManager:
 
         if base_key in _WORKER_OVERRIDES:
             sub_mod, mode, guard = _WORKER_OVERRIDES[base_key]
-            return f"{sys.executable} -m {WORKER_BASE_PKG}.{sub_mod}", mode, guard
+            cmd = cls._resolve_worker_cmd(sub_mod, worker_packages)
+            return cmd, mode, guard
 
-        # 'worker.price.model_xxxx' -> 'worker.price.model' -> '{WORKER_BASE_PKG}.price.model'
+        # 'worker.price.model_xxxx' -> 'worker.price.model' -> '<pkg>.price.model'
         clean_id = lookup_id.split("_", 1)[0] if lookup_id.startswith("worker.") else lookup_id
         if clean_id.startswith("worker."):
             sub_mod = clean_id[len("worker."):]
-            return f"{sys.executable} -m {WORKER_BASE_PKG}.{sub_mod}", "multiplex", None
+            cmd = cls._resolve_worker_cmd(sub_mod, worker_packages)
+            return cmd, "multiplex", None
 
         return None, "multiplex", None
 
@@ -93,6 +163,7 @@ class E2EWorkerManager:
         mode: Optional[str] = None,
         transport_type: Optional[str] = None,
         preflight_pattern: Optional[str] = None,
+        worker_packages: Optional[Sequence[str]] = None,
     ) -> MCPServerConnector:
         if execution_target and not cls._is_network_url(execution_target) and " " not in execution_target:
             base_worker_id = base_worker_id or execution_target
@@ -100,11 +171,18 @@ class E2EWorkerManager:
 
         lookup_id = base_worker_id or target_id
         spec = (anchor_specs or {}).get(lookup_id)
-        default_cmd, default_mode, default_guard = cls.resolve_worker_defaults(lookup_id)
+        default_cmd, default_mode, default_guard = cls.resolve_worker_defaults(
+            lookup_id, worker_packages=worker_packages
+        )
 
-        resolved_cmd = execution_target or (spec.exec_cmd if spec else None) or default_cmd
+        spec_cmd = spec.exec_cmd if (spec and not _is_stale_module_cmd(spec.exec_cmd)) else None
+        resolved_cmd = execution_target or spec_cmd or default_cmd
         if not resolved_cmd:
-            raise ValueError(f"[E2EWorker] Cannot resolve execution_target for '{target_id}' (lookup='{lookup_id}').")
+            searched = cls.get_worker_packages(worker_packages)
+            raise ValueError(
+                f"[E2EWorker] Cannot resolve execution_target for '{target_id}' "
+                f"(lookup='{lookup_id}', searched_packages={searched})."
+            )
 
         is_net = cls._is_network_url(resolved_cmd)
         resolved_mode = mode or (spec.mode if spec else None) or ("multiplex" if is_net else default_mode)
@@ -120,12 +198,20 @@ class E2EWorkerManager:
             else ((spec.preflight if spec else None) or default_guard)
         )
 
+        extra_kwargs: Dict[str, Any] = {}
+        if spec is not None:
+            if getattr(spec, "env", None):
+                extra_kwargs["env"] = spec.env
+            if getattr(spec, "headers", None):
+                extra_kwargs["headers"] = spec.headers
+
         return MCPServerConnector(
             target_id=target_id,
             execution_target=resolved_cmd,
             mode=resolved_mode,
             transport_type=resolved_transport,
             preflight_pattern=resolved_preflight,
+            **extra_kwargs,
         )
 
     @classmethod
@@ -138,6 +224,7 @@ class E2EWorkerManager:
         auto_bootstrap: bool = False,
         preflight_overrides: Optional[Dict[str, Optional[str]]] = None,
         mode_overrides: Optional[Dict[str, str]] = None,
+        worker_packages: Optional[Sequence[str]] = None,
         tag: str = "E2EWorker",
     ) -> List[MCPServerConnector]:
         active_ids = await cls.get_active_daemon_ids() if attach_live else set()
@@ -150,6 +237,7 @@ class E2EWorkerManager:
             attach_live=attach_live,
             preflight_overrides=preflight_overrides,
             mode_overrides=mode_overrides,
+            worker_packages=worker_packages,
             tag=tag,
         )
 
@@ -160,6 +248,7 @@ class E2EWorkerManager:
         targets: Mapping[str, Union[str, Tuple[str, str], None]],
         *,
         preflight_overrides: Optional[Dict[str, Optional[str]]] = None,
+        worker_packages: Optional[Sequence[str]] = None,
         tag: str = "E2EWorker",
     ) -> List[MCPServerConnector]:
         return cls._mount_sync(
@@ -169,6 +258,7 @@ class E2EWorkerManager:
             anchor_specs={},
             attach_live=False,
             preflight_overrides=preflight_overrides,
+            worker_packages=worker_packages,
             tag=tag,
         )
 
@@ -183,6 +273,7 @@ class E2EWorkerManager:
         attach_live: bool,
         preflight_overrides: Optional[Dict[str, Optional[str]]] = None,
         mode_overrides: Optional[Dict[str, str]] = None,
+        worker_packages: Optional[Sequence[str]] = None,
         tag: str = "E2EWorker",
     ) -> List[MCPServerConnector]:
         connectors_list: List[MCPServerConnector] = (
@@ -209,6 +300,7 @@ class E2EWorkerManager:
                 execution_target=exec_target,
                 mode=mode_val,
                 preflight_pattern=preflight_map.get(tid),
+                worker_packages=worker_packages,
             )
             log.info(
                 f"[{tag}] Mounted connector [{tid}] (Transport: {conn.transport_type.upper()}, Mode: {conn.mode.upper()})"

@@ -8,14 +8,12 @@ import orjson
 
 from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.config import McpConfigMapper
-from fiber.gateway.bridge.action.connect import (
-    DEFAULT_WORKER_PACKAGE,
+from fiber.node.mcp.mapper.spec import (
+    ACTIVE_TARGETS_TUNNEL_KEY,
+    STANDALONE_ATTACHED_TUNNEL_KEY,
     ResolvedTarget,
-    discover_builtin_workers,
-    resolve_connector_spec,
     _parse_fiber_tags,
     _specs_from_mapped_entries,
-    _sync_to_anchor_config,
 )
 from xphi.arch.contract.registry.unified import contract
 from xphi.node.ops.daemon.base import AbstractDaemon
@@ -24,16 +22,12 @@ from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("daemon.mcp")
 
-ACTIVE_TARGETS_TUNNEL_KEY = "mcp:registry:active_targets"
-STANDALONE_ATTACHED_TUNNEL_KEY = "mcp:registry:standalone_attached"
-
 
 @contract.daemon("mcp_worker")
 class McpWorkerDaemon(AbstractDaemon):
     def __init__(self, ctx):
         super().__init__("McpWorkerDaemon")
         self.ctx = ctx
-        self.base_package = os.getenv("MCP_WORKER_PACKAGE", DEFAULT_WORKER_PACKAGE)
         self.connectors: Dict[str, MCPServerConnector] = {}
         self._connector_tasks: Dict[str, asyncio.Task] = {}
         self._target_specs: Dict[str, ResolvedTarget] = {}
@@ -222,12 +216,17 @@ class McpWorkerDaemon(AbstractDaemon):
     def _spawn_connector_task(self, spec: ResolvedTarget):
         guard_badge = f", Pre-Flight: /{spec.preflight}/i" if spec.preflight else ""
         tags_badge = f", Tags: {list(spec.tags)}" if getattr(spec, "tags", None) else ""
+        spec_env = spec.env_dict if hasattr(spec, "env_dict") else None
+        spec_headers = spec.headers_dict if hasattr(spec, "headers_dict") else None
+
         connector = MCPServerConnector(
             target_id=spec.target_id,
             execution_target=spec.exec_cmd,
             mode=spec.mode,
             transport_type=spec.transport,
             preflight_pattern=spec.preflight,
+            env=spec_env or None,
+            headers=spec_headers or None,
         )
         self.connectors[spec.target_id] = connector
         task = asyncio.create_task(
@@ -253,7 +252,7 @@ class McpWorkerDaemon(AbstractDaemon):
 
     async def _reconcile_anchor_config(self):
         current_mtime = self._get_anchor_mtime()
-        if current_mtime <= self._last_anchor_mtime:
+        if current_mtime == self._last_anchor_mtime:
             return
 
         log.info(f"[{self.name}] Detected update in anchor mcp.json. Reconciling MCP workers...")

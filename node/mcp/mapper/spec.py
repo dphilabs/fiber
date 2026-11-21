@@ -3,11 +3,12 @@ import os
 import sys
 import ast
 import shlex
+from importlib.metadata import entry_points
 import importlib.util
 from pathlib import Path
 from urllib.parse import urlparse
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, List, Any
+from typing import Dict, Tuple, Optional, List, Any, Mapping
 
 import orjson
 import typer
@@ -35,19 +36,59 @@ class ResolvedTarget:
     transport: str
     preflight: Optional[str] = None
     tags: Tuple[str, ...] = ()
+    env: Tuple[Tuple[str, str], ...] = ()
+    headers: Tuple[Tuple[str, str], ...] = ()
+
+    @property
+    def env_dict(self) -> Dict[str, str]:
+        return dict(self.env)
+
+    @property
+    def headers_dict(self) -> Dict[str, str]:
+        return dict(self.headers)
 
 
 BUILTIN_ALIASES: Dict[str, str] = {
     "deployer": "worker.deployer",
     "finops": "worker.finops",
     "reaper": "worker.reaper",
-    "eco.margin": "worker.eco.margin",
-    "eco.finlib": "worker.eco.finlib",
-    "price.model": "worker.price.model",
-    "search.archive": "worker.search.archive",
 }
 
-_BUILTIN_CACHE: Dict[str, Dict[str, Tuple[str, str, str]]] = {}
+_BUILTIN_CACHE: Dict[Tuple[str, ...], Dict[str, Tuple[str, str, str]]] = {}
+
+
+def _freeze_str_map(raw: Optional[Mapping[str, Any]]) -> Tuple[Tuple[str, str], ...]:
+    if not raw or not isinstance(raw, Mapping):
+        return ()
+    return tuple(
+        sorted(
+            (str(k).strip(), str(v))
+            for k, v in raw.items()
+            if str(k).strip() and v is not None
+        )
+    )
+
+
+def _resolve_worker_packages(base_package: Optional[str] = None) -> Tuple[str, ...]:
+    raw = (
+        base_package
+        if base_package and base_package != DEFAULT_WORKER_PACKAGE
+        else os.environ.get("MCP_WORKER_PACKAGE", "")
+    )
+    pkgs: List[str] = [
+        p.strip() for chunk in raw.replace(":", ",").split(",") if (p := chunk.strip())
+    ]
+    pkgs.append(DEFAULT_WORKER_PACKAGE)
+
+    if not base_package or base_package == DEFAULT_WORKER_PACKAGE:
+        try:
+            for ep in entry_points(group="fiber.worker_packages"):
+                if ep.value and ep.value.strip():
+                    pkgs.append(ep.value.strip())
+        except Exception:
+            pass
+
+    return tuple(dict.fromkeys(pkgs))
 
 
 def _parse_fiber_tags(raw: Any) -> Tuple[str, ...]:
@@ -87,62 +128,71 @@ def _extract_base_name(b: ast.expr) -> str:
 def discover_builtin_workers(
     base_package: str = DEFAULT_WORKER_PACKAGE,
 ) -> Dict[str, Tuple[str, str, str]]:
-    if base_package in _BUILTIN_CACHE:
-        return _BUILTIN_CACHE[base_package]
+    packages = _resolve_worker_packages(base_package)
+    if packages in _BUILTIN_CACHE:
+        return _BUILTIN_CACHE[packages]
 
     discovered: Dict[str, Tuple[str, str, str]] = {}
-    try:
-        spec = importlib.util.find_spec(base_package)
-        if not spec or not spec.submodule_search_locations:
-            return discovered
-        root_dir = Path(list(spec.submodule_search_locations)[0]).resolve()
-    except Exception:
-        return discovered
-
     target_bases = {"WorkerProtocol", "AsyncWorkerProtocol", "BaseWorker", "McpWorker"}
 
-    for py_file in sorted(root_dir.rglob("*.py")):
-        if py_file.name.startswith("_") or "e2e" in py_file.parts or "tests" in py_file.parts:
-            continue
+    for pkg in packages:
         try:
-            source_text = py_file.read_text(encoding="utf-8")
-            tree = ast.parse(source_text)
+            spec = importlib.util.find_spec(pkg)
+            if not spec or not spec.submodule_search_locations:
+                continue
+            search_roots = [Path(loc).resolve() for loc in spec.submodule_search_locations]
         except Exception:
             continue
 
-        rel_parts = py_file.relative_to(root_dir).with_suffix("").parts
-        rel_key = ".".join(rel_parts)
-        module_path = f"{base_package}.{rel_key}"
-        leaf = rel_parts[-1]
-
-        matched_mode: Optional[str] = None
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef):
+        for root_dir in search_roots:
+            if not root_dir.is_dir():
                 continue
-            bases = {_extract_base_name(b) for b in node.bases}
-            matched = bases & target_bases
-            if matched or any("Worker" in b for b in bases):
-                matched_mode = "multiplex" if "AsyncWorkerProtocol" in matched else "linear"
-                break
+            for py_file in sorted(root_dir.rglob("*.py")):
+                if py_file.name.startswith("_") or "e2e" in py_file.parts or "tests" in py_file.parts:
+                    continue
+                try:
+                    source_text = py_file.read_text(encoding="utf-8")
+                    tree = ast.parse(source_text)
+                except Exception:
+                    continue
 
-        if matched_mode is None and (rel_key in BUILTIN_ALIASES or leaf in BUILTIN_ALIASES or "__main__" in source_text):
-            matched_mode = "multiplex" if "Async" in source_text else "linear"
+                rel_parts = py_file.relative_to(root_dir).with_suffix("").parts
+                rel_key = ".".join(rel_parts)
+                module_path = f"{pkg}.{rel_key}"
+                leaf = rel_parts[-1]
 
-        if matched_mode is not None:
-            canonical_id = BUILTIN_ALIASES.get(rel_key, f"worker.{rel_key}")
-            entry = (canonical_id, f"{sys.executable} -m {module_path}", matched_mode)
+                matched_mode: Optional[str] = None
+                for node in tree.body:
+                    if not isinstance(node, ast.ClassDef):
+                        continue
+                    bases = {_extract_base_name(b) for b in node.bases}
+                    matched = bases & target_bases
+                    if matched or any("Worker" in b for b in bases):
+                        matched_mode = "multiplex" if "AsyncWorkerProtocol" in matched else "linear"
+                        break
 
-            discovered[canonical_id] = entry
-            discovered[rel_key] = entry
-            discovered[f"worker.{rel_key}"] = entry
-            if leaf not in discovered or BUILTIN_ALIASES.get(leaf) == canonical_id:
-                discovered[leaf] = entry
+                if matched_mode is None and (
+                    rel_key in BUILTIN_ALIASES or leaf in BUILTIN_ALIASES or "__main__" in source_text
+                ):
+                    matched_mode = "multiplex" if "Async" in source_text else "linear"
 
-            for alias_key, target_cid in BUILTIN_ALIASES.items():
-                if target_cid == canonical_id:
-                    discovered[alias_key] = entry
+                if matched_mode is not None:
+                    canonical_id = BUILTIN_ALIASES.get(rel_key, f"worker.{rel_key}")
+                    if canonical_id in discovered:
+                        continue
+                    entry = (canonical_id, f"{sys.executable} -m {module_path}", matched_mode)
 
-    _BUILTIN_CACHE[base_package] = discovered
+                    discovered[canonical_id] = entry
+                    discovered.setdefault(rel_key, entry)
+                    discovered.setdefault(f"worker.{rel_key}", entry)
+                    if leaf not in discovered or BUILTIN_ALIASES.get(leaf) == canonical_id:
+                        discovered[leaf] = entry
+
+                    for alias_key, target_cid in BUILTIN_ALIASES.items():
+                        if target_cid == canonical_id:
+                            discovered.setdefault(alias_key, entry)
+
+    _BUILTIN_CACHE[packages] = discovered
     return discovered
 
 
@@ -192,6 +242,9 @@ def resolve_connector_spec(
     transport: Optional[str] = None,
     preflight: Optional[str] = None,
     tags: Any = None,
+    *,
+    env: Optional[Mapping[str, Any]] = None,
+    headers: Optional[Mapping[str, Any]] = None,
 ) -> ResolvedTarget:
     raw_cmd = exec_cmd.strip()
     if not raw_cmd:
@@ -236,6 +289,8 @@ def resolve_connector_spec(
         transport=resolved_transport,
         preflight=PreflightGuard.resolve_pattern(resolved_target, preflight),
         tags=_parse_fiber_tags(tags),
+        env=_freeze_str_map(env),
+        headers=_freeze_str_map(headers),
     )
 
 
@@ -251,10 +306,10 @@ def _specs_from_mapped_entries(
             continue
 
         entry_preflight, clean_env = PreflightGuard.extract_from_env_dict(entry.env, preflight_override)
-        env_mode = clean_env.pop("FIBER_MODE", None) if clean_env else None
-        env_tags = clean_env.pop("FIBER_TAGS", None) if clean_env else None
-        if clean_env:
-            os.environ.update(clean_env)
+        clean_env = dict(clean_env) if clean_env else {}
+        env_mode = clean_env.pop("FIBER_MODE", None)
+        env_tags = clean_env.pop("FIBER_TAGS", None)
+        entry_headers = getattr(entry, "headers", None)
 
         specs.append(
             resolve_connector_spec(
@@ -263,6 +318,8 @@ def _specs_from_mapped_entries(
                 mode=mode_override or env_mode,
                 preflight=entry_preflight,
                 tags=env_tags,
+                env=clean_env,
+                headers=entry_headers,
             )
         )
     return specs
@@ -294,9 +351,13 @@ def _sync_to_anchor_config(
 
     for spec in specs:
         existing_entry = servers.get(spec.target_id, {})
+        entry_dict: Dict[str, Any] = dict(existing_entry) if isinstance(existing_entry, dict) else {}
+
         merged_env: Dict[str, str] = {}
-        if isinstance(existing_entry, dict) and isinstance(existing_entry.get("env"), dict):
-            merged_env.update({str(k): str(v) for k, v in existing_entry["env"].items()})
+        if isinstance(entry_dict.get("env"), dict):
+            merged_env.update({str(k): str(v) for k, v in entry_dict["env"].items() if v is not None})
+        if spec.env:
+            merged_env.update(spec.env_dict)
         if spec.target_id in env_lookup:
             merged_env.update(env_lookup[spec.target_id])
 
@@ -308,20 +369,34 @@ def _sync_to_anchor_config(
         elif "FIBER_TAGS" in merged_env and not _parse_fiber_tags(merged_env["FIBER_TAGS"]):
             merged_env.pop("FIBER_TAGS", None)
 
+        merged_headers: Dict[str, str] = {}
+        if isinstance(entry_dict.get("headers"), dict):
+            merged_headers.update({str(k): str(v) for k, v in entry_dict["headers"].items() if v is not None})
+        if spec.headers:
+            merged_headers.update(spec.headers_dict)
+
         if spec.exec_cmd.startswith(("http://", "https://")):
-            entry_dict: Dict[str, Any] = {"url": spec.exec_cmd}
+            entry_dict.pop("command", None)
+            entry_dict.pop("args", None)
+            entry_dict["url"] = spec.exec_cmd
         else:
+            entry_dict.pop("url", None)
             try:
                 parts = shlex.split(spec.exec_cmd)
             except ValueError:
                 parts = spec.exec_cmd.split()
-            entry_dict = {
-                "command": parts[0] if parts else spec.exec_cmd,
-                "args": parts[1:] if len(parts) > 1 else [],
-            }
+            entry_dict["command"] = parts[0] if parts else spec.exec_cmd
+            entry_dict["args"] = parts[1:] if len(parts) > 1 else []
 
         if merged_env:
             entry_dict["env"] = merged_env
+        else:
+            entry_dict.pop("env", None)
+
+        if merged_headers:
+            entry_dict["headers"] = merged_headers
+        else:
+            entry_dict.pop("headers", None)
 
         servers[spec.target_id] = entry_dict
 
