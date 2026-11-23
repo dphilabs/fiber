@@ -1,11 +1,4 @@
-# fiber.node.reflex.trigger.cron
-"""
-[Zero-Dependency POSIX/Vixie Cron Compiler & Slot Resolver]
-Distilled from proven open-source cron parsers (`cronsim` / Vixie standard):
-  - Supports macros (`@hourly`, `@daily`, `@weekly`, `@monthly`), names (`MON-FRI`, `JAN-DEC`), and `L` (last day of month)
-  - Implements the POSIX DOM/DOW union rule (OR when both are restricted, AND when either is `*`)
-  - Provides `latest_slot_at(epoch)` so `TriggerRuntime` can recover missed ticks within `grace_sec`
-"""
+# fiber.node.runbook.trigger.cron
 from __future__ import annotations
 
 import calendar

@@ -1,4 +1,4 @@
-# fiber.node.reflex.workspace.projection
+# fiber.node.runbook.viewport.projector
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,8 +9,8 @@ from xphi.arch.contract.registry.flow import FlowRegistry
 from xphi.arch.contract.reflex.auth import missing_credentials, resolve_accounts
 from xphi.arch.contract.reflex.flow import FlowContract, StepSpec, UnitContract
 
-from fiber.node.reflex.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
-from fiber.node.reflex.workspace.inspector import (
+from fiber.node.runbook.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from fiber.node.runbook.stepper import (
     block_auth,
     emit_flow_dsl,
     emit_step_dsl,
@@ -100,8 +100,7 @@ class SynthesisReport:
     def to_llm_feedback(self) -> str:
         return format_synthesis_feedback(self)
 
-
-class TopologyProjector:
+class ViewportProjector:
     """Stateless coordinate-free graph projector."""
 
     emit_unit_dsl = staticmethod(emit_unit_dsl)

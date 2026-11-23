@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from xphi.node.runtime.reflex.engine import FlowEngine
-from fiber.node.reflex.unit.indexer import UnitsIndexer
-from fiber.node.reflex.unit.loader import UnitsLoader
-from fiber.node.reflex.workspace.inspector import emit_flow_dsl, emit_unit_dsl, inspect_flow
-from fiber.node.reflex.workspace.viewport import WorkflowViewport
+from fiber.node.runbook.unit.indexer import UnitsIndexer
+from fiber.node.runbook.unit.loader import UnitsLoader
+from fiber.node.runbook.stepper import emit_flow_dsl, emit_unit_dsl, inspect_flow
+from fiber.node.runbook.viewport.runtime import ViewportRuntime
 from xphi.arch.contract.reflex.flow import (
     CompiledChoice,
     CompiledTask,
@@ -40,7 +40,7 @@ def _task_steps(flow: FlowContract) -> list[str]:
 class BlueprintAnalyzer:
     def __init__(self, repo_arg: str | Path = "reflexor", spec_arg: str | Path = "", **_: Any) -> None:
         cand = Path(repo_arg).resolve()
-        self.vp = WorkflowViewport(auto_sync_catalog=False)
+        self.vp = ViewportRuntime(auto_sync_catalog=False)
         self.loader = UnitsLoader(local_repo_dir=cand if cand.is_dir() else None)
         self.indexer = UnitsIndexer(self.loader)
         root = self.loader.local_repo_dir

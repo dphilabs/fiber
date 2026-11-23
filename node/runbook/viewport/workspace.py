@@ -1,4 +1,4 @@
-# fiber.node.reflex.workspace.manager
+# fiber.node.runbook.viewport.workspace
 from __future__ import annotations
 
 import json
@@ -6,20 +6,20 @@ from pathlib import Path
 import time
 from typing import Any
 
-from fiber.node.reflex.trigger.base import (
+from fiber.node.runbook.trigger.base import (
     DEFAULT_TRIGGERS,
     TriggerGate,
     TriggerKind,
     TriggerSpec,
 )
-from fiber.node.reflex.workspace.inspector import emit_flow_dsl, emit_unit_dsl
-from fiber.node.reflex.workspace.projection import SynthesisReport, ViewportSnapshot
-from fiber.node.reflex.workspace.viewport import WorkflowViewport
+from fiber.node.runbook.stepper import emit_flow_dsl, emit_unit_dsl
+from fiber.node.runbook.viewport.projector import SynthesisReport, ViewportSnapshot
+from fiber.node.runbook.viewport.runtime import ViewportRuntime
 
 from xphi.arch.contract.reflex.flow import Shape, UnitContract
 from xphi.node.space.bind.resolver import resolve_path
 
-DEFAULT_WORKSPACE_FILE = resolve_path("anchor") / "workflows.json"
+DEFAULT_RUNBOOK_FILE = resolve_path("anchor") / "runbook.json"
 _WRITE_KEYWORDS = (
     "send", "post", "create", "mutate", "apply", "commit",
     "push", "append", "update", "delete", "exec", "act", "deploy", "rewrite",
@@ -38,17 +38,17 @@ def _default_for_shape(shape: Shape) -> Any:
     return "dry_run_val"
 
 
-class ViewportWorkspace:
+class ViewportRunbook:
     """Manages workflow persistence, dry-run testing, trigger configuration, and publication."""
 
     def __init__(
         self,
-        session: WorkflowViewport | None = None,
+        session: ViewportRuntime | None = None,
         *,
-        storage_path: str | Path = DEFAULT_WORKSPACE_FILE,
+        storage_path: str | Path = DEFAULT_RUNBOOK_FILE,
         auto_load: bool = True,
     ) -> None:
-        self.session = session or WorkflowViewport()
+        self.session = session or ViewportRuntime()
         self.storage_path = Path(storage_path).resolve()
         self.trigger_gate = TriggerGate()
 

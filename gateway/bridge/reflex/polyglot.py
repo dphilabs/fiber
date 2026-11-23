@@ -1,4 +1,4 @@
-# fiber.node.reflex.bridge.polyglot
+# fiber.gateway.bridge.reflex.polyglot
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import importlib
@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import httpx
 
 from fiber.gateway.bridge.emitter import get_emitter
-from fiber.node.reflex.bridge.execution import FiberExecutionBridge
-from fiber.node.reflex.unit.loader import UnitsLoader
+from fiber.gateway.bridge.reflex.execution import FiberExecutionBridge
+from fiber.node.runbook.unit.loader import UnitsLoader
 from xphi.arch.bound.adapter.pta import PtaPointer
 from xphi.arch.contract.reflex.fsm import (
     CompactKey,

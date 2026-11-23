@@ -1,11 +1,9 @@
 # fiber.studio.cli.reflex
-"""Single CLI entrypoint for `UnitsManager`, `BlueprintAnalyzer`, `context`, and `compass`.
-
+"""
 Usage:
   python -m fiber.studio.cli.reflex                     # [sync]    index gen + static wiring check
   python -m fiber.studio.cli.reflex verify [FLOW]       # [verify]  index gen + trace (--hybrid)
   python -m fiber.studio.cli.reflex pack <FLOW>         # [pack]    index gen + emit LLM markdown
-  python -m fiber.studio.cli.reflex compass [--suite]   # [compass] L1-L5 layer + coverage check
   python -m fiber.studio.cli.reflex inspect [FLOW]      # [inspect] flow list or ASL node view
   python -m fiber.studio.cli.reflex new <PATH> [--kind py] [--name foo] [--desc "..."] [--force]
   python -m fiber.studio.cli.reflex build | fix | init | clean
@@ -18,10 +16,9 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from fiber.node.reflex.unit.loader import UnitLoaderError
-from fiber.node.reflex.unit.manager import UnitsManager
+from fiber.node.runbook.unit.loader import UnitLoaderError
+from fiber.node.runbook.unit.manager import UnitsManager
 from fiber.studio.base.reflex.blueprint import BlueprintAnalyzer
-from fiber.studio.base.reflex.compass import run_compass
 from fiber.studio.base.reflex.context import ContextError, collect_flow_markdown
 
 PIPELINES: dict[str, tuple[str, list[str]]] = {
@@ -40,18 +37,11 @@ REPO_ACTIONS: dict[str, str] = {
     "clean": "유닛 로더 로컬 실행 캐시 정리",
 }
 
-
 def _run_step(step: str, args: argparse.Namespace, root: Path) -> int:
     if step == "index_gen":
         return UnitsManager(root).gen()
 
-    if step == "arch_compass":
-        _, report = run_compass(root, run_verify=args.suite)
-        print(report)
-        return 0
-
     analyzer = BlueprintAnalyzer(repo_arg=root, spec_arg=args.spec)
-
     if step == "static_check":
         print(analyzer.evaluate_readiness())
         return 0

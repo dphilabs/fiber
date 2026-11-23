@@ -1,4 +1,4 @@
-# fiber.node.reflex.bridge.execution
+# fiber.gateway.bridge.reflex.execution
 import json
 import uuid
 from typing import Dict, Any, Optional, Tuple, List

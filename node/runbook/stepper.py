@@ -1,4 +1,4 @@
-# fiber.node.reflex.workspace.inspector
+# fiber.node.runbook.stepper
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,8 +15,8 @@ from xphi.arch.contract.reflex.flow import FlowContract, Shape, StepSpec, UnitCo
 from xphi.arch.xor.fsm.parser import parse_if_ast
 
 if TYPE_CHECKING:
-    from fiber.node.reflex.trigger.base import TriggerSpec
-    from fiber.node.reflex.workspace.projection import SynthesisReport, ViewportSnapshot
+    from fiber.node.runbook.trigger.base import TriggerSpec
+    from fiber.node.runbook.viewport.projector import SynthesisReport, ViewportSnapshot
 
 # Canonical DSL Emitter (Contract Object -> DSL String)
 def _format_arg_items(
@@ -251,11 +251,7 @@ def inspect_flow(
     rep.auth = flow_auth(reg, flow_name)
     return rep
 
-
-# =====================================================================
-# 3. LLM Feedback, Trigger Summary & Catalog Text Formatters
-# =====================================================================
-
+# LLM Feedback, Trigger Summary & Catalog Text Formatters
 def _format_triggers(triggers: tuple[TriggerSpec, ...]) -> str:
     parts: list[str] = []
     for t in triggers:
@@ -267,7 +263,6 @@ def _format_triggers(triggers: tuple[TriggerSpec, ...]) -> str:
         else:
             parts.append("manual")
     return ", ".join(parts) or "manual"
-
 
 def format_synthesis_feedback(report: SynthesisReport) -> str:
     if not report.valid or report.snapshot is None:
@@ -303,7 +298,6 @@ def format_synthesis_feedback(report: SynthesisReport) -> str:
         lines.append("[WARN]     " + "; ".join(report.warnings))
     lines.append("[WIRING]\n" + "\n".join(wiring))
     return "\n".join(lines)
-
 
 def format_llm_diagnostic(snap: ViewportSnapshot) -> str:
     pub_label = "PUBLISHED" if snap.published else "DRAFT"
