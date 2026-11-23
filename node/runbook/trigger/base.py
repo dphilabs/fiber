@@ -1,4 +1,4 @@
-# fiber.node.reflex.trigger.base
+# fiber.node.runbook.trigger.base
 """
 [Unified Tri-Modal Trigger Core & Runtime: Manual | Cron | Event]
 Consolidates `TriggerSpec`, `TriggerEnvelope`, `TriggerGate`, and `TriggerRuntime`
@@ -13,11 +13,11 @@ import time
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fiber.node.reflex.trigger.cron import compile_cron
+from fiber.node.runbook.trigger.cron import compile_cron
 from xphi.arch.contract.reflex.fsm import extract_json_path
 
 if TYPE_CHECKING:
-    from fiber.node.reflex.workspace.projection import ViewportSnapshot
+    from fiber.node.runbook.viewport.projector import ViewportSnapshot
 
 TriggerKind = Literal["manual", "cron", "event"]
 MissedPolicy = Literal["skip", "run_once"]

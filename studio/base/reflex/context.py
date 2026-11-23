@@ -1,11 +1,4 @@
 # fiber.studio.base.reflex.context
-"""Collect flow-scoped source context from `reflexor` for LLM prompts (managed by `reflexor.shell.flow`).
-
-Owns only what existing layers do not:
-- joining index meta (`path`) with registry contracts (`scheme`/`target`)
-- resolving mcp targets to worker implementations, llm targets to prompt files
-- repo-internal import closure and rendering
-"""
 from __future__ import annotations
 
 import ast
@@ -14,8 +7,8 @@ from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 
-from fiber.node.reflex.unit.indexer import UnitsIndexer
-from fiber.node.reflex.unit.loader import UnitLoaderError, UnitsLoader
+from fiber.node.runbook.unit.indexer import UnitsIndexer
+from fiber.node.runbook.unit.loader import UnitLoaderError, UnitsLoader
 from xphi.arch.contract.registry.flow import FlowRegistry
 
 _REPO_PKG_PREFIX = "reflexor."

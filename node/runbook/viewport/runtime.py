@@ -1,4 +1,4 @@
-# fiber.node.reflex.workspace.viewport
+# fiber.node.runbook.viewport.runtime
 from __future__ import annotations
 
 from dataclasses import replace
@@ -11,24 +11,24 @@ from xphi.node.runtime.reflex.engine import DispatcherFn, FlowEngine
 from xphi.arch.contract.reflex.flow import UnitContract
 from xphi.arch.xor.fsm.parser import verify_asl
 
-from fiber.node.reflex.unit.indexer import UnitsIndexer
-from fiber.node.reflex.unit.loader import UnitsLoader
-from fiber.node.reflex.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
-from fiber.node.reflex.workspace.inspector import (
+from fiber.node.runbook.unit.indexer import UnitsIndexer
+from fiber.node.runbook.unit.loader import UnitsLoader
+from fiber.node.runbook.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from fiber.node.runbook.stepper import (
     emit_flow_dsl,
     emit_unit_dsl,
     format_llm_catalog,
     format_llm_diagnostic,
     inspect_flow,
 )
-from fiber.node.reflex.workspace.projection import (
+from fiber.node.runbook.viewport.projector import (
     SynthesisReport,
     TelemetryEvent,
-    TopologyProjector,
+    ViewportProjector,
     ViewportSnapshot,
 )
 
-class WorkflowViewport:
+class ViewportRuntime:
     format_llm_diagnostic = staticmethod(format_llm_diagnostic)
 
     def __init__(
@@ -71,7 +71,7 @@ class WorkflowViewport:
         return shadow
 
     def project(self, flow_name: str, *, inspection: Any | None = None) -> ViewportSnapshot:
-        return TopologyProjector.project(
+        return ViewportProjector.project(
             self.registry,
             flow_name,
             available_credentials=self.available_credentials,
@@ -153,7 +153,7 @@ class WorkflowViewport:
             if asl_errors := verify_asl(asl):
                 return SynthesisReport(flow_name=flow_name, dsl=proposed_dsl, valid=False, errors=tuple(asl_errors))
             FlowEngine.compile_asl_nodes(asl, validate=False)
-            snap = TopologyProjector.project(
+            snap = ViewportProjector.project(
                 shadow_reg,
                 flow_name,
                 available_credentials=self.available_credentials,
@@ -237,7 +237,7 @@ class WorkflowViewport:
         if scheme in ("pass", "py", "exec"):
             return self.loader.dispatch(scheme, target, payload)
         if not hasattr(self, "_polyglot_bridge") or self._polyglot_bridge is None:
-            from fiber.node.reflex.bridge.polyglot import PolyglotExecutionBridge
+            from fiber.gateway.bridge.reflex.polyglot import PolyglotExecutionBridge
             self._polyglot_bridge = PolyglotExecutionBridge(loader=self.loader)
         return self._polyglot_bridge.dispatch_sync(scheme, target, payload)
 
