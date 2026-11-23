@@ -13,7 +13,7 @@ from fiber.llm.pipeline.channel.observer import MeteringObserver
 from fiber.node.account.finops.watcher import default_finops_watcher, default_tenant_eco
 from fiber.node.account.auth.payload import NodeAuthPayload
 from fiber.gateway.bridge.emitter import get_emitter
-from xphi.arch.contract.reflex.fsm import (
+from xphi.arch.reflex.fsm import (
     CompactKey,
     NodeType,
     apply_projection,

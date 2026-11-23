@@ -1,19 +1,20 @@
-# fiber.node.runbook.viewport.runtime
+# fiber.node.runbook.runtime.viewport
 from __future__ import annotations
 
 from dataclasses import replace
 import time
 from typing import Any
 
-from xphi.arch.contract.registry.flow import FlowDSL, FlowRegistry, load_sample_registry
-from xphi.arch.contract.reflex.auth import missing_credentials, unit_auth
+from xphi.arch.contract.registry.flow import FlowRegistry, load_sample_registry, parse_unit_dsl
+from xphi.arch.reflex.compiler import compile_to_asl
+from xphi.arch.reflex.auth import missing_credentials, unit_auth
 from xphi.node.runtime.reflex.engine import DispatcherFn, FlowEngine
-from xphi.arch.contract.reflex.flow import UnitContract
-from xphi.arch.xor.fsm.parser import verify_asl
+from xphi.arch.reflex.flow import UnitContract
+from xphi.arch.xor.asl.evaluator import verify_asl
 
 from fiber.node.runbook.unit.indexer import UnitsIndexer
 from fiber.node.runbook.unit.loader import UnitsLoader
-from fiber.node.runbook.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerSpec
 from fiber.node.runbook.stepper import (
     emit_flow_dsl,
     emit_unit_dsl,
@@ -21,7 +22,7 @@ from fiber.node.runbook.stepper import (
     format_llm_diagnostic,
     inspect_flow,
 )
-from fiber.node.runbook.viewport.projector import (
+from fiber.node.runbook.runtime.projector import (
     SynthesisReport,
     TelemetryEvent,
     ViewportProjector,
@@ -126,7 +127,7 @@ class ViewportRuntime:
         desc: str = "",
         commit: bool = False,
     ) -> UnitContract:
-        unit = FlowDSL.parse_unit(unit_name, proposed_unit_dsl, desc)
+        unit = parse_unit_dsl(unit_name, proposed_unit_dsl, desc)
         if unit.scheme == "llm" and unit.auth:
             raise ValueError(f"LLM unit '{unit_name}' must not declare user-app auth (§5).")
         if commit:

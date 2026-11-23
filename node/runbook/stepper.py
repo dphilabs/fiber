@@ -2,21 +2,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import re
 from typing import TYPE_CHECKING, Any
 
-from xphi.arch.contract.registry.flow import FlowRegistry
-from xphi.arch.contract.reflex.auth import (
+from xphi.arch.reflex.auth import (
     allowed_account_slots,
     flow_auth,
     unit_auth,
 )
-from xphi.arch.contract.reflex.flow import FlowContract, Shape, StepSpec, UnitContract
-from xphi.arch.xor.fsm.parser import parse_if_ast
+from xphi.arch.reflex.compiler import inject_gate_paths
+from xphi.arch.reflex.flow import (
+    FlowContract,
+    Shape,
+    StepSpec,
+    UnitContract,
+    remap_out_keys,
+    split_unit_ref,
+)
+from xphi.arch.contract.registry.flow import FlowRegistry
+from xphi.arch.xor.asl.evaluator import parse_if_ast
 
 if TYPE_CHECKING:
-    from fiber.node.runbook.trigger.base import TriggerSpec
-    from fiber.node.runbook.viewport.projector import SynthesisReport, ViewportSnapshot
+    from xphi.node.runtime.trigger.spec import TriggerSpec
+    from fiber.node.runbook.runtime.projector import SynthesisReport, ViewportSnapshot
+
+_GATE_KEYWORDS = frozenset({"and", "or", "not", "in", "is", "True", "False", "None", "true", "false", "null"})
 
 # Canonical DSL Emitter (Contract Object -> DSL String)
 def _format_arg_items(
@@ -63,8 +72,9 @@ def emit_step_dsl(step: StepSpec) -> str:
         return f"gate({step.name}: {step.gate_expr})"
     core = step.name
     if step.bindings:
-        bind_str = ", ".join(f"{dst}={src}" for dst, src in step.bindings.items())
-        core = f"{core}[{bind_str}]"
+        core = f"{core}[{', '.join(f'{dst}={src}' for dst, src in step.bindings.items())}]"
+    if step.remap:
+        core = f"{core} => ({', '.join(f'{new_k}={old_k}' for new_k, old_k in step.remap.items())})"
     if step.heal_target:
         op = "!>" if step.heal_mode == "fallback" else "!"
         core = f"{core}({op}{step.heal_target})"
@@ -82,7 +92,11 @@ def emit_flow_dsl(flow: FlowContract) -> str:
         parts.append(f"out({', '.join(out_items)})")
     return " -> ".join(parts)
 
-# Unified Static Flow Inspector (Shared by Viewport & ContractTester)
+
+# =====================================================================
+# 2. Unified Static Flow Inspector (Shared by Viewport & Testers)
+# =====================================================================
+
 @dataclass(slots=True)
 class FlowInspection:
     flow: str
@@ -104,9 +118,64 @@ class FlowInspection:
 def block_auth(reg: FlowRegistry, name: str) -> set[str]:
     if name in reg.units:
         return {str(a) for a in unit_auth(reg.units[name])}
-    if name in reg.flows:
-        return flow_auth(reg, name)
-    return set()
+    return flow_auth(reg, name) if name in reg.flows else set()
+
+
+def _record_compat(rep: FlowInspection, src_shape: Shape, dst_shape: Shape, msg: str) -> None:
+    verdict = src_shape.compat(dst_shape)
+    if verdict == "error":
+        rep.errors.append(msg)
+    elif verdict == "warn":
+        rep.warnings.append(msg)
+
+
+def _collect_bare_idents(expr: str) -> set[str]:
+    """Scan bare identifier candidates outside string literals so `parse_if_ast` can inspect all refs."""
+    found: set[str] = set()
+    quote = ""
+    escaped = False
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in "'\"":
+            quote = ch
+            i += 1
+            continue
+        if ch == "_" or ("a" <= ch <= "z") or ("A" <= ch <= "Z"):
+            start = i
+            while i < n and (expr[i] == "_" or expr[i].isalnum()):
+                i += 1
+            ident = expr[start:i]
+            if ident not in _GATE_KEYWORDS:
+                found.add(ident)
+            continue
+        i += 1
+    return found
+
+
+def _check_gate(flow_name: str, step: StepSpec, pool: dict[str, Shape], rep: FlowInspection) -> None:
+    assert step.gate_expr is not None
+    candidate_vars = set(pool) | _collect_bare_idents(step.gate_expr)
+    rewritten = inject_gate_paths(step.gate_expr, candidate_vars)
+    try:
+        _, path_map = parse_if_ast(rewritten)
+    except (SyntaxError, ValueError) as exc:
+        rep.errors.append(f"{flow_name}:{step.name}: invalid gate expression '{step.gate_expr}' ({exc}).")
+        return
+
+    for path in path_map.values():
+        root_key = path.removeprefix("$.").partition(".")[0]
+        if root_key not in pool:
+            rep.errors.append(f"{flow_name}:{step.name}: gate references unknown key '{root_key}'.")
 
 
 def _wire_step(
@@ -135,18 +204,15 @@ def _wire_step(
         required = k in c.in_reqs and k not in c.in_defaults
         if src not in pool:
             if required:
-                rep.errors.append(f"{owner.name}:{name}: required input '{k}' <- '{src}' not in context {sorted(pool)}.")
+                rep.errors.append(
+                    f"{owner.name}:{name}: required input '{k}' <- '{src}' not in context {sorted(pool)}."
+                )
             continue
         if required and src in weak:
             rep.errors.append(f"{owner.name}:{name}: required input '{k}' wired from optional output '{src}'.")
 
         target_shape = c.in_shapes.get(k, Shape())
-        verdict = pool[src].compat(target_shape)
-        msg = f"{owner.name}:{name}: '{src}' ({pool[src]}) -> '{k}' ({target_shape})"
-        if verdict == "error":
-            rep.errors.append(msg)
-        elif verdict == "warn":
-            rep.warnings.append(msg)
+        _record_compat(rep, pool[src], target_shape, f"{owner.name}:{name}: '{src}' ({pool[src]}) -> '{k}' ({target_shape})")
 
     if isinstance(c, UnitContract):
         if c.scheme == "llm" and c.auth:
@@ -165,7 +231,24 @@ def _wire_step(
         rep.warnings.extend(sub.warnings)
         rep.open_slots.extend(sub.open_slots)
 
-    return {k: c.out_shapes.get(k, Shape()) for k in c.out_keys}, set(c.out_optional)
+    raw_shapes = {k: c.out_shapes.get(k, Shape()) for k in c.out_keys}
+    raw_opt = set(c.out_optional)
+    if not step.remap:
+        return raw_shapes, raw_opt
+
+    try:
+        effective_keys = remap_out_keys(c.out_keys, step.remap)
+    except KeyError as exc:
+        rep.errors.append(f"{owner.name}:{name}: {exc.args[0]}")
+        return raw_shapes, raw_opt
+
+    inv_remap = {new_k: old_k for new_k, old_k in step.remap.items()}
+    remapped_shapes = {
+        k: raw_shapes.get(inv_remap.get(k, k), Shape())
+        for k in effective_keys
+    }
+    remapped_opt = {k for k in effective_keys if inv_remap.get(k, k) in raw_opt}
+    return remapped_shapes, remapped_opt
 
 
 def inspect_flow(
@@ -174,7 +257,7 @@ def inspect_flow(
     *,
     _visited: set[str] | None = None,
 ) -> FlowInspection:
-    """Single-pass static analyzer for shapes, bindings, gate syntax, open cfg slots, and auth rules."""
+    """Single-pass static analyzer for shapes, bindings, remaps, gate syntax, open cfg slots, and auth rules."""
     if flow_name not in reg.flows:
         return FlowInspection(flow=flow_name, errors=[f"Unregistered workflow contract: '{flow_name}'."])
 
@@ -186,25 +269,17 @@ def inspect_flow(
         for k in (*flow.in_reqs, *flow.in_defaults, *flow.in_optional)
     }
     weak: set[str] = set(flow.in_optional)
-    valid_step_targets = {n for s in flow.steps for n in (s.name, s.heal_target) if n}
+
+    step_names = {n for s in flow.steps for n in (s.name, s.heal_target) if n and s.gate_expr is None}
+    valid_cfg_targets = step_names | {split_unit_ref(n)[0] for n in step_names}
 
     for key in flow.cfg_values:
-        if key.partition(".")[0] not in valid_step_targets:
+        if key.partition(".")[0] not in valid_cfg_targets:
             rep.errors.append(f"{flow_name}: cfg '{key}' targets no direct or heal step.")
 
     for step in flow.steps:
         if step.gate_expr is not None:
-            expr = step.gate_expr
-            for k in sorted(pool, key=len, reverse=True):
-                expr = re.sub(rf"(?<!\$\.)\b{re.escape(k)}\b", f"$.{k}", expr)
-            try:
-                _, path_map = parse_if_ast(expr)
-                for path in path_map.values():
-                    root_key = path.removeprefix("$.").partition(".")[0]
-                    if root_key not in pool:
-                        rep.errors.append(f"{flow_name}:{step.name}: gate references unknown key '{root_key}'.")
-            except (SyntaxError, ValueError) as exc:
-                rep.errors.append(f"{flow_name}:{step.name}: invalid gate expression '{step.gate_expr}' ({exc}).")
+            _check_gate(flow_name, step, pool, rep)
             continue
 
         step_pool = pool
@@ -233,7 +308,6 @@ def inspect_flow(
             pool.update(produced)
         weak |= opt
 
-    # Exit contract verification (presence, optionality propagation, and shape compatibility)
     for k in flow.out_keys:
         if k not in pool:
             rep.errors.append(f"{flow_name}: exit out('{k}') never produced.")
@@ -241,12 +315,7 @@ def inspect_flow(
         if k not in flow.out_optional and k in weak:
             rep.errors.append(f"{flow_name}: required exit out('{k}') wired from optional output.")
         out_target_shape = flow.out_shapes.get(k, Shape())
-        verdict = pool[k].compat(out_target_shape)
-        msg = f"{flow_name}:exit: '{k}' ({pool[k]}) -> out '{k}' ({out_target_shape})"
-        if verdict == "error":
-            rep.errors.append(msg)
-        elif verdict == "warn":
-            rep.warnings.append(msg)
+        _record_compat(rep, pool[k], out_target_shape, f"{flow_name}:exit: '{k}' ({pool[k]}) -> out '{k}' ({out_target_shape})")
 
     rep.auth = flow_auth(reg, flow_name)
     return rep
@@ -263,6 +332,7 @@ def _format_triggers(triggers: tuple[TriggerSpec, ...]) -> str:
         else:
             parts.append("manual")
     return ", ".join(parts) or "manual"
+
 
 def format_synthesis_feedback(report: SynthesisReport) -> str:
     if not report.valid or report.snapshot is None:
@@ -298,6 +368,7 @@ def format_synthesis_feedback(report: SynthesisReport) -> str:
         lines.append("[WARN]     " + "; ".join(report.warnings))
     lines.append("[WIRING]\n" + "\n".join(wiring))
     return "\n".join(lines)
+
 
 def format_llm_diagnostic(snap: ViewportSnapshot) -> str:
     pub_label = "PUBLISHED" if snap.published else "DRAFT"

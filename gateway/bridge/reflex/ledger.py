@@ -19,8 +19,8 @@ from xphi.arch.bound.adapter.pta import (
 )
 from xphi.arch.bound.adapter.state import StateAdapter
 
-from fiber.node.runbook.manifest import OutputPolicy, RunbookManifest
-from fiber.node.runbook.planner import SchedulePlanner
+from xphi.node.runtime.reflex.manifest import OutputPolicy, ReflexManifest
+from xphi.node.runtime.trigger.scheduler import SchedulePlanner
 
 if TYPE_CHECKING:
     from fiber.node.runbook.store import PinnedRelease
@@ -135,7 +135,7 @@ class RunLedger:
         self.emit(StepStreamEvent(run_id=run_id, seq=len(rec.events) + 1, kind="node.failed", node_name=failed_node, error_line=line, l1_summary=f"실패 · {line}"))
         return "failed", {}, 0.0
 
-    def finalize(self, run_id: str, outcome: str, outputs: dict[str, Any], manifest: RunbookManifest, *, score: float = 1.0) -> RunRecord:
+    def finalize(self, run_id: str, outcome: str, outputs: dict[str, Any], manifest: ReflexManifest, *, score: float = 1.0) -> RunRecord:
         rec = self._runs[run_id]
         rec.outcome = "no_change" if (outcome == "ok" and score == 0.0) else outcome  # type: ignore[assignment]
         if rec.outcome != "paused":
@@ -179,7 +179,7 @@ class RunLedger:
             })
         return rows
 
-    def project_detail_view(self, run_id: str, manifest: RunbookManifest, *, raw_l2: bool = False) -> dict[str, Any]:
+    def project_detail_view(self, run_id: str, manifest: ReflexManifest, *, raw_l2: bool = False) -> dict[str, Any]:
         rec = self._runs[run_id]
         return {
             "run_id": rec.run_id,

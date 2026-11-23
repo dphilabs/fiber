@@ -1,33 +1,35 @@
-# fiber.node.runbook.trigger.base
-"""
-[Unified Tri-Modal Trigger Core & Runtime: Manual | Cron | Event]
-Consolidates `TriggerSpec`, `TriggerEnvelope`, `TriggerGate`, and `TriggerRuntime`
-on top of `reflexor.workflow.trigger.cron` with zero circular imports to `viewport`.
-"""
+# fiber.node.runbook.runtime.trigger
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 import hashlib
 import json
 import time
-from typing import TYPE_CHECKING, Any, Literal, Protocol
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from typing import TYPE_CHECKING, Any, Protocol
 
-from fiber.node.runbook.trigger.cron import compile_cron
-from xphi.arch.contract.reflex.fsm import extract_json_path
+from xphi.arch.reflex.fsm import extract_json_path
+from xphi.node.runtime.trigger.spec import TriggerKind, TriggerSpec
+from xphi.node.runtime.trigger.cron import compile_cron
 
 if TYPE_CHECKING:
-    from fiber.node.runbook.viewport.projector import ViewportSnapshot
-
-TriggerKind = Literal["manual", "cron", "event"]
-MissedPolicy = Literal["skip", "run_once"]
+    from fiber.node.runbook.runtime.projector import ViewportSnapshot
 
 
 class TriggerTargetWorkspace(Protocol):
-    """Structural protocol avoiding circular runtime imports with `viewport.workspace`."""
+    """Structural protocol for `ViewportWorkspace` bound to `TriggerRuntime`."""
 
     @property
     def session(self) -> Any: ...
+
+    @property
+    def trigger_gate(self) -> TriggerGate: ...
+
+    def test_dry_run(
+        self,
+        flow_name: str,
+        *,
+        initial_context: dict[str, Any] | None = None,
+    ) -> tuple[ViewportSnapshot, dict[str, Any]]: ...
 
     def fire_trigger(
         self,
@@ -42,89 +44,8 @@ class TriggerTargetWorkspace(Protocol):
     ) -> tuple[ViewportSnapshot, dict[str, Any]] | None: ...
 
 
-# =====================================================================
-# 1. Trigger Specification & Normalized Execution Envelope
-# =====================================================================
-
-
-@dataclass(frozen=True, slots=True)
-class TriggerSpec:
-    kind: TriggerKind = "manual"
-    # Cron fields
-    cron_expr: str | None = None
-    tz: str = "UTC"
-    missed_policy: MissedPolicy = "skip"
-    grace_sec: int = 300
-    # Event fields (Push Webhook & Pull Polling)
-    source: str | None = None
-    dedup_path: str | None = None
-    map_in: dict[str, str] = field(default_factory=dict)
-
-    def validate(self, flow_name: str = "") -> None:
-        prefix = f"[{flow_name}] " if flow_name else ""
-        if self.kind not in ("manual", "cron", "event"):
-            raise ValueError(f"{prefix}Unsupported trigger kind: {self.kind!r}")
-
-        if self.kind == "cron":
-            if not self.cron_expr or not self.cron_expr.strip():
-                raise ValueError(f"{prefix}Cron trigger requires a non-empty 'cron_expr'.")
-            try:
-                compile_cron(self.cron_expr)
-            except ValueError as exc:
-                raise ValueError(f"{prefix}Invalid cron_expr {self.cron_expr!r}: {exc}") from exc
-
-            if self.tz and self.tz.upper() != "UTC":
-                try:
-                    ZoneInfo(self.tz)
-                except (ZoneInfoNotFoundError, KeyError) as exc:
-                    raise ValueError(f"{prefix}Unknown IANA timezone {self.tz!r}.") from exc
-
-            if self.grace_sec < 0:
-                raise ValueError(f"{prefix}Cron 'grace_sec' must be >= 0, got {self.grace_sec}.")
-
-        elif self.kind == "event":
-            if not (self.source and self.source.strip()):
-                raise ValueError(f"{prefix}Event trigger requires a non-empty 'source' identifier.")
-
-    def to_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"kind": self.kind}
-        if self.kind == "cron":
-            out.update({
-                "cron_expr": self.cron_expr,
-                "tz": self.tz,
-                "missed_policy": self.missed_policy,
-                "grace_sec": self.grace_sec,
-            })
-        elif self.kind == "event":
-            out.update({
-                "source": self.source,
-                "dedup_path": self.dedup_path,
-                "map_in": dict(self.map_in),
-            })
-        return out
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> TriggerSpec:
-        policy = data.get("missed_policy", "skip")
-        return cls(
-            kind=data.get("kind", "manual"),
-            cron_expr=data.get("cron_expr"),
-            tz=data.get("tz", "UTC"),
-            missed_policy="run_once" if policy == "run_once" else "skip",
-            grace_sec=int(data.get("grace_sec", 300)),
-            source=data.get("source"),
-            dedup_path=data.get("dedup_path"),
-            map_in=dict(data.get("map_in") or {}),
-        )
-
-
-DEFAULT_TRIGGERS: tuple[TriggerSpec, ...] = (TriggerSpec(kind="manual"),)
-
-
 @dataclass(frozen=True, slots=True)
 class TriggerEnvelope:
-    """Normalized execution envelope emitted when a trigger passes validation and deduplication."""
-
     flow_name: str
     kind: TriggerKind
     dedup_key: str
@@ -132,16 +53,8 @@ class TriggerEnvelope:
     triggered_at: float = field(default_factory=time.time)
 
 
-# =====================================================================
-# 2. Stateful Idempotency & Context Projection Gate
-# =====================================================================
-
-
 class TriggerGate:
-    """
-    Stateful idempotency & normalization gate for Manual, Cron, and Event triggers.
-    Prevents cron startup stampedes, multi-worker duplicates, and polling race loops.
-    """
+    """Stateful idempotency & normalization gate for Manual, Cron, and Event triggers."""
 
     def __init__(self, seen_keys: set[str] | list[str] | None = None, *, max_history: int = 1000) -> None:
         self._seen: dict[str, float] = {str(k): time.time() for k in (seen_keys or ())}
@@ -174,10 +87,6 @@ class TriggerGate:
         now_epoch: int | None = None,
         dedup_override: str | None = None,
     ) -> TriggerEnvelope | None:
-        """
-        Normalize raw trigger input into a `TriggerEnvelope`.
-        Returns `None` if outside cron grace window or blocked as a duplicate execution.
-        """
         raw = dict(payload or {})
         now = int(now_epoch if now_epoch is not None else time.time())
 
@@ -199,7 +108,7 @@ class TriggerGate:
             dedup_key = dedup_override or f"cron:{flow_name}:{expr_tag}:{slot}"
             init_ctx = {**raw, "_cron_slot": slot, "_tz": spec.tz}
 
-        elif spec.kind == "event":
+        elif spec.kind in ("event", "poll"):
             ev_id = extract_json_path(raw, spec.dedup_path) if spec.dedup_path else None
             if ev_id is None:
                 canonical = json.dumps(raw, sort_keys=True, default=str).encode("utf-8")
@@ -224,17 +133,8 @@ class TriggerGate:
         )
 
 
-# =====================================================================
-# 3. Active Cron Scheduler & Event Fan-Out Ingress Runtime
-# =====================================================================
-
-
 class TriggerRuntime:
-    """
-    High-level trigger ingress & scheduler engine bound to `ViewportWorkspace`.
-    Uses `compile_cron(...).latest_slot_at(...)` for exact slot matching and grace-window recovery,
-    and fans out inbound events by `source` across all published workflows.
-    """
+    """High-level trigger ingress & scheduler engine bound to `ViewportWorkspace`."""
 
     def __init__(self, workspace: TriggerTargetWorkspace) -> None:
         self.workspace = workspace
@@ -245,7 +145,6 @@ class TriggerRuntime:
         return sorted(self.workspace.session.published_flows)
 
     def resolve_cron_slot(self, spec: TriggerSpec, now_epoch: int) -> int | None:
-        """Resolve the matching minute-aligned cron slot at `now_epoch` respecting `missed_policy`."""
         if spec.kind != "cron" or not spec.cron_expr:
             return None
         compiled = compile_cron(spec.cron_expr)
@@ -264,10 +163,6 @@ class TriggerRuntime:
         dry_run: bool = False,
         include_drafts: bool = False,
     ) -> list[tuple[str, ViewportSnapshot, dict[str, Any]]]:
-        """
-        Scan registered `cron` triggers at `now_epoch` and fire matching flows idempotently.
-        Recovers missed ticks within `grace_sec` when `missed_policy == 'run_once'`.
-        """
         ts = int(now_epoch if now_epoch is not None else time.time())
         executed: list[tuple[str, ViewportSnapshot, dict[str, Any]]] = []
 
@@ -277,7 +172,6 @@ class TriggerRuntime:
                 if slot_epoch is None:
                     continue
 
-                # Execute directly via workspace using the matched spec's slot
                 env = self.workspace.trigger_gate.prepare(
                     flow_name,
                     spec,
@@ -304,10 +198,6 @@ class TriggerRuntime:
         dry_run: bool = False,
         include_drafts: bool = False,
     ) -> list[tuple[str, ViewportSnapshot, dict[str, Any]]]:
-        """
-        Fan-out an inbound event from `source` (e.g. `'github.push'`, `'slack.command'`)
-        to all subscribed workflows, enforcing per-flow deduplication and `map_in` projection.
-        """
         executed: list[tuple[str, ViewportSnapshot, dict[str, Any]]] = []
 
         for flow_name in self._active_flow_names(include_drafts=include_drafts):

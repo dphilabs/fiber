@@ -14,7 +14,7 @@ import subprocess
 from typing import Any
 import urllib.request
 
-from xphi.arch.contract.reflex.script import (
+from xphi.arch.reflex.script import (
     has_uv,
     link_editable_package,
     run_unit_script,

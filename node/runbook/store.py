@@ -8,20 +8,21 @@ from pathlib import Path
 import time
 from typing import Any
 
-from xphi.arch.contract.reflex.flow import Shape
-from xphi.arch.contract.registry.flow import FlowDSL
-from xphi.arch.xor.fsm.parser import verify_asl
+from xphi.arch.reflex.flow import Shape
+from xphi.arch.reflex.compiler import compile_to_asl
+from xphi.arch.xor.asl.evaluator import verify_asl
+from xphi.node.runtime.reflex.manifest import ManifestStore, OutputPolicy, OutputWidget, ReflexManifest
+from xphi.node.runtime.trigger.scheduler import SchedulePlanner, ScheduleVerdict
+from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerSpec
+from xphi.arch.model.content.artifact import ArtifactStore
+from xphi.arch.model.content.intake import ContentSchema, SlotVerifier
 
-from fiber.node.runbook.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from fiber.node.runbook.simulator import DryMode, DryRunSimulator
 from fiber.node.runbook.stepper import emit_flow_dsl, inspect_flow
-from fiber.node.runbook.viewport.runtime import ViewportRuntime
-
-from fiber.node.runbook.manifest import ManifestStore, OutputPolicy, RunbookManifest
-from fiber.node.runbook.planner import SchedulePlanner, ScheduleVerdict
-from fiber.node.runbook.inspector import DryMode, SourceInspector
+from fiber.node.runbook.runtime.viewport import ViewportRuntime
 
 
-def _default_widget_for_shape(shape: Shape) -> str:
+def _default_widget_for_shape(shape: Shape) -> OutputWidget:
     if shape.is_list:
         return "table"
     if shape.base == "num":
@@ -37,7 +38,7 @@ class PinnedRelease:
     flow_dsl: str
     compiled_asl: dict[str, Any]
     unit_shas: dict[str, str]
-    manifest: RunbookManifest
+    manifest: ReflexManifest
     triggers: tuple[TriggerSpec, ...] = DEFAULT_TRIGGERS
     fixture_id: str | None = None
 
@@ -48,12 +49,9 @@ class PinnedRelease:
             "pinned_at": self.pinned_at,
             "flow_dsl": self.flow_dsl,
             "compiled_asl": self.compiled_asl,
-            "unit_shas": self.unit_shas,
+            "unit_shas": dict(self.unit_shas),
             "manifest": self.manifest.to_dict(),
-            "triggers": [
-                t.to_dict() if hasattr(t, "to_dict") else {"kind": getattr(t, "kind", "manual")}
-                for t in self.triggers
-            ],
+            "triggers": [t.to_dict() for t in self.triggers],
             "fixture_id": self.fixture_id,
         }
 
@@ -61,9 +59,9 @@ class PinnedRelease:
     def from_dict(cls, raw: dict[str, Any]) -> PinnedRelease:
         raw_trigs = raw.get("triggers") or [{"kind": "manual"}]
         triggers = tuple(
-            TriggerSpec.from_dict(t) if hasattr(TriggerSpec, "from_dict") else DEFAULT_TRIGGERS[0]
+            TriggerSpec.from_raw(t)
             for t in raw_trigs
-            if isinstance(t, dict)
+            if isinstance(t, (dict, str, TriggerSpec))
         )
         return cls(
             flow_name=str(raw["flow_name"]),
@@ -72,7 +70,7 @@ class PinnedRelease:
             flow_dsl=str(raw["flow_dsl"]),
             compiled_asl=dict(raw.get("compiled_asl") or {}),
             unit_shas=dict(raw.get("unit_shas") or {}),
-            manifest=RunbookManifest.from_dict(raw["manifest"]),
+            manifest=ReflexManifest.from_dict(raw["manifest"]),
             triggers=triggers or DEFAULT_TRIGGERS,
             fixture_id=raw.get("fixture_id"),
         )
@@ -93,18 +91,29 @@ class ReleaseStudio:
         root_dir: Path,
         *,
         viewport: ViewportRuntime | None = None,
-        sources: SourceInspector | None = None,
+        artifacts: ArtifactStore | None = None,
+        intake: SlotVerifier | None = None,
+        simulator: DryRunSimulator | None = None,
+        schemas: dict[str, ContentSchema] | None = None,
     ) -> None:
         self.root_dir = root_dir
         self.releases_dir = root_dir / "releases"
         self.viewport = viewport or ViewportRuntime()
         self.manifests = ManifestStore(root_dir / "drafts")
         self.planner = SchedulePlanner()
-        self.sources = sources or SourceInspector(root_dir / "io")
+
+        io_dir = root_dir / "io"
+        self.artifacts = artifacts or ArtifactStore(io_dir)
+        self.intake = intake or SlotVerifier(self.artifacts, schemas=schemas)
+        self.simulator = simulator or DryRunSimulator(self.artifacts, fixture_dir=io_dir)
         self._pins: dict[str, list[PinnedRelease]] = {}
 
         if self.releases_dir.is_dir():
             self._reload_pins_from_disk()
+
+    # =====================================================================
+    # 1. Disk Persistence (`releases/<flow>/vNNNN.json`)
+    # =====================================================================
 
     def _reload_pins_from_disk(self) -> None:
         for flow_dir in sorted(self.releases_dir.iterdir()):
@@ -117,13 +126,14 @@ class ReleaseStudio:
                 if rel.flow_name not in self.viewport.registry.flows:
                     try:
                         self.viewport.registry.register_flow(rel.flow_name, rel.flow_dsl)
-                    except Exception:
+                    except ValueError:
                         pass
             if versions:
                 versions.sort(key=lambda r: r.version)
                 fname = versions[-1].flow_name
                 self._pins[fname] = versions
                 self.viewport.published_flows.add(fname)
+                self.viewport.flow_triggers[fname] = versions[-1].triggers
 
     def _save_pin_disk(self, rel: PinnedRelease) -> Path:
         safe_name = rel.flow_name.replace("/", "__")
@@ -132,7 +142,17 @@ class ReleaseStudio:
         target.write_text(json.dumps(rel.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return target
 
-    def _ensure_declared_outputs(self, flow_name: str, manifest: RunbookManifest) -> RunbookManifest:
+    # =====================================================================
+    # 2. Draft Manifest, Schema & Dry-Run Orchestration
+    # =====================================================================
+
+    def register_schema(self, schema: ContentSchema) -> None:
+        self.intake.register_schema(schema)
+
+    def configure_manifest(self, flow_name: str, patch_ops: dict[str, Any]) -> ReflexManifest:
+        return self.manifests.patch(flow_name, patch_ops)
+
+    def _ensure_declared_outputs(self, flow_name: str, manifest: ReflexManifest) -> ReflexManifest:
         """플로우 계약의 out(...) 키가 manifest.outputs에 비어 있으면 Shape 기반 기본 위젯으로 보강."""
         flow = self.viewport.registry.flows.get(flow_name)
         if flow is None or not flow.out_keys:
@@ -146,14 +166,11 @@ class ReleaseStudio:
             flow_name,
             {
                 "outputs": {
-                    k: OutputPolicy(key=k, widget=_default_widget_for_shape(flow.out_shape(k))).to_dict()  # type: ignore[arg-type]
+                    k: OutputPolicy(key=k, widget=_default_widget_for_shape(flow.out_shape(k))).to_dict()
                     for k in missing_outs
                 }
             },
         )
-
-    def configure_manifest(self, flow_name: str, patch_ops: dict[str, Any]) -> RunbookManifest:
-        return self.manifests.patch(flow_name, patch_ops)
 
     def dryrun(
         self,
@@ -163,15 +180,18 @@ class ReleaseStudio:
         mode: DryMode = "hybrid",
         fixture_id: str | None = None,
     ) -> dict[str, Any]:
+        if flow_name not in self.viewport.registry.flows:
+            raise KeyError(f"Flow '{flow_name}' not found in registry.")
+
         flow = self.viewport.registry.flows[flow_name]
         manifest, _, _ = self.manifests.inspect(flow_name, flow.in_reqs)
         manifest = self._ensure_declared_outputs(flow_name, manifest)
 
-        resolved_ctx, io_refs, ok, warnings = self.sources.verify(sample_inputs, manifest)
+        resolved_ctx, io_refs, ok, warnings = self.intake.verify(sample_inputs, manifest)
         if not ok:
             raise ValueError(f"Sample input contract failed for '{flow_name}': {warnings}")
 
-        snap, preview_out, score = self.sources.simulate(
+        snap, preview_out, score = self.simulator.simulate(
             self.viewport,
             flow_name,
             resolved_ctx,
@@ -181,11 +201,15 @@ class ReleaseStudio:
         return {
             "snapshot": snap,
             "preview_out": preview_out,
-            "step_summaries": dict(self.sources.last_step_summaries),
+            "step_summaries": dict(self.simulator.last_step_summaries),
             "io_refs": io_refs,
             "warnings": warnings,
             "score": score,
         }
+
+    # =====================================================================
+    # 3. Release Pinning, Lookup & Staleness Checks
+    # =====================================================================
 
     def pin(
         self,
@@ -206,8 +230,12 @@ class ReleaseStudio:
                 f"open_accounts={snap.open_account_slots}, open_cfg={snap.open_cfg_slots}"
             )
 
+        inspection = inspect_flow(self.viewport.registry, flow_name)
+        if inspection.errors:
+            raise ValueError(f"Static flow inspection failed for '{flow_name}': {inspection.errors}")
+
         flow = self.viewport.registry.flows[flow_name]
-        step_names = tuple(s.name for s in flow.steps)
+        step_names = tuple(n for s in flow.steps for n in (s.name, s.heal_target) if n)
         manifest, slots_ok, mile_ok = self.manifests.inspect(
             flow_name, flow.in_reqs, valid_step_names=step_names
         )
@@ -217,17 +245,16 @@ class ReleaseStudio:
             )
         manifest = self._ensure_declared_outputs(flow_name, manifest)
 
-        asl = FlowDSL.compile_to_asl(flow_name, self.viewport.registry)
+        asl = compile_to_asl(flow_name, self.viewport.registry)
         if asl_errors := verify_asl(asl):
             raise ValueError(f"ASL verification failed: {asl_errors}")
 
-        inspection = inspect_flow(self.viewport.registry, flow_name)
         unit_shas = self._collect_unit_shas(flow_name)
         triggers = self.viewport.flow_triggers.get(flow_name, DEFAULT_TRIGGERS)
 
         history = self._pins.setdefault(flow_name, [])
-        next_ver = (history[-1].version + 1) if history else 1
         prev = history[-1] if history else None
+        next_ver = (prev.version + 1) if prev else 1
 
         rel = PinnedRelease(
             flow_name=flow_name,
@@ -274,12 +301,13 @@ class ReleaseStudio:
         if flow is None:
             return {}
         shas: dict[str, str] = {}
-        for step in flow.steps:
-            unit = self.viewport.registry.units.get(step.name)
-            if unit is None:
+        target_names = (n for s in flow.steps for n in (s.name, s.heal_target) if n)
+        for unit_name in target_names:
+            unit = self.viewport.registry.units.get(unit_name)
+            if unit is None or unit_name in shas:
                 continue
             if hasattr(self.viewport.indexer, "unit_sha"):
-                shas[step.name] = str(self.viewport.indexer.unit_sha(step.name))
+                shas[unit_name] = str(self.viewport.indexer.unit_sha(unit_name))
             else:
                 spec_sig = json.dumps(
                     {
@@ -291,7 +319,7 @@ class ReleaseStudio:
                     },
                     sort_keys=True,
                 )
-                shas[step.name] = hashlib.sha256(spec_sig.encode("utf-8")).hexdigest()[:12]
+                shas[unit_name] = hashlib.sha256(spec_sig.encode("utf-8")).hexdigest()[:12]
         return shas
 
     @staticmethod

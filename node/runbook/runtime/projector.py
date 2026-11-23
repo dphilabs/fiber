@@ -1,4 +1,4 @@
-# fiber.node.runbook.viewport.projector
+# fiber.node.runbook.runtime.projector
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,10 +6,10 @@ import re
 from typing import Any
 
 from xphi.arch.contract.registry.flow import FlowRegistry
-from xphi.arch.contract.reflex.auth import missing_credentials, resolve_accounts
-from xphi.arch.contract.reflex.flow import FlowContract, StepSpec, UnitContract
+from xphi.arch.reflex.auth import missing_credentials, resolve_accounts
+from xphi.arch.reflex.flow import FlowContract, StepSpec, UnitContract
 
-from fiber.node.runbook.trigger.base import DEFAULT_TRIGGERS, TriggerSpec
+from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerSpec
 from fiber.node.runbook.stepper import (
     block_auth,
     emit_flow_dsl,
