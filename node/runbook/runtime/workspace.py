@@ -1,4 +1,4 @@
-# fiber.node.runbook.viewport.workspace
+# fiber.node.runbook.runtime.workspace
 from __future__ import annotations
 
 import json
@@ -6,18 +6,14 @@ from pathlib import Path
 import time
 from typing import Any
 
-from fiber.node.runbook.trigger.base import (
-    DEFAULT_TRIGGERS,
-    TriggerGate,
-    TriggerKind,
-    TriggerSpec,
-)
-from fiber.node.runbook.stepper import emit_flow_dsl, emit_unit_dsl
-from fiber.node.runbook.viewport.projector import SynthesisReport, ViewportSnapshot
-from fiber.node.runbook.viewport.runtime import ViewportRuntime
-
-from xphi.arch.contract.reflex.flow import Shape, UnitContract
+from xphi.arch.reflex.flow import Shape, UnitContract
 from xphi.node.space.bind.resolver import resolve_path
+from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerKind, TriggerSpec
+
+from fiber.node.runbook.stepper import emit_flow_dsl, emit_unit_dsl
+from fiber.node.runbook.runtime.trigger import TriggerGate, TriggerRuntime
+from fiber.node.runbook.runtime.projector import SynthesisReport, ViewportSnapshot
+from fiber.node.runbook.runtime.viewport import ViewportRuntime
 
 DEFAULT_RUNBOOK_FILE = resolve_path("anchor") / "runbook.json"
 _WRITE_KEYWORDS = (
@@ -51,6 +47,7 @@ class ViewportRunbook:
         self.session = session or ViewportRuntime()
         self.storage_path = Path(storage_path).resolve()
         self.trigger_gate = TriggerGate()
+        self.trigger_runtime = TriggerRuntime(self)
 
         if auto_load and self.storage_path.is_file():
             self.load()
@@ -105,8 +102,8 @@ class ViewportRunbook:
 
             raw_triggers = meta.get("triggers") or [{"kind": "manual"}]
             self.session.flow_triggers[flow_name] = tuple(
-                TriggerSpec.from_dict(t) for t in raw_triggers if isinstance(t, dict)
-            )
+                TriggerSpec.from_raw(t) for t in raw_triggers if isinstance(t, (dict, str))
+            ) or DEFAULT_TRIGGERS
 
         self.trigger_gate.load_keys(raw.get("seen_trigger_keys") or [])
 
@@ -114,13 +111,13 @@ class ViewportRunbook:
     # 2. Trigger Configuration (`set_triggers` / `configure_trigger`)
     # =====================================================================
 
-    def set_triggers(self, flow_name: str, triggers: list[TriggerSpec | dict[str, Any]]) -> ViewportSnapshot:
+    def set_triggers(self, flow_name: str, triggers: list[TriggerSpec | dict[str, Any] | str]) -> ViewportSnapshot:
         if flow_name not in self.session.registry.flows:
             raise KeyError(f"Flow '{flow_name}' not found in registry.")
 
         parsed: list[TriggerSpec] = []
-        for t in triggers:
-            spec = TriggerSpec.from_dict(t) if isinstance(t, dict) else t
+        for raw_trig in triggers:
+            spec = TriggerSpec.from_raw(raw_trig)
             spec.validate(flow_name)
             parsed.append(spec)
 
@@ -232,6 +229,25 @@ class ViewportRunbook:
         if dry_run:
             return self.test_dry_run(flow_name, initial_context=env.initial_context)
         return self.session.execute_with_trace(flow_name, initial_context=env.initial_context)
+
+    def tick_cron(
+        self,
+        now_epoch: int | None = None,
+        *,
+        dry_run: bool = False,
+        include_drafts: bool = False,
+    ) -> list[tuple[str, ViewportSnapshot, dict[str, Any]]]:
+        return self.trigger_runtime.tick_cron(now_epoch, dry_run=dry_run, include_drafts=include_drafts)
+
+    def ingest_event(
+        self,
+        source: str,
+        payload: dict[str, Any],
+        *,
+        dry_run: bool = False,
+        include_drafts: bool = False,
+    ) -> list[tuple[str, ViewportSnapshot, dict[str, Any]]]:
+        return self.trigger_runtime.ingest_event(source, payload, dry_run=dry_run, include_drafts=include_drafts)
 
     # =====================================================================
     # 4. Publication Gate (`publish` / `unpublish`) & Session Passthrough

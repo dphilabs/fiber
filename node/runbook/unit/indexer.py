@@ -3,23 +3,26 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
-import sys
 from pathlib import Path
+import sys
 from typing import Any
 
-from fiber.node.runbook.unit.loader import UnitsLoader
-from xphi.arch.contract.reflex.flow import UnitContract
-from xphi.arch.contract.reflex.multiflow import (
+from xphi.arch.reflex.flow import (
+    UnitContract,
     collect_header_flows,
     expand_entries,
     is_flow_meta,
 )
+from xphi.arch.reflex.grammar.header import parse_unit_header_meta, prefix_target_clause
+from xphi.arch.reflex.script import has_pep723
 from xphi.arch.contract.registry.flow import FlowRegistry
 
-_UNIT_TAG_RE = re.compile(r"@unit:\s*([A-Za-z0-9_]+)")
-_DESC_TAG_RE = re.compile(r"@desc:\s*(.+)")
-_SIDE_EFFECT_TAG_RE = re.compile(r"@side_effect:\s*([A-Za-z0-9_]+)")
+from fiber.node.runbook.stepper import emit_unit_dsl
+from fiber.node.runbook.unit.loader import UnitsLoader
+
+_HEADER_SCAN_BYTES = 8192
+_SKIP_SCAN_DIRS = frozenset({"__pycache__", "fixtures", "docs", "io", "build", "dist"})
+_SKIP_FLOW_JSONS = frozenset({"scenarios.json"})
 
 
 class UnitsIndexer:
@@ -30,21 +33,23 @@ class UnitsIndexer:
 
     @staticmethod
     def parse_script_header(raw_bytes: bytes, rel_path: str = "", ref_prefix: str = "") -> dict[str, Any] | None:
-        """스크립트 상단 주석(@unit, @flow/@flow.<name>, @desc)에서 계약 원본을 파싱한다."""
-        head = raw_bytes[:2048].decode("utf-8", errors="replace")
-        rewrite = (lambda s: re.sub(r"\b(py|exec)\((?!@)", rf"\1({ref_prefix}@", s)) if ref_prefix else (lambda s: s)
-        u_match, flow_meta = _UNIT_TAG_RE.search(head), collect_header_flows(head, rewrite)
-        if not (u_match and flow_meta):
+        """스크립트 상단 주석(@unit, @flow/@flow.<name>, @desc, @side_effect)에서 계약 원본을 파싱한다."""
+        head = raw_bytes[:_HEADER_SCAN_BYTES].decode("utf-8", errors="replace")
+        meta = parse_unit_header_meta(head)
+        if meta is None:
             return None
-        u_name = u_match.group(1).strip()
-        d_match = _DESC_TAG_RE.search(head)
-        s_match = _SIDE_EFFECT_TAG_RE.search(head)
+
+        rewrite = (lambda s: prefix_target_clause(s, ref_prefix)) if ref_prefix else (lambda s: s)
+        flow_meta = collect_header_flows(head, rewrite)
+        if not flow_meta:
+            return None
+
         return {
-            "unit": u_name,
+            "unit": meta.unit,
             **flow_meta,
-            "desc": d_match.group(1).strip() if d_match else f"Unit {u_name} ({rel_path})",
-            "isolated": "# /// script" in head[:512],
-            "side_effect": s_match.group(1).strip() if s_match else None,
+            "desc": meta.desc or f"Unit {meta.unit} ({rel_path})",
+            "isolated": has_pep723(head),
+            "side_effect": meta.side_effect,
         }
 
     @classmethod
@@ -54,44 +59,63 @@ class UnitsIndexer:
         units_manifest: dict[str, dict[str, Any]] = {}
         flows_manifest: dict[str, str] = {}
 
-        # 1. Scan executable `.py` and `.sh` unit scripts (SSOT: path + sha256 locator only)
+        # 1. Scan executable `.py` and `.sh`/`.bash` unit scripts (SSOT: path + sha256 locator only)
         for path in sorted(root.rglob("*")):
-            if not path.is_file() or any(p.startswith(".") for p in path.relative_to(root).parts):
+            if not path.is_file():
+                continue
+            rel_parts = path.relative_to(root).parts
+            if any(p.startswith(".") or p in _SKIP_SCAN_DIRS for p in rel_parts):
+                continue
+            if rel_parts[:2] == ("units", "adapters"):
                 continue
             if path.suffix not in (".py", ".sh", ".bash") or path.name == "__init__.py":
                 continue
-            rel_path = path.relative_to(root).as_posix()
-            if rel_path == cls.INDEX_FILENAME:
-                continue
 
+            rel_path = path.relative_to(root).as_posix()
             raw_bytes = path.read_bytes()
-            hdr = cls.parse_script_header(raw_bytes, rel_path)
+            hdr = cls.parse_script_header(raw_bytes, rel_path, ref_prefix=ref_prefix)
             if not hdr:
                 continue
+
+            u_name = hdr["unit"]
+            if u_name in units_manifest:
+                prev = units_manifest[u_name].get("path") or units_manifest[u_name].get("source")
+                raise ValueError(f"Duplicate @unit '{u_name}' declared in '{rel_path}' and '{prev}'.")
 
             entry: dict[str, Any] = {"path": rel_path, "sha256": hashlib.sha256(raw_bytes).hexdigest()}
             if path.suffix == ".py":
                 entry["isolated"] = hdr["isolated"]
             if hdr["side_effect"]:
                 entry["side_effect"] = hdr["side_effect"]
-            units_manifest[hdr["unit"]] = entry
+            units_manifest[u_name] = entry
 
-        # 2. Scan `flow/*.json` for flow file locations & script-less delegated units only
+        # 2. Recursively scan `flow/**/*.json` for domain flow specs & delegated units
         flow_dir = root / "flow"
         if flow_dir.is_dir():
-            for spec_path in sorted(flow_dir.glob("*.json")):
-                if spec_path.name == "scenarios.json":
+            for spec_path in sorted(flow_dir.rglob("*.json")):
+                rel_flow_parts = spec_path.relative_to(flow_dir).parts
+                if any(p.startswith(".") for p in rel_flow_parts) or spec_path.name in _SKIP_FLOW_JSONS:
                     continue
+
+                rel_spec = spec_path.relative_to(root).as_posix()
                 try:
                     spec_data = json.loads(spec_path.read_text(encoding="utf-8"))
-                except Exception:
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"Invalid JSON in flow spec '{rel_spec}': {exc}") from exc
+
+                if not isinstance(spec_data, dict):
                     continue
-                rel_spec = spec_path.relative_to(root).as_posix()
+
                 for u_name, u_meta in (spec_data.get("units") or {}).items():
                     if u_name not in units_manifest and isinstance(u_meta, dict) and is_flow_meta(u_meta):
                         units_manifest[u_name] = {"source": rel_spec}
+
                 for f_name, f_meta in (spec_data.get("flows") or {}).items():
-                    if isinstance(f_meta, dict) and "flow" in f_meta:
+                    if is_flow_meta(f_meta):
+                        if f_name in flows_manifest:
+                            raise ValueError(
+                                f"Duplicate flow '{f_name}' in '{rel_spec}' and '{flows_manifest[f_name]}'."
+                            )
                         flows_manifest[f_name] = rel_spec
 
         result: dict[str, Any] = {"version": "1.0", "units": units_manifest}
@@ -167,13 +191,14 @@ class UnitsIndexer:
                         registry.register_unit(key, spec, desc)
                         count += 1
 
-        if hasattr(registry, "register_flow"):
-            for f_name, f_entry in idx.get("flows", {}).items():
-                rel_spec = f_entry if isinstance(f_entry, str) else f_entry.get("source", "")
-                if rel_spec:
-                    f_meta = (_read_spec(rel_spec).get("flows") or {}).get(f_name)
-                    if isinstance(f_meta, dict) and "flow" in f_meta:
-                        registry.register_flow(f_name, f_meta["flow"], f_meta.get("desc", ""))
+        for f_name, f_entry in idx.get("flows", {}).items():
+            rel_spec = f_entry if isinstance(f_entry, str) else f_entry.get("source", "")
+            if not rel_spec:
+                continue
+            f_meta = (_read_spec(rel_spec).get("flows") or {}).get(f_name)
+            if is_flow_meta(f_meta):
+                for key, spec, desc in expand_entries(f_name, f_meta):
+                    registry.register_flow(key, spec, desc)
         return count
 
     @staticmethod
@@ -199,12 +224,13 @@ class UnitsIndexer:
             if req_out_set is not None and not (req_out_set <= set(u.out_keys)):
                 continue
 
-            haystack = f"{u.name} {u.target} {' '.join(u.in_reqs)} {' '.join(u.out_keys)} {u.desc}".lower()
+            in_all = (*u.in_reqs, *u.in_optional, *u.in_defaults)
+            haystack = f"{u.name} {u.target} {' '.join(in_all)} {' '.join(u.out_keys)} {u.desc}".lower()
             if q_tokens and not all(tok in haystack for tok in q_tokens):
                 continue
 
             score = sum(3 for tok in q_tokens if tok in u.name.lower()) + sum(
-                2 for tok in q_tokens if tok in u.out_keys or tok in u.in_reqs
+                2 for tok in q_tokens if tok in u.out_keys or tok in in_all
             )
             scored.append((score, u))
 
@@ -235,10 +261,7 @@ class UnitsIndexer:
 
         lines = [f"[CATALOG MATCHES ({len(matches)})]"]
         for u in matches:
-            in_items = list(u.in_reqs) + [f"{k}={v!r}" for k, v in u.in_defaults.items()]
-            in_str = f"in({', '.join(in_items)}) -> " if in_items else ""
-            out_str = f" -> out({', '.join(u.out_keys)})" if u.out_keys else ""
-            lines.append(f"  - {u.name}: {in_str}{u.scheme}({u.target}){out_str}  # {u.desc}")
+            lines.append(f"  - {u.name}: {emit_unit_dsl(u)}  # {u.desc}")
         return "\n".join(lines)
 
 

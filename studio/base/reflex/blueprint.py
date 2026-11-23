@@ -9,8 +9,8 @@ from xphi.node.runtime.reflex.engine import FlowEngine
 from fiber.node.runbook.unit.indexer import UnitsIndexer
 from fiber.node.runbook.unit.loader import UnitsLoader
 from fiber.node.runbook.stepper import emit_flow_dsl, emit_unit_dsl, inspect_flow
-from fiber.node.runbook.viewport.runtime import ViewportRuntime
-from xphi.arch.contract.reflex.flow import (
+from fiber.node.runbook.runtime.viewport import ViewportRuntime
+from xphi.arch.reflex.flow import (
     CompiledChoice,
     CompiledTask,
     CompiledTerminal,
@@ -18,7 +18,7 @@ from xphi.arch.contract.reflex.flow import (
     Shape,
     UnitContract,
 )
-from xphi.arch.contract.registry.flow import FlowDSL
+from xphi.arch.reflex.compiler import compile_to_asl
 
 
 def _mock_val_for_shape(shape: Shape) -> Any:
@@ -35,7 +35,6 @@ def _mock_val_for_shape(shape: Shape) -> Any:
 
 def _task_steps(flow: FlowContract) -> list[str]:
     return [s.name for s in flow.steps if s.gate_expr is None]
-
 
 class BlueprintAnalyzer:
     def __init__(self, repo_arg: str | Path = "reflexor", spec_arg: str | Path = "", **_: Any) -> None:
@@ -133,7 +132,7 @@ class BlueprintAnalyzer:
             notes = list(ins.errors)
             if not notes:
                 try:
-                    FlowDSL.compile_to_asl(fname, reg)
+                    compile_to_asl(fname, reg)
                 except Exception as exc:
                     notes.append(str(exc))
 
