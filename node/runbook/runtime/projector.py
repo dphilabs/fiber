@@ -234,7 +234,7 @@ class ViewportProjector:
                 edges.append(EdgeWiringView(source=step.name, target=step.heal_target, kind="heal_catch", bound_keys=heal_inputs))
                 ret_target = step.name if step.heal_mode == "retry" else next_id
                 edges.append(EdgeWiringView(source=step.heal_target, target=ret_target, kind="heal_return", bound_keys=h_c.out_keys))
-                if step.heal_mode == "fallback":
+                if step.heal_mode == "alt":
                     ctx_pool.update(h_c.out_keys)
 
             ctx_pool.update(c.out_keys)
