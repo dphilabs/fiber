@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 _GATE_KEYWORDS = frozenset({"and", "or", "not", "in", "is", "True", "False", "None", "true", "false", "null"})
 
+
 # Canonical DSL Emitter (Contract Object -> DSL String)
 def _format_arg_items(
     reqs: tuple[str, ...],
@@ -76,7 +77,7 @@ def emit_step_dsl(step: StepSpec) -> str:
     if step.remap:
         core = f"{core} => ({', '.join(f'{new_k}={old_k}' for new_k, old_k in step.remap.items())})"
     if step.heal_target:
-        op = "!>" if step.heal_mode == "fallback" else "!"
+        op = "~>" if step.heal_mode == "alt" else "!"
         core = f"{core}({op}{step.heal_target})"
     return f"each({step.each_item} in {step.each_over}: {core})" if step.is_each else core
 
@@ -127,6 +128,32 @@ def _record_compat(rep: FlowInspection, src_shape: Shape, dst_shape: Shape, msg:
         rep.errors.append(msg)
     elif verdict == "warn":
         rep.warnings.append(msg)
+
+
+def _merge_alt_shape(
+    rep: FlowInspection,
+    flow_name: str,
+    alt_name: str,
+    key: str,
+    primary_shape: Shape,
+    alt_shape: Shape,
+) -> Shape:
+    """Validate shape compatibility between primary and alt outputs and return the merged context shape."""
+    _record_compat(
+        rep,
+        alt_shape,
+        primary_shape,
+        f"{flow_name}:{alt_name}: alt out '{key}' ({alt_shape}) incompatible with primary ({primary_shape})",
+    )
+    if (primary_shape.base == "val" and not primary_shape.is_list) or (
+        alt_shape.base == "val" and not alt_shape.is_list
+    ):
+        return Shape()
+    if primary_shape.base == "val" or alt_shape.base == "val":
+        return Shape(base="val", is_list=primary_shape.is_list)
+    if primary_shape.ext != alt_shape.ext:
+        return Shape(base=primary_shape.base, ext=None, is_list=primary_shape.is_list)
+    return primary_shape
 
 
 def _collect_bare_idents(expr: str) -> set[str]:
@@ -293,20 +320,28 @@ def inspect_flow(
             item = src.element() if src.is_list else Shape()
             step_pool = {**pool, step.each_item: item}
 
+        primary_exists = step.name in reg.units or step.name in reg.flows
         produced, opt = _wire_step(reg, flow, step, step.name, step_pool, weak, rep, visited)
+
         if step.heal_target:
+            heal_exists = step.heal_target in reg.units or step.heal_target in reg.flows
             heal_out, heal_opt = _wire_step(
                 reg, flow, StepSpec(name=step.heal_target), step.heal_target, step_pool, weak, rep, visited
             )
-            if step.heal_mode == "fallback":
-                produced = {**produced, **heal_out}
-                opt |= heal_opt
+            if step.heal_mode == "alt" and primary_exists and heal_exists:
+                merged_shared = {
+                    k: _merge_alt_shape(rep, flow_name, step.heal_target, k, produced[k], heal_out[k])
+                    for k in sorted(set(produced) & set(heal_out))
+                }
+                disjoint_keys = set(produced) ^ set(heal_out)
+                produced = {**produced, **heal_out, **merged_shared}
+                opt |= heal_opt | disjoint_keys
 
         if step.is_each and step.each_over and step.each_item:
             pool.update({k: s.collected() for k, s in produced.items()})
         else:
             pool.update(produced)
-        weak |= opt
+        weak = (weak - (set(produced) - opt)) | opt
 
     for k in flow.out_keys:
         if k not in pool:
@@ -319,6 +354,7 @@ def inspect_flow(
 
     rep.auth = flow_auth(reg, flow_name)
     return rep
+
 
 # LLM Feedback, Trigger Summary & Catalog Text Formatters
 def _format_triggers(triggers: tuple[TriggerSpec, ...]) -> str:
@@ -402,7 +438,7 @@ def format_llm_catalog(reg: FlowRegistry, *, max_units: int = 30) -> str:
         lines.append("[COMPOSABLE SUB-FLOWS]")
         for f in reg.flows.values():
             in_part = ", ".join(_format_arg_items(f.in_reqs, f.in_optional, f.in_defaults, f.in_shapes))
-            out_part = ", ".join(_format_out_items(f.out_keys, f.out_optional, f.out_shapes))
+            out_part = ", ".join(_format_arg_items(f.out_keys, f.out_optional, f.out_shapes))
             f_auth = sorted(flow_auth(reg, f.name))
             auth_clause = f" -> auth({', '.join(f_auth)})" if f_auth else ""
             lines.append(
