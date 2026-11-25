@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import Optional
 import httpx
 
-from fiber.studio.base.workflow.audit.context import AuditContext
-from fiber.studio.base.workflow.config import Phase, E2EConfig
-from fiber.studio.base.workflow.pipeline import MockPipeline, log
+from fiber.studio.harness.gateway.audit.context import AuditContext
+from fiber.studio.e2e.config import Phase, E2EConfig
+from fiber.studio.e2e.pipeline import MockPipeline, log
 
 from fiber.llm.entry import acompletion
 from fiber.llm.pipeline.channel.breaker import StreamBreaker
@@ -33,7 +33,7 @@ from fiber.llm.vcr.manager import (
     add_vcr_arguments,
 )
 from fiber.llm.vcr.injector import VCRInjector
-from fiber.studio.base.workflow.builder import create_e2e_parser, build_e2e_context
+from fiber.studio.e2e.builder import create_e2e_parser, build_e2e_context
 import fiber.node.mcp.worker.finops as worker_finops
 from fiber.node.account.finops.watcher import default_finops_watcher, default_tenant_eco
 

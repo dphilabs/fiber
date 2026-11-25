@@ -1,4 +1,4 @@
-# fiber.studio.base.mcp.server
+# fiber.studio.harness.mcp.server
 import time
 import uuid
 import sqlite3
@@ -9,10 +9,10 @@ from typing import Dict, Any, Optional
 import orjson
 from aiohttp import web
 
-from fiber.studio.base.mcp.payload import McpRequest, McpPayloadBuilder
+from fiber.studio.harness.mcp.payload import McpRequest, McpPayloadBuilder
 from fiber.gateway.bridge.emitter import get_emitter
 
-log = get_emitter("e2e.mcp.server")
+log = get_emitter("harness.mcp.server")
 
 _AUDIT_SEED = [
     ("filesystem.read", 1.25, "OK"),

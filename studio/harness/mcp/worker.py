@@ -1,4 +1,4 @@
-# fiber.studio.base.mcp.worker
+# fiber.studio.harness.mcp.worker
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
-from fiber.studio.base.workflow.pipeline import log
+from fiber.studio.e2e.pipeline import log
 from fiber.gateway.bridge.action.connect import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     ResolvedTarget,

@@ -1,4 +1,4 @@
-# fiber.studio.base.workflow.audit.context
+# fiber.studio.harness.gateway.audit.context
 from __future__ import annotations
 
 import base64

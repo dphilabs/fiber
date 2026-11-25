@@ -1,10 +1,12 @@
-# fiber.studio.base.scene.flare.bridge
+# fiber.studio.e2e.infra.scene.flare.bridge
+## @lineage: fiber.studio.harness.scene.flare.bridge
+## @lineage: fiber.studio.base.scene.flare.bridge
 ## @lineage: fiber.dev.base.scene.flare.bridge
 import time
 import json
 from typing import Any
 
-from fiber.studio.base.scene.runner import SandboxRunner
+from fiber.studio.e2e.infra.scene.runner import SandboxRunner
 
 from xphi.arch.bound.adapter.pta import compute_merkle_root
 from xphi.arch.contract.config.env import config as env_config

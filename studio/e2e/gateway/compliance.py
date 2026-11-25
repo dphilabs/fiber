@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 import httpx
 
-from fiber.studio.base.client import GatewayClient, StrictPayloadFactory, Endpoints
+from fiber.studio.harness.gateway.client import GatewayClient, StrictPayloadFactory, Endpoints
 from xphi.state.phase.workflow import ErrorMessage, StopMessage, Workflow, WorkflowMessage, step
 from xphi.state.phase.reactor import PhaseReactor
-from fiber.studio.base.workflow.chaos import ChaosPayloadLibrary
+from fiber.studio.harness.gateway.chaos import ChaosPayloadLibrary
 from fiber.gateway.bridge.emitter import get_emitter
 from xphi.arch.contract.config.env import FIBER_GATEWAY_URL, XPHI_ENV
 

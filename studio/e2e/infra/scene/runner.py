@@ -1,4 +1,5 @@
-# fiber.studio.base.scene.runner
+# fiber.studio.e2e.infra.scene.runner
+## @lineage: fiber.studio.harness.scene.runner
 import os
 import time
 import json

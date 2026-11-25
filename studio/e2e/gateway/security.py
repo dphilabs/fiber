@@ -16,10 +16,10 @@ from contextlib import suppress
 
 import httpx
 
-from fiber.studio.base.client import Endpoints, StrictPayloadFactory, Endpoints
+from fiber.studio.harness.gateway.client import Endpoints, StrictPayloadFactory, Endpoints
 from xphi.state.phase.workflow import ErrorMessage, StopMessage, Workflow, WorkflowMessage, step
 from xphi.state.phase.reactor import PhaseReactor
-from fiber.studio.base.workflow.chaos import ChaosPayloadLibrary
+from fiber.studio.harness.gateway.chaos import ChaosPayloadLibrary
 from fiber.gateway.bridge.emitter import get_emitter
 from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.arch.bound.adapter.gateway import DPoPClientGenerator

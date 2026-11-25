@@ -6,7 +6,7 @@ import importlib
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional
 
-from fiber.studio.base.scene.runner import SandboxRunner
+from fiber.studio.e2e.infra.scene.runner import SandboxRunner
 
 from xphi.arch.bound.adapter.fsm import FsmAdapter, FsmTarget, FsmOp
 from xphi.node.ops.wasm.builder import WasmBuilder

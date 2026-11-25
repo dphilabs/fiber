@@ -1,4 +1,4 @@
-# fiber.studio.base.mcp.payload
+# fiber.studio.harness.mcp.payload
 from typing import Any, Dict, List, Optional, Union
 from pydantic import Field
 import orjson

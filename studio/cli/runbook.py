@@ -24,8 +24,8 @@ from xphi.arch.reflex.script import PEP723_MARKER, has_pep723
 from fiber.node.runbook.unit import loader as unit_loader_mod
 from fiber.node.runbook.unit.indexer import UnitsIndexer
 from fiber.node.runbook.unit.loader import UnitLoaderError, UnitsLoader
-from fiber.studio.base.reflex.blueprint import BlueprintAnalyzer
-from fiber.studio.base.reflex.context import ContextError, collect_flow_markdown
+from fiber.studio.harness.reflex.blueprint import BlueprintAnalyzer
+from fiber.studio.harness.reflex.context import ContextError, collect_flow_markdown
 
 UNIT_TEMPLATE_DIR = Path(unit_loader_mod.__file__).resolve().parent / "templates"
 

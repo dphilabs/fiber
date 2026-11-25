@@ -1,4 +1,4 @@
-# fiber.studio.base.workflow.pipeline
+# fiber.studio.e2e.pipeline
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import uvicorn
 
-from fiber.studio.base.workflow.config import (
+from fiber.studio.e2e.config import (
     E2EConfig,
     ManagedTestServer,
     PipelineRunner,

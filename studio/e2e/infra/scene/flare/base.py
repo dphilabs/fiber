@@ -1,4 +1,6 @@
-# fiber.studio.base.scene.flare.base
+# fiber.studio.e2e.infra.scene.flare.base
+## @lineage: fiber.studio.harness.scene.flare.base
+## @lineage: fiber.studio.base.scene.flare.base
 ## @lineage: fiber.dev.base.scene.flare.base
 import time
 import asyncio
@@ -6,8 +8,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-from fiber.studio.base.scene.runner import SandboxRunner, TestScripts
-from fiber.studio.base.scene.epoch import ActorIdentity
+from fiber.studio.e2e.infra.scene.runner import SandboxRunner, TestScripts
+from fiber.studio.e2e.infra.scene.epoch import ActorIdentity
 
 from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.arch.bound.adapter.pta import compute_merkle_root

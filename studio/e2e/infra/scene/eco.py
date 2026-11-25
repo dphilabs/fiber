@@ -1,4 +1,5 @@
-# fiber.studio.base.scene.eco
+# fiber.studio.e2e.infra.scene.eco
+## @lineage: fiber.studio.harness.scene.eco
 import time
 import json
 from typing import Any, List, Dict
@@ -6,9 +7,9 @@ import hashlib
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
-from fiber.studio.base.scene.epoch import EpochBase
-from fiber.studio.base.scene.epoch import ActorIdentity
-from fiber.studio.base.scene.runner import SchemeRunner
+from fiber.studio.e2e.infra.scene.epoch import EpochBase
+from fiber.studio.e2e.infra.scene.epoch import ActorIdentity
+from fiber.studio.e2e.infra.scene.runner import SchemeRunner
 
 from xphi.state.settlement.mandate import ClearingAdapter
 from xphi.arch.bound.adapter.state import StateAdapter

@@ -5,7 +5,7 @@ import importlib
 from dataclasses import dataclass, field
 from typing import List, Dict
 
-import fiber.studio.base.scene as scene_module
+import fiber.studio.e2e.infra.scene as scene_module
 
 from xphi.node.ops.wasm.builder import WasmBuilder
 from xphi.node.ops.wasm.tester import WasmNodeTester

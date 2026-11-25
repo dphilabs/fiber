@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Protocol
 import orjson
 
 from fiber.node.mcp.quarantine import AdapterRegistry
-from fiber.studio.base.mcp.payload import McpPayloadBuilder
+from fiber.studio.harness.mcp.payload import McpPayloadBuilder
 from fiber.node.mcp.fsm import IntentLifecycleFSM, IntentState
 
 from xphi.arch.bound.client.rpc import InternalRpcClient

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fiber.llm.entry import acompletion
 from fiber.llm.gateway.state.traverser import StateTraverser
-from fiber.studio.base.workflow.builder import (
+from fiber.studio.e2e.builder import (
     E2EBaseWorkflow,
     E2EBaseApplication,
     create_e2e_parser,
