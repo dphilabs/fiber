@@ -15,9 +15,9 @@ from typing import Any, Dict, List
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-from fiber.studio.base.workflow.config import Phase, E2EConfig, get_free_port
-from fiber.studio.base.workflow.pipeline import MockPipeline, log
-from fiber.studio.base.workflow.profile.metrics import PipelineLoadProfiler, LoadSLO
+from fiber.studio.e2e.config import Phase, E2EConfig, get_free_port
+from fiber.studio.e2e.pipeline import MockPipeline, log
+from fiber.studio.harness.pipeline.profile.metrics import PipelineLoadProfiler, LoadSLO
 
 from fiber.llm.entry import acompletion
 from fiber.llm.gateway.state.traverser import StateTraverser
@@ -27,7 +27,7 @@ from fiber.llm.vcr.manager import (
     add_vcr_arguments
 )
 from fiber.llm.vcr.injector import VCRInjector
-from fiber.studio.base.workflow.builder import create_e2e_parser, build_e2e_context
+from fiber.studio.e2e.builder import create_e2e_parser, build_e2e_context
 
 from xphi.arch.contract.event.next import next_trace_id
 from xphi.node.space.bind.resolver import get_invoker

@@ -12,11 +12,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fiber.studio.base.mcp.payload import McpPayloadBuilder
-from fiber.studio.base.mcp.worker import E2EWorkerManager, _is_stale_module_cmd
-from fiber.studio.base.workflow.audit.context import AuditContext, MCPGatewayTestClient
-from fiber.studio.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
-from fiber.studio.base.workflow.pipeline import BasePipeline, log
+from fiber.studio.harness.mcp.payload import McpPayloadBuilder
+from fiber.studio.harness.mcp.worker import E2EWorkerManager, _is_stale_module_cmd
+from fiber.studio.harness.gateway.audit.context import AuditContext, MCPGatewayTestClient
+from fiber.studio.e2e.config import E2EConfig, Phase, TestResult, get_free_port
+from fiber.studio.e2e.pipeline import BasePipeline, log
 from fiber.gateway.bridge.action.connect import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     ResolvedTarget,

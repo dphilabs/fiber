@@ -1,4 +1,4 @@
-# fiber.studio.base.reflex.blueprint
+# fiber.studio.harness.reflex.blueprint
 from __future__ import annotations
 
 import json

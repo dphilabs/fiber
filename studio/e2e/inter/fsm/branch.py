@@ -3,9 +3,9 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from xphi.arch.contract.registry.asl import default_asl_registry
-from fiber.studio.base.mcp.worker import E2EWorkerManager
-from fiber.studio.base.workflow.config import E2EConfig, Phase, TestResult, get_free_port
-from fiber.studio.base.workflow.pipeline import BasePipeline, log
+from fiber.studio.harness.mcp.worker import E2EWorkerManager
+from fiber.studio.e2e.config import E2EConfig, Phase, TestResult, get_free_port
+from fiber.studio.e2e.pipeline import BasePipeline, log
 from fiber.gateway.bridge.reflex.polyglot import PolyglotExecutionBridge
 
 from xphi.watcher.reflex.traverser import GraphTraverser, TraversalResult

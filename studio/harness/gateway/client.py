@@ -1,4 +1,4 @@
-# fiber.studio.base.client
+# fiber.studio.harness.gateway.client
 import time
 import logging
 from dataclasses import dataclass, asdict

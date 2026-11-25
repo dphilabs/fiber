@@ -1,4 +1,4 @@
-# fiber.studio.base.workflow.builder
+# fiber.studio.e2e.builder
 from __future__ import annotations
 
 import argparse

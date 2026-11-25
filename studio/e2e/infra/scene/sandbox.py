@@ -1,4 +1,5 @@
-# fiber.studio.base.scene.sandbox
+# fiber.studio.e2e.infra.scene.sandbox
+## @lineage: fiber.studio.harness.scene.sandbox
 import time
 import asyncio
 import json
@@ -6,8 +7,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional
 
-from fiber.studio.base.scene.runner import SandboxRunner, ScriptDef, TestScripts
-from fiber.studio.base.scene.epoch import ActorIdentity
+from fiber.studio.e2e.infra.scene.runner import SandboxRunner, ScriptDef, TestScripts
+from fiber.studio.e2e.infra.scene.epoch import ActorIdentity
 
 from xphi.arch.bound.adapter.state import StateAdapter
 from xphi.node.runtime.wasm.method import WasmMethod

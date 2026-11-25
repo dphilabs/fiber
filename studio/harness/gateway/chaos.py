@@ -1,4 +1,4 @@
-# fiber.studio.base.workflow.chaos
+# fiber.studio.harness.gateway.chaos
 import asyncio
 import json
 import random

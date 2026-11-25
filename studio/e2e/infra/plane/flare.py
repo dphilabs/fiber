@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Dict
 
-import fiber.studio.base.scene as scene_module
+import fiber.studio.e2e.infra.scene as scene_module
 
 from xphi.watcher.plane.flare.controller import FlareController
 

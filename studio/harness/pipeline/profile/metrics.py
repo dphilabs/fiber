@@ -1,4 +1,4 @@
-# fiber.studio.base.workflow.profile.metrics
+# fiber.studio.harness.pipeline.profile.metrics
 """
 Lightweight, zero-dependency load profiling and SLO enforcement engine for Fiber pipelines.
 Captures latency percentiles (p50/p90/p95/p99), TTFT, throughput (RPS/CPS), peak memory delta,

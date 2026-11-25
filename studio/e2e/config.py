@@ -1,4 +1,4 @@
-# fiber.studio.base.workflow.config
+# fiber.studio.e2e.config
 import socket
 import uvicorn
 from dataclasses import dataclass

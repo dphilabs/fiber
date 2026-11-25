@@ -1,4 +1,5 @@
-# fiber.studio.base.scene.epoch
+# fiber.studio.e2e.infra.scene.epoch
+## @lineage: fiber.studio.harness.scene.epoch
 import os
 import time
 import json
@@ -10,7 +11,7 @@ from pydantic import BaseModel, Field
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
-from fiber.studio.base.scene.runner import SchemeRunner
+from fiber.studio.e2e.infra.scene.runner import SchemeRunner
 
 from xphi.state.settlement.mandate import MandateAdapter, Ap2MandateResult, SettlementReceipt, TransactionReceipt
 from xphi.arch.bound.adapter.state import StateAdapter
