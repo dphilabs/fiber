@@ -9,10 +9,9 @@ from xphi.node.space.bind.resolver import resolve_path
 from xphi.watcher.plane.emitter import get_emitter 
 
 log_cost = get_emitter("cost.registry")
-REGISTRY_ROOT = resolve_path("abc") / "registry"
-DEFAULT_REGISTRY_FILENAME = "model_prices_and_context_window.json"
+REGISTRY_ROOT = resolve_path("xyz") / "registry"
+DEFAULT_REGISTRY_FILENAME = "model_prices.json"
 PROVIDER_KEY = "model_provider"
-
 
 class RegistryIO:
     @classmethod

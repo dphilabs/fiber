@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
-from fiber.studio.e2e.pipeline import log
+from fiber.studio.cli.e2e.pipeline import log
 from fiber.gateway.bridge.action.connect import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     ResolvedTarget,
@@ -20,12 +20,12 @@ from fiber.gateway.bridge.action.connect import (
 )
 from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.config import McpConfigMapper
-import fiber.node.mcp.worker.reaper as worker_reaper
+import fiber.node.worker.reaper as worker_reaper
 from xphi.node.space.bind.resolver import resolve_path
 from xphi.node.space.tunnel.factory import TunnelFactory
 
 ANCHOR_MCP_JSON: Path = resolve_path("anchor") / "mcp.json"
-WORKER_BASE_PKG: str = "fiber.node.mcp.worker"
+WORKER_BASE_PKG: str = "fiber.node.worker"
 _WORKER_OVERRIDES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "worker.eco.finlib": ("eco.finlib", "linear", r"normalize_order|pow\(|exp\("),
     "worker.deployer": ("deployer", "ephemeral", None),

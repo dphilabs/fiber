@@ -10,7 +10,7 @@ import httpx
 
 from fiber.gateway.bridge.emitter import get_emitter
 from fiber.gateway.bridge.reflex.execution import FiberExecutionBridge
-from fiber.node.runbook.unit.loader import UnitsLoader
+from fiber.studio.runbook.unit.loader import UnitsLoader
 from xphi.arch.bound.adapter.pta import PtaPointer
 from xphi.arch.reflex.fsm import (
     CompactKey,

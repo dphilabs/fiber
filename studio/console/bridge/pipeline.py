@@ -197,7 +197,7 @@ class PipelineActionBridge:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "fiber.studio.e2e.llm.guardrail",
+                "fiber.studio.cli.e2e.llm.guardrail",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env={**os.environ, "FIBER_CONSOLE_ACTIVE": "1"},

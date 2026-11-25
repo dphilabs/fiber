@@ -8,6 +8,7 @@ import orjson
 
 from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.config import McpConfigMapper
+from fiber.node.bound.check.deps import WorkerDepsChecker
 from fiber.node.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     STANDALONE_ATTACHED_TUNNEL_KEY,
@@ -55,6 +56,28 @@ class McpWorkerDaemon(AbstractDaemon):
         except OSError:
             return False
 
+    # def _build_desired_specs(self) -> Dict[str, ResolvedTarget]:
+    #     desired: Dict[str, ResolvedTarget] = {}
+    #     anchor_path = McpConfigMapper.get_anchor_config_path()
+
+    #     if not anchor_path.is_file():
+    #         log.info(f"[{self.name}] Anchor config not found at {anchor_path}. No workers will be started.")
+    #         self._last_anchor_mtime = 0.0
+    #         return desired
+
+    #     log.info(f"[{self.name}] Loading canonical MCP config from: {anchor_path}")
+    #     anchor_entries = McpConfigMapper.scan_and_parse(agent="fiber")
+
+    #     try:
+    #         for spec in _specs_from_mapped_entries(anchor_entries):
+    #             desired[spec.target_id] = spec
+    #         log.info(f"[{self.name}] Loaded {len(desired)} target(s) from mcp.json: {list(desired.keys())}")
+    #     except BaseException as e:
+    #         log.error(f"[{self.name}] Failed to resolve anchor config entries: {e}")
+
+    #     self._last_anchor_mtime = self._get_anchor_mtime()
+    #     return desired
+
     def _build_desired_specs(self) -> Dict[str, ResolvedTarget]:
         desired: Dict[str, ResolvedTarget] = {}
         anchor_path = McpConfigMapper.get_anchor_config_path()
@@ -68,9 +91,11 @@ class McpWorkerDaemon(AbstractDaemon):
         anchor_entries = McpConfigMapper.scan_and_parse(agent="fiber")
 
         try:
-            for spec in _specs_from_mapped_entries(anchor_entries):
-                desired[spec.target_id] = spec
-            log.info(f"[{self.name}] Loaded {len(desired)} target(s) from mcp.json: {list(desired.keys())}")
+            raw_specs = _specs_from_mapped_entries(anchor_entries)
+            desired = WorkerDepsChecker.filter_mountable_specs(
+                raw_specs, logger=log, daemon_name=self.name
+            )
+            log.info(f"[{self.name}] Loaded {len(desired)} mountable target(s) from mcp.json: {list(desired.keys())}")
         except BaseException as e:
             log.error(f"[{self.name}] Failed to resolve anchor config entries: {e}")
 

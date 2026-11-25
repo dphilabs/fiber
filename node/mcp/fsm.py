@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from xphi.node.rpc.method import RpcMethod
 from xphi.arch.bound.client.rpc import InternalRpcClient
 
-from fiber.node.mcp.guard.preflight import PreflightGuard
+from fiber.node.bound.guard.preflight import PreflightGuard
 from fiber.gateway.bridge.emitter import get_emitter
 
 

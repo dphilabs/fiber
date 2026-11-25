@@ -23,7 +23,7 @@ from xphi.node.runtime.reflex.manifest import OutputPolicy, ReflexManifest
 from xphi.node.runtime.trigger.scheduler import SchedulePlanner
 
 if TYPE_CHECKING:
-    from fiber.node.runbook.store import PinnedRelease
+    from fiber.studio.runbook.store import PinnedRelease
 
 RunOutcome = Literal["running", "ok", "no_change", "paused", "failed"]
 _BADGES: dict[str, str] = {"ok": "✔", "failed": "✖", "no_change": "– 변경없음", "paused": "⏸ 대기중", "running": "▶ 실행중", "never": "–"}

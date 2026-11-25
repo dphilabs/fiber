@@ -103,7 +103,7 @@ class GuideModal(ModalTemplate):
     persistent = False
 
     def compose(self, dialog: ui.dialog) -> None:
-        from fiber.node.ops.channel.slack import (
+        from fiber.studio.cli.ops.channel.slack import (
             build_slack_manifest_url,
             get_local_spiffe_id,
         )

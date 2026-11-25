@@ -12,7 +12,7 @@ from typing import Dict, Tuple, Optional, List, Any, Mapping
 
 import orjson
 import typer
-from fiber.node.mcp.guard.preflight import PreflightGuard
+from fiber.node.bound.guard.preflight import PreflightGuard
 from fiber.node.mcp.mapper.config import McpConfigMapper, MappedMcpEntry
 
 from xphi.node.space.bind.resolver import resolve_path
@@ -25,7 +25,7 @@ STANDALONE_ATTACHED_TUNNEL_KEY = "mcp:registry:standalone_attached"
 
 ANCHOR_ROOT = resolve_path("anchor")
 ANCHOR_MCP_PATH = ANCHOR_ROOT / "mcp.json"
-DEFAULT_WORKER_PACKAGE = "fiber.node.mcp.worker"
+DEFAULT_WORKER_PACKAGE = "fiber.node.worker"
 
 
 @dataclass(frozen=True)

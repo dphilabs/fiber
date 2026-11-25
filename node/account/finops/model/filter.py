@@ -1,6 +1,4 @@
 # fiber.node.account.finops.model.filter
-## @lineage: fiber.node.finops.model.filter
-## @lineage: fiber.node.infra.finops.model.filter
 import argparse
 import requests
 from typing import Tuple, Union, Dict
