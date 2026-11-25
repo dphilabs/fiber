@@ -1,5 +1,4 @@
 # fiber.gateway.bridge.action.sign
-"""Node Keychain & Admin TOTP Attestation CLI"""
 from __future__ import annotations
 
 import asyncio

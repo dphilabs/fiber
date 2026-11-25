@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from xphi.node.runtime.reflex.engine import FlowEngine
-from fiber.node.runbook.unit.indexer import UnitsIndexer
-from fiber.node.runbook.unit.loader import UnitsLoader
-from fiber.node.runbook.stepper import emit_flow_dsl, emit_unit_dsl, inspect_flow
-from fiber.node.runbook.runtime.viewport import ViewportRuntime
+from fiber.studio.runbook.unit.indexer import UnitsIndexer
+from fiber.studio.runbook.unit.loader import UnitsLoader
+from fiber.studio.runbook.stepper import emit_flow_dsl, emit_unit_dsl, inspect_flow
+from fiber.studio.runbook.runtime.viewport import ViewportRuntime
 from xphi.arch.reflex.flow import (
     CompiledChoice,
     CompiledTask,

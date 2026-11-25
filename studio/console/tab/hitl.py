@@ -12,8 +12,8 @@ from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.env import get_slack_status
 from fiber.studio.console.ui.guide import open_guide_modal
 from fiber.studio.console.ui.sim import HitlSimulatorModal, open_hitl_simulator_modal
-from fiber.node.mcp.guard.preflight import PreflightGuard
-from fiber.node.mcp.guard.preset import RAW_BUILTIN_PRESETS, PreflightPresetRegistry
+from fiber.node.bound.guard.preflight import PreflightGuard
+from fiber.node.bound.guard.preset import RAW_BUILTIN_PRESETS, PreflightPresetRegistry
 import fiber.studio.console.ui.kit as kit
 from fiber.studio.console.ui.kit import StudioTab, ModalTemplate
 from xphi.node.space.bind.resolver import resolve_path

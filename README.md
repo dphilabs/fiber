@@ -82,7 +82,7 @@ The **Fiber Connect CLI** (`fiber`) is the single entrypoint for the local contr
 Most AI agents (Claude Code, Cursor, VSCode, Zed) launch MCP servers directly on your machine through point-to-point pipes—with your filesystem, databases, and credentials in reach, and nothing in between to absorb retries or demand approval. Fiber's **Local MCP Gateway** runs as a loopback daemon on the same host, absorbs your existing agent configurations and exposes them through a single stateless endpoint (`/v1/mcp-gateway/invoke`, `/tools`, or per-target `/v1/mcp-gateway/{target_id}/invoke`). Local stdio servers are spawned and supervised by the daemon itself, and remote HTTP/SSE servers can be registered behind the same gate—so every tool call passes through one control point on your machine.
 
 <p align="center">
-  <img src="./studio/abc/asset/diagram/mcp-gateway.jpg" alt="Local MCP Gateway Architecture" width="820" />
+  <img src="./xyz/asset/diagram/mcp-gateway.jpg" alt="Local MCP Gateway Architecture" width="820" />
 </p>
 
 **Why a Local Gateway?**
@@ -160,7 +160,7 @@ $ fiber connect all
 $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /tmp" -p "button:prod_secrets|DELETE"
 ```
 
-> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For the approval protocol and wire format, refer to: **[MCP Connector Spec](./studio/abc/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./studio/abc/spec/gateway/hitl.slack.md)**
+> **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For the approval protocol and wire format, refer to: **[MCP Connector Spec](./xyz/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./xyz/spec/gateway/hitl.slack.md)**
 
 ---
 
@@ -175,7 +175,7 @@ While the Local MCP Gateway (**1**) governs tool execution, Fiber's duplex LLM p
 > **In-Process SDK vs. Gateway Daemon:** While the Python SDK runs explicit `interceptors=[...]` in-process without a daemon, routing requests through `fiber daemon` (`/v1/chat/completions`) enforces both `PRE_TRANSLATE` masking and `POST_TRANSLATE` secret blocking by default—with live On/Off slot toggles persisted in `~/.anchor/state.json` via Console Studio (`fiber console`).
 
 <p align="center">
-  <img src="./studio/abc/asset/diagram/llm-pipeline.jpg" alt="Fiber LLM Pipeline Architecture" width="820" />
+  <img src="./xyz/asset/diagram/llm-pipeline.jpg" alt="Fiber LLM Pipeline Architecture" width="820" />
 </p>
 
 
@@ -304,9 +304,9 @@ To add custom credential patterns, override existing rules, or disable specific 
 
 > **Note:** Out of the box, Fiber ships with **33 built-in credential regex rules** (`BASE_SECRET_RULES`) and **14 sensitive key/URL tokens** that already cover standard cloud providers (`AKIA...`, `AIza...`), auth headers (`Bearer`, `JWT`, `PEM`), and major LLM/SaaS vendor keys (`sk-...`, `ghp_...`, `xoxb-...`) with zero configuration.
 > For most deployments, mounting `ActiveBlockingGuardrail()` and `PayloadSanitizationGuardrail()` as-is provides complete baseline protection without maintaining a custom registry file.
-> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./studio/abc/spec/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
+> When you need to introduce proprietary internal token formats or selectively relax specific checks via `redact_rules.json`, refer to the **[Interceptor Spec](./xyz/spec/llm/interceptor.md)** for the full catalog of default rule IDs and slot extension patterns.
 
-> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./studio/abc/spec/llm/entry.md)** · **[Interceptor Spec](./studio/abc/spec/llm/interceptor.md)** · **[Token Counter Spec](./studio/abc/spec/llm/token.counter.md)**
+> **SDK Compatibility Specs:** For in-process Python usage, Fiber preserves drop-in parity with OpenAI/LiteLLM entrypoints, Pydantic response models, and token utilities: **[Entrypoint Spec](./xyz/spec/llm/entry.md)** · **[Interceptor Spec](./xyz/spec/llm/interceptor.md)** · **[Token Counter Spec](./xyz/spec/llm/token.counter.md)**
 
 ---
 
@@ -354,7 +354,7 @@ The runtime resolves options per request (via JSON payload or `metadata`), envir
 | **`vcr_speed` / `VCR_SPEED`** | `"max"` \| `"real"` | Immediate execution (`~0ms`) or emulated historical latency pacing (`ttfb_ms`, `delta_ms`). |
 | **`vcr_chaos` / `vcr_tick`** | Float | Injects synthetic replay jitter (ms) or sets the SSE chunk coalescing window (default `100.0` ms). |
 
-> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./studio/abc/spec/llm/vcr/test.md)** · **[Fixture Format Spec](./studio/abc/spec/llm/vcr/fixture.format.md)**
+> **Pytest Suites & VCR Specifications:** For offline `pytest` cassette injection, full `VCRManager` parameter matrices, and Fixture schema, refer to: **[VCR Testing & Config Spec](./xyz/spec/llm/vcr/test.md)** · **[Fixture Format Spec](./xyz/spec/llm/vcr/fixture.format.md)**
 
 ---
 
@@ -522,7 +522,6 @@ $ XPHI_WASM_PLANE=flare fiber daemon
 
 # Flare Global Edge Plane: Routes directly to a self-hosted Cloudflare Worker
 $ XPHI_WASM_PLANE=flare:https://xphi-gateway-node.<subdomain>.workers.dev fiber daemon
-
 ```
 
 **Self-Hosted Provisioning**
@@ -573,7 +572,7 @@ fiber e2e inter.concurrency --vcr replay --concurrency 200
 
 Fiber enforces execution determinism and runtime safety through automated CI gates (on every PR and release tag) alongside targeted end-to-end validation suites across each subsystem:
 
-- **[hitl.slack.log](./studio/abc/log/gateway/hitl/slack.20261107.log):** Validates zero-code pre-flight HITL governance over live Slack Socket Mode, confirming instant safe-call passthrough, pre-I/O `HTTP 202` parking with 6-digit TOTP attestation on multiplexed network streams (`Context7`), and strict Zero-Spawn 1-Click button resumption on ephemeral `npx` stdio sandboxes.
-- **[llm.guardrail.log](./studio/abc/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection, and chained `[Mask -> Block]` defense with fallback shielding.
-- **[llm.vcr.log](./studio/abc/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
-- **[infra.plane.flare.log](./studio/abc/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming WASM/Pyodide parity, zero-leakage host isolation, bit-exact compute determinism, and signed receipts sealed into the local ledger.
+- **[hitl.slack.log](./xyz/log/gateway/hitl/slack.20261107.log):** Validates zero-code pre-flight HITL governance over live Slack Socket Mode, confirming instant safe-call passthrough, pre-I/O `HTTP 202` parking with 6-digit TOTP attestation on multiplexed network streams (`Context7`), and strict Zero-Spawn 1-Click button resumption on ephemeral `npx` stdio sandboxes.
+- **[llm.guardrail.log](./xyz/log/gateway/llm/guardrail.20261104.log):** Validates the two-track DLP guardrail pipeline and dynamic secret registry, confirming zero-I/O edge cache short-circuiting, in-place `PRE_TRANSLATE` PII masking, strict `POST_TRANSLATE` credential blocking, fault-tolerant JSON rule injection, and chained `[Mask -> Block]` defense with fallback shielding.
+- **[llm.vcr.log](./xyz/log/gateway/llm/vcr.20261104.log):** Validates deterministic VCR replay and tracer isolation across the LLM pipeline, confirming sub-millisecond synchronous fixture playback, zero-I/O asynchronous stream chunk tracking, strict exception boundary verification, and idempotent fallback routing with deepcopy payload shielding.
+- **[infra.plane.flare.log](./xyz/log/infra/plane/flare.20261106.log):** Validates `XPHI_WASM_PLANE` bridge routing and Dual V8 Isolate execution on Cloudflare Edge, confirming WASM/Pyodide parity, zero-leakage host isolation, bit-exact compute determinism, and signed receipts sealed into the local ledger.

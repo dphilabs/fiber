@@ -107,9 +107,9 @@ def run_ops(
     target: Annotated[str, typer.Argument(help="Target ops module (e.g., flare.deploy, brew.verify, channel.slack)")],
     env_file: EnvFileOpt = None,
 ):
-    """Executes operational, provisioning, and verification utilities under fiber.node.ops."""
+    """Executes operational, provisioning, and verification utilities under fiber.studio.cli.ops."""
     _load_env(env_file)
-    module_path = f"fiber.node.ops.{target.strip().replace('/', '.')}"
+    module_path = f"fiber.studio.cli.ops.{target.strip().replace('/', '.')}"
 
     def _invoke():
         try:
@@ -248,7 +248,7 @@ def run_e2e(
 
     log.info(f"[Fiber] Igniting E2E Test Suite(s): {', '.join(targets)}")
     for t in targets:
-        module_path = f"fiber.studio.e2e.{t}"
+        module_path = f"fiber.studio.cli.e2e.{t}"
         try:
             mod = importlib.import_module(module_path)
             if not hasattr(mod, "main"):

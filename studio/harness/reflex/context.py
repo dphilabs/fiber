@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 
-from fiber.node.runbook.unit.indexer import UnitsIndexer
-from fiber.node.runbook.unit.loader import UnitLoaderError, UnitsLoader
+from fiber.studio.runbook.unit.indexer import UnitsIndexer
+from fiber.studio.runbook.unit.loader import UnitLoaderError, UnitsLoader
 from xphi.arch.contract.registry.flow import FlowRegistry
 
 _REPO_PKG_PREFIX = "reflexor."
