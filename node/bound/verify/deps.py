@@ -1,4 +1,4 @@
-# fiber.node.bound.check.deps
+# fiber.node.bound.verify.deps
 from __future__ import annotations
 
 import ast

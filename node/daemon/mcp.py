@@ -8,7 +8,7 @@ import orjson
 
 from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.config import McpConfigMapper
-from fiber.node.bound.check.deps import WorkerDepsChecker
+from fiber.node.bound.verify.deps import WorkerDepsChecker
 from fiber.node.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     STANDALONE_ATTACHED_TUNNEL_KEY,
