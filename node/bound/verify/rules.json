@@ -1,0 +1,278 @@
+{
+  "payload_rules": {
+    "mcp.tools_list.contract": {
+      "description": "MCP tools/list 응답 규격 및 내부 예약 파라미터(self, meta, req_id 등) 노출 금지 검증",
+      "jmespath_expr": "tools",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["name", "description", "inputSchema"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "description": { "type": "string", "minLength": 1 },
+            "inputSchema": {
+              "type": "object",
+              "required": ["type", "properties"],
+              "properties": {
+                "properties": {
+                  "type": "object",
+                  "propertyNames": {
+                    "not": { "enum": ["self", "meta", "_meta", "req_id", "cls"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mcp.tool_call.ok": {
+      "description": "MCP tools/call 정상 응답 엔벨로프(isError=false 및 text content 존재) 검증",
+      "jmespath_expr": "result",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "isError": { "const": false },
+          "content": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["type", "text"],
+              "properties": {
+                "type": { "const": "text" },
+                "text": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mcp.tool_call.is_error": {
+      "description": "경로 탈출 차단 등 도메인 예외 발생 시 크래시 없이 MCP isError=true로 반환되는지 검증",
+      "jmespath_expr": "result",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["content", "isError"],
+        "properties": {
+          "isError": { "const": true },
+          "content": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["type", "text"],
+              "properties": {
+                "type": { "const": "text" },
+                "text": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "duck.describe_result": {
+      "description": "worker.duck 스키마 조회(describe_data) 결과 구조 검증",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["source", "columns"],
+        "properties": {
+          "source": { "type": "string", "minLength": 1 },
+          "columns": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    "duck.query_result": {
+      "description": "worker.duck SQL 집계(query_sql) 결과 구조 및 행 수 상한 검증",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["row_count", "limit", "rows"],
+        "properties": {
+          "row_count": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+          "rows": { "type": "array" }
+        }
+      }
+    },
+    "ast.outline_result": {
+      "description": "worker.ast 코드 윤곽 추출(code_outline) 결과 구조 검증",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["path", "symbol_count", "symbols"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "symbol_count": { "type": "integer", "minimum": 0 },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "start_line", "end_line", "signature"],
+              "properties": {
+                "kind": { "type": "string" },
+                "start_line": { "type": "integer", "minimum": 1 },
+                "end_line": { "type": "integer", "minimum": 1 },
+                "signature": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ast.replace_result": {
+      "description": "worker.ast 구문 치환(ast_replace) 결과 및 Unified Diff 반환 규격 검증",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["dry_run", "modified_count", "files", "diff"],
+        "properties": {
+          "dry_run": { "type": "boolean" },
+          "modified_count": { "type": "integer", "minimum": 0 },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "diff": { "type": "string", "maxLength": 8000 }
+        }
+      }
+    },
+    "pin.search_result": {
+      "description": "worker.pin FTS5 검색(search_notes) 결과 구조 검증",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["count", "notes"],
+        "properties": {
+          "count": { "type": "integer", "minimum": 0 },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["key", "project", "tags", "content", "updated_at"]
+            }
+          }
+        }
+      }
+    },
+    "reader.scoped_manifest": {
+      "description": "worker.reader 컨텍스트 조립 결과의 MANIFEST 헤더 포함 및 예산 상한 검증",
+      "json_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["manifest", "content"],
+        "properties": {
+          "manifest": { "type": "string", "pattern": "^\\[READER MANIFEST" },
+          "content": { "type": "string", "maxLength": 4000 }
+        }
+      }
+    }
+  },
+  "http_probes": {
+    "fiber.gateway.tools_list": {
+      "description": "실행 중인 로컬 xphi.node DPoP 게이트웨이 대상 워커의 tools/list 라이브 계약 검증",
+      "method": "POST",
+      "url": "http://127.0.0.1:{gateway_port}/v1/mcp-gateway/{worker}/invoke",
+      "auth_mode": "fiber_dpop",
+      "spiffe_id": "spiffe://self/fiber",
+      "headers": { "Content-Type": "application/json" },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": "verify-probe-list",
+        "method": "tools/list",
+        "params": {}
+      },
+      "timeout_sec": 5.0,
+      "expected_status": [200],
+      "jmespath_expr": "result.tools",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["name", "description", "inputSchema"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "description": { "type": "string", "minLength": 1 },
+            "inputSchema": {
+              "type": "object",
+              "required": ["type", "properties"],
+              "properties": {
+                "properties": {
+                  "type": "object",
+                  "propertyNames": {
+                    "not": { "enum": ["self", "meta", "_meta", "req_id", "cls"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "fiber.gateway.tool_call": {
+      "description": "실행 중인 로컬 xphi.node DPoP 게이트웨이 대상 워커의 tools/call 라이브 호출 검증 (body_override 활용)",
+      "method": "POST",
+      "url": "http://127.0.0.1:{gateway_port}/v1/mcp-gateway/{worker}/invoke",
+      "auth_mode": "fiber_dpop",
+      "spiffe_id": "spiffe://self/fiber",
+      "headers": { "Content-Type": "application/json" },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": "verify-probe-call",
+        "method": "tools/call",
+        "params": { "name": "list_rules", "arguments": {} }
+      },
+      "timeout_sec": 10.0,
+      "expected_status": [200],
+      "jmespath_expr": "result",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "isError": { "const": false },
+          "content": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["type", "text"],
+              "properties": {
+                "type": { "const": "text" },
+                "text": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "binary_probes": {
+    "git.worktree_clean": {
+      "description": "지정 경로에 의도치 않은 파일 변경(dirty state)이 없는지 로컬 git 바이너리로 검증",
+      "executable": "git",
+      "args": ["status", "--porcelain", "--", "{target_path}"],
+      "expected_exit_codes": [0],
+      "parse_stdout_json": false,
+      "timeout_sec": 5.0,
+      "stdout_schema": {
+        "type": "string",
+        "maxLength": 0
+      }
+    },
+    "rg.forbid_pattern": {
+      "description": "지정 경로 내 금지 패턴이 존재하지 않는지 ripgrep 종료 코드(1 = 미검출)로 검증",
+      "executable": "rg",
+      "args": ["--no-messages", "-e", "{pattern}", "--", "{target_path}"],
+      "expected_exit_codes": [1],
+      "parse_stdout_json": false,
+      "timeout_sec": 10.0
+    }
+  }
+}

@@ -1,5 +1,4 @@
 # fiber.node.account.finops.watcher
-## @lineage: fiber.node.finops.watcher
 """
 Glossary:
 - fuel_budget: Fixed spending quota limit assigned via policy/Mandate (immutable until upgraded).

@@ -1,5 +1,4 @@
 # fiber.node.account.manager
-## @lineage: fiber.node.auth.account.manager
 from __future__ import annotations
 
 import asyncio

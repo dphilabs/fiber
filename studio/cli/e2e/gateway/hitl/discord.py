@@ -1,5 +1,4 @@
 # fiber.studio.cli.e2e.gateway.hitl.discord
-"""Standalone E2E test suite for Discord Out-of-Band HITL Guard (2-Step TOTP Modal, 1-Click & RBAC Isolation)"""
 from __future__ import annotations
 
 import asyncio
