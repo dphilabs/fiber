@@ -6,32 +6,17 @@ from pathlib import Path
 import time
 from typing import Any
 
-from xphi.arch.reflex.flow import Shape, UnitContract
-from xphi.node.space.bind.resolver import resolve_path
+from xphi.arch.reflex.flow import UnitContract
 from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerKind, TriggerSpec
+from xphi.node.space.bind.resolver import resolve_path
 
-from fiber.studio.runbook.stepper import emit_flow_dsl, emit_unit_dsl
-from fiber.studio.runbook.runtime.trigger import TriggerGate, TriggerRuntime
 from fiber.studio.runbook.runtime.projector import SynthesisReport, ViewportSnapshot
+from fiber.studio.runbook.runtime.trigger import TriggerGate, TriggerRuntime
 from fiber.studio.runbook.runtime.viewport import ViewportRuntime
+from fiber.studio.runbook.spec import DRY_NOTE_KEY, is_write_unit, synthesize_dry_output
+from fiber.studio.runbook.stepper import emit_flow_dsl, emit_unit_dsl
 
 DEFAULT_RUNBOOK_FILE = resolve_path("anchor") / "runbook.json"
-_WRITE_KEYWORDS = (
-    "send", "post", "create", "mutate", "apply", "commit",
-    "push", "append", "update", "delete", "exec", "act", "deploy", "rewrite",
-)
-
-
-def _default_for_shape(shape: Shape) -> Any:
-    if shape.is_list:
-        return []
-    if shape.base == "num":
-        return 1.0
-    if shape.base == "bool":
-        return True
-    if shape.base == "obj":
-        return {}
-    return "dry_run_val"
 
 
 class ViewportRunbook:
@@ -81,7 +66,9 @@ class ViewportRunbook:
             },
             "seen_trigger_keys": self.trigger_gate.seen_keys,
         }
-        target.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp.replace(target)
         return target
 
     def load(self, path: str | Path | None = None) -> None:
@@ -156,19 +143,27 @@ class ViewportRunbook:
     # =====================================================================
 
     @staticmethod
-    def _is_write_unit(unit: UnitContract) -> bool:
-        if unit.scheme == "mcp" and any(w in unit.target.lower() or w in unit.name.lower() for w in _WRITE_KEYWORDS):
-            return True
-        return any(w in unit.name.lower() for w in _WRITE_KEYWORDS)
+    def _is_write_unit(
+        scheme_or_unit: str | UnitContract,
+        target: str = "",
+        unit: UnitContract | None = None,
+    ) -> bool:
+        if isinstance(scheme_or_unit, UnitContract):
+            u = scheme_or_unit
+            return is_write_unit(u.scheme, u.target, u)
+        return is_write_unit(scheme_or_unit, target, unit)
 
-    def _synthesize_mock_output(self, scheme: str, target: str, payload: dict[str, Any]) -> dict[str, Any]:
-        for u in self.session.registry.units.values():
-            if u.scheme == scheme and u.target == target:
-                out = {k: payload.get(k, _default_for_shape(u.out_shape(k))) for k in u.out_keys}
-                out.setdefault("_score", 1.0)
-                out["__dry_run_skipped__"] = True
-                return out
-        return {"_score": 1.0, "__dry_run_skipped__": True}
+    def _resolve_flow_unit(self, flow_name: str, scheme: str, target: str) -> UnitContract | None:
+        flow_obj = self.session.registry.flows.get(flow_name)
+        if flow_obj is not None:
+            step_names = {s.name for s in flow_obj.steps}
+            for name, u in self.session.registry.units.items():
+                if name in step_names and u.scheme == scheme and u.target == target:
+                    return u
+        return next(
+            (u for u in self.session.registry.units.values() if u.scheme == scheme and u.target == target),
+            None,
+        )
 
     def test_dry_run(
         self,
@@ -182,9 +177,11 @@ class ViewportRunbook:
                 _, sub_ctx = self.test_dry_run(target, initial_context=payload, mock_all_io=mock_all_io)
                 return sub_ctx
 
-            unit = next((u for u in self.session.registry.units.values() if u.scheme == scheme and u.target == target), None)
-            if mock_all_io or (unit is not None and self._is_write_unit(unit)):
-                return self._synthesize_mock_output(scheme, target, payload)
+            unit = self._resolve_flow_unit(flow_name, scheme, target)
+            if mock_all_io or is_write_unit(scheme, target, unit):
+                out = synthesize_dry_output(unit, payload)
+                out.pop(DRY_NOTE_KEY, None)
+                return out
 
             return self.session.loader.dispatch(scheme, target, payload)
 

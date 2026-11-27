@@ -77,6 +77,7 @@ jobs:
           fiber e2e infra.wasm.gateway
           fiber e2e infra.wasm.fsm
           fiber e2e infra.plane.flare --mode dev
+          fiber e2e worker.builtin
 
       - name: Run Gateway & FinOps Interceptors
         env:
