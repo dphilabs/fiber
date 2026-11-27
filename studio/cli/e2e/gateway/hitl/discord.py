@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import sys
 import tempfile
 import time
@@ -11,19 +12,18 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fiber.studio.harness.mcp.payload import McpPayloadBuilder
-from fiber.studio.harness.mcp.worker import E2EWorkerManager, _is_stale_module_cmd
-from fiber.studio.harness.gateway.audit.context import AuditContext, MCPGatewayTestClient
+from fiber.node.mcp.mapper.spec import (
+    ANCHOR_MCP_PATH,
+    ResolvedTarget,
+    load_anchor_specs,
+    resolve_connector_spec,
+    sync_target_specs,
+)
 from fiber.studio.cli.e2e.config import E2EConfig, Phase, TestResult, get_free_port
 from fiber.studio.cli.e2e.pipeline import BasePipeline, log
-from fiber.gateway.bridge.action.connect import (
-    ACTIVE_TARGETS_TUNNEL_KEY,
-    ResolvedTarget,
-    _specs_from_mapped_entries,
-    resolve_connector_spec,
-    run_connect_copy,
-)
-from fiber.node.mcp.mapper.config import McpConfigMapper
+from fiber.studio.harness.gateway.audit.context import AuditContext, MCPGatewayTestClient
+from fiber.studio.harness.mcp.payload import McpPayloadBuilder
+from fiber.studio.harness.mcp.worker import E2EWorkerManager, _is_stale_module_cmd
 
 try:
     from fiber.gateway.bridge.channel.discord import DiscordHitlBridge, DiscordInteractionType
@@ -31,11 +31,10 @@ except ImportError:
     from fiber.gateway.bridge.discord import DiscordHitlBridge, DiscordInteractionType
 
 from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT
-from xphi.node.space.bind.resolver import resolve_path
-from xphi.node.space.tunnel.factory import TunnelFactory
 from xphi.state.phase.reactor import PhaseReactor
 
-ANCHOR_MCP_JSON = Path(resolve_path("anchor")) / "mcp.json"
+ANCHOR_MCP_JSON: Path = ANCHOR_MCP_PATH
+FALLBACK_WORKER_PACKAGES: Tuple[str, ...] = ("reflexor.units.worker",)
 
 
 class DiscordHitlGuardPipeline(BasePipeline):
@@ -67,11 +66,26 @@ class DiscordHitlGuardPipeline(BasePipeline):
         self.discord_approver_role = os.environ.get("FIBER_DISCORD_APPROVER_ROLE", "111222333444555666")
 
         self.set_phases([
-            Phase("Phase 1: Connect Spec Resolver & Discord Dual Mode Guard Arming", self.phase_resolver_and_guard_arming),
-            Phase("Phase 2: Safe Call Passthrough (Zero-Overhead on Non-Matching Payload)", self.phase_safe_passthrough),
-            Phase("Phase 3: [Discord RBAC Defense] Unauthorized User Click Ephemeral Rejection", self.phase_unauthorized_rbac_rejection),
-            Phase("Phase 4: [Daemon Persistent + TOTP Modal] 2-Step Modal Popup & Attested Resume", self.phase_daemon_finlib_totp_modal_hitl),
-            Phase("Phase 5: [Stdio/Ephemeral + 1-Click Button] Zero-Spawn Trap & Immediate Resume", self.phase_stdio_ephemeral_button_hitl),
+            Phase(
+                "Phase 1: Connect Spec Resolver & Discord Dual Mode Guard Arming",
+                self.phase_resolver_and_guard_arming,
+            ),
+            Phase(
+                "Phase 2: Safe Call Passthrough (Zero-Overhead on Non-Matching Payload)",
+                self.phase_safe_passthrough,
+            ),
+            Phase(
+                "Phase 3: [Discord RBAC Defense] Unauthorized User Click Ephemeral Rejection",
+                self.phase_unauthorized_rbac_rejection,
+            ),
+            Phase(
+                "Phase 4: [Daemon Persistent + TOTP Modal] 2-Step Modal Popup & Attested Resume",
+                self.phase_daemon_finlib_totp_modal_hitl,
+            ),
+            Phase(
+                "Phase 5: [Stdio/Ephemeral + 1-Click Button] Zero-Spawn Trap & Immediate Resume",
+                self.phase_stdio_ephemeral_button_hitl,
+            ),
         ])
 
     async def setup_custom_context(self) -> None:
@@ -109,10 +123,13 @@ class DiscordHitlGuardPipeline(BasePipeline):
     def _resolve_finlib_exec_cmd(self, anchor_spec: Optional[ResolvedTarget] = None) -> str:
         if anchor_spec and anchor_spec.exec_cmd and not _is_stale_module_cmd(anchor_spec.exec_cmd):
             return anchor_spec.exec_cmd
-        cmd, _, _ = E2EWorkerManager.resolve_worker_defaults(self.finlib_target_id)
+        cmd, _, _ = E2EWorkerManager.resolve_worker_defaults(
+            self.finlib_target_id,
+            worker_packages=FALLBACK_WORKER_PACKAGES,
+        )
         if cmd:
             return cmd
-        searched = E2EWorkerManager.get_worker_packages()
+        searched = E2EWorkerManager.get_worker_packages(FALLBACK_WORKER_PACKAGES)
         raise RuntimeError(
             f"[DiscordGuard] Cannot locate '{self.finlib_target_id}' in worker packages {searched}. "
             f"Set MCP_WORKER_PACKAGE or register '{self.finlib_target_id}' in {ANCHOR_MCP_JSON}."
@@ -122,8 +139,11 @@ class DiscordHitlGuardPipeline(BasePipeline):
         def _parse_current() -> Optional[ResolvedTarget]:
             if not ANCHOR_MCP_JSON.is_file():
                 return None
-            entries = McpConfigMapper.parse_file(ANCHOR_MCP_JSON, agent_hint="fiber")
-            return {s.target_id: s for s in _specs_from_mapped_entries(entries)}.get(self.finlib_target_id)
+            try:
+                return {s.target_id: s for s in load_anchor_specs()}.get(self.finlib_target_id)
+            except Exception as exc:
+                log.warning(f"[DiscordGuard] Failed to read {ANCHOR_MCP_JSON}: {exc}")
+                return None
 
         existing = _parse_current()
         if (
@@ -134,8 +154,11 @@ class DiscordHitlGuardPipeline(BasePipeline):
             return existing, False
 
         try:
-            default_cmd, _, _ = E2EWorkerManager.resolve_worker_defaults(self.finlib_target_id)
-            run_connect_copy(
+            default_cmd, _, _ = E2EWorkerManager.resolve_worker_defaults(
+                self.finlib_target_id,
+                worker_packages=FALLBACK_WORKER_PACKAGES,
+            )
+            sync_target_specs(
                 exec_cmd=default_cmd or "finlib",
                 target=self.finlib_target_id,
                 mode="linear",
@@ -144,8 +167,8 @@ class DiscordHitlGuardPipeline(BasePipeline):
             if ANCHOR_MCP_JSON.is_file():
                 os.utime(ANCHOR_MCP_JSON, None)
             return _parse_current(), True
-        except BaseException as e:
-            log.warning(f"[DiscordGuard] Anchor config sync warning: {e}")
+        except BaseException as exc:
+            log.warning(f"[DiscordGuard] Anchor config sync warning: {exc}")
             return None, False
 
     async def setup_workers(self) -> None:
@@ -163,9 +186,10 @@ class DiscordHitlGuardPipeline(BasePipeline):
             preflight = anchor_spec.preflight if anchor_spec else self.finlib_preflight_rule
             self.add_connector(self.finlib_target_id, exec_cmd, mode=mode, preflight=preflight)
 
+        quoted_sandbox = shlex.quote(str(self.sandbox_path))
         self.add_connector(
             self.stdio_target_id,
-            f"npx -y @modelcontextprotocol/server-filesystem {self.sandbox_path}",
+            f"npx -y @modelcontextprotocol/server-filesystem {quoted_sandbox}",
             preflight=self.stdio_preflight_rule,
         )
 
@@ -174,9 +198,10 @@ class DiscordHitlGuardPipeline(BasePipeline):
     ) -> None:
         """
         Discord Gateway v10 INTERACTION_CREATE 로컬 에뮬레이션 (Slack의 인라인 Block-Kit 입력과 대비되는 2-Step 모달 구조):
-- expect_totp=True: 1) MESSAGE_COMPONENT 클릭 -> MODAL_OPENED 확인 -> 2) MODAL_SUBMIT 제출 -> RESUMED
-- expect_totp=False: 1) MESSAGE_COMPONENT 클릭 -> 즉시 RESUMED
+        - expect_totp=True: 1) MESSAGE_COMPONENT 클릭 -> MODAL_OPENED 확인 -> 2) MODAL_SUBMIT 제출 -> RESUMED
+        - expect_totp=False: 1) MESSAGE_COMPONENT 클릭 -> 즉시 RESUMED
         """
+        assert self.discord_bridge is not None
         yield_event = {
             "event": "MCP_PHASE_YIELD",
             "handle_id": handle_id,
@@ -240,15 +265,23 @@ class DiscordHitlGuardPipeline(BasePipeline):
         idem_key: str,
         expect_totp: bool,
     ) -> str:
+        assert self.discord_bridge is not None
+        assert self.gw_client is not None
+
         actual_totp = bool(prompt_payload.get("params", {}).get("require_totp", True))
         if actual_totp != expect_totp:
-            raise RuntimeError(f"Prompt require_totp mismatch on {target_id}: expected {expect_totp}, got {actual_totp}")
+            raise RuntimeError(
+                f"Prompt require_totp mismatch on {target_id}: expected {expect_totp}, got {actual_totp}"
+            )
 
         mode_badge = "TOTP-MODAL" if expect_totp else "1-CLICK BUTTON"
 
         if self.discord_bridge.is_live_configured:
             await asyncio.sleep(0.4)
-            print(f"\n{'=' * 80}\n[LIVE DISCORD HITL | {mode_badge}] Target: {target_id} | Handle: {handle_id}\n{'-' * 80}")
+            print(
+                f"\n{'=' * 80}\n[LIVE DISCORD HITL | {mode_badge}] "
+                f"Target: {target_id} | Handle: {handle_id}\n{'-' * 80}"
+            )
             start_wait = time.time()
 
             async def spinner_task() -> None:
@@ -259,9 +292,15 @@ class DiscordHitlGuardPipeline(BasePipeline):
                     icon = frames[tick % len(frames)]
                     if expect_totp:
                         rem = 30 - (int(time.time()) % 30)
-                        msg = f"{icon} [PARKED: TOTP MODAL] Click Approve & Enter [ \033[1;32m{self.crypto_ctx.generate_totp()}\033[0m ] (in {rem:02d}s)... ({el:.1f}s)"
+                        msg = (
+                            f"{icon} [PARKED: TOTP MODAL] Click Approve & Enter "
+                            f"[ \033[1;32m{self.crypto_ctx.generate_totp()}\033[0m ] (in {rem:02d}s)... ({el:.1f}s)"
+                        )
                     else:
-                        msg = f"{icon} [PARKED: 1-CLICK] Click [ \033[1;36mApprove & Resume\033[0m ] in Discord... ({el:.1f}s)"
+                        msg = (
+                            f"{icon} [PARKED: 1-CLICK] Click "
+                            f"[ \033[1;36mApprove & Resume\033[0m ] in Discord... ({el:.1f}s)"
+                        )
                     sys.stdout.write(f"\r\033[K   {msg}")
                     sys.stdout.flush()
                     tick += 1
@@ -273,12 +312,17 @@ class DiscordHitlGuardPipeline(BasePipeline):
             finally:
                 spinner.cancel()
                 await asyncio.gather(spinner, return_exceptions=True)
-            print(f"\r\033[K   [SIGNAL RECEIVED] Status: {event_data.get('status')} ({time.time() - start_wait:.1f}s)\n{'=' * 80}")
+            print(
+                f"\r\033[K   [SIGNAL RECEIVED] Status: {event_data.get('status')} "
+                f"({time.time() - start_wait:.1f}s)\n{'=' * 80}"
+            )
         else:
             event_data = await self.wait_for_intent_reply(
                 handle_id,
                 timeout=15.0,
-                trigger_coro=lambda: self._emulate_local_discord_interaction(target_id, handle_id, prompt_payload, expect_totp),
+                trigger_coro=lambda: self._emulate_local_discord_interaction(
+                    target_id, handle_id, prompt_payload, expect_totp
+                ),
             )
 
         if event_data.get("status") != "RESOLVED":
@@ -314,23 +358,30 @@ class DiscordHitlGuardPipeline(BasePipeline):
         log.info(f"  └─ Armed: [{self.finlib_target_id} (TOTP Modal)] & [{self.stdio_target_id} (1-Click Button)]")
 
     async def phase_safe_passthrough(self) -> None:
+        assert self.gw_client is not None
         res_math = await self.gw_client.post_gateway(
             self.finlib_target_id, self.mcp.next_tool_call("eval_math", expression="100 * 50")
         )
-        if res_math.status_code != 200 or McpPayloadBuilder.extract_data(res_math.content, parse_json=True).get("result") != 5000.0:
+        if (
+            res_math.status_code != 200
+            or McpPayloadBuilder.extract_data(res_math.content, parse_json=True).get("result") != 5000.0
+        ):
             raise RuntimeError(f"Safe FinLib call failed: {res_math.status_code}")
 
         safe_file = str(self.sandbox_path / "public_readme.txt")
         res_fs = await self.gw_client.post_gateway(
             self.stdio_target_id, self.mcp.next_tool_call("read_file", path=safe_file)
         )
-        if res_fs.status_code != 200 or "SAFE_PUBLIC_CONTENT" not in McpPayloadBuilder.extract_data(res_fs.content, parse_json=False):
+        if res_fs.status_code != 200 or "SAFE_PUBLIC_CONTENT" not in McpPayloadBuilder.extract_data(
+            res_fs.content, parse_json=False
+        ):
             raise RuntimeError(f"Safe Stdio call failed: {res_fs.status_code}")
 
         log.info("  └─ Safe Calls ('eval_math' & 'public_readme.txt') bypassed Guard with 200 OK.")
 
     async def phase_unauthorized_rbac_rejection(self) -> None:
         """권한 없는 유저(역할 미보유 또는 identity_map 미등록)가 버튼을 클릭했을 때 Ephemeral 차단 및 토큰 보존 검증"""
+        assert self.discord_bridge is not None
         dummy_handle = f"hdl_rbac_{uuid.uuid4().hex[:8]}"
         yield_event = {
             "event": "MCP_PHASE_YIELD",
@@ -361,6 +412,7 @@ class DiscordHitlGuardPipeline(BasePipeline):
         log.info("  └─ Unauthorized Discord User/Role rejected via Ephemeral Guard (State Token Preserved).")
 
     async def phase_daemon_finlib_totp_modal_hitl(self) -> None:
+        assert self.gw_client is not None
         idem_key = uuid.uuid4().hex
         payload = self.mcp.next_tool_call("normalize_order", symbol="BTCUSD", raw_price=65000.25, raw_amount=1.5004)
 
@@ -383,7 +435,11 @@ class DiscordHitlGuardPipeline(BasePipeline):
         log.info(f"  └─ [Daemon/Linear | Discord TOTP Modal] Verified -> Normalized price={parsed['normalized_price']}")
 
     async def phase_stdio_ephemeral_button_hitl(self) -> None:
+        assert self.gw_client is not None
         stdio_conn = self._get_connector(self.stdio_target_id)
+        if stdio_conn is None:
+            raise RuntimeError(f"Connector not found for {self.stdio_target_id}")
+
         idem_key = uuid.uuid4().hex
         payload = self.mcp.next_tool_call("read_file", path=str(self.sandbox_path / "prod_secrets.env"))
 
@@ -423,10 +479,17 @@ async def run_suite() -> None:
         )
     lines.extend([
         "-" * 90,
-        "DISCORD PRE-FLIGHT GUARD PIPELINE VALIDATED SUCCESSFULLY." if all_passed else "DISCORD PRE-FLIGHT GUARD FAILURE DETECTED.",
+        (
+            "DISCORD PRE-FLIGHT GUARD PIPELINE VALIDATED SUCCESSFULLY."
+            if all_passed
+            else "DISCORD PRE-FLIGHT GUARD FAILURE DETECTED."
+        ),
         "=" * 90 + "\n",
     ])
     print("\n".join(lines), flush=True)
+
+    if not all_passed:
+        raise SystemExit(1)
 
 def main(args_list: Optional[List[str]] = None) -> None:
     PhaseReactor.ignite(main_coro_func=run_suite)

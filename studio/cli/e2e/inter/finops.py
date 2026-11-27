@@ -34,7 +34,7 @@ from fiber.llm.vcr.manager import (
 )
 from fiber.llm.vcr.injector import VCRInjector
 from fiber.studio.cli.e2e.builder import create_e2e_parser, build_e2e_context
-import fiber.node.worker.finops as worker_finops
+import fiber.node.worker.internal.finops as worker_finops
 from fiber.node.account.finops.watcher import default_finops_watcher, default_tenant_eco
 
 from fiber.node.account.auth.payload import NodeAuthPayload

@@ -6,32 +6,23 @@ from typing import Dict, Optional, List, Any
 
 import orjson
 import typer
+
+from fiber.gateway.bridge.emitter import get_emitter
 from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     STANDALONE_ATTACHED_TUNNEL_KEY,
-    ANCHOR_ROOT,
-    ANCHOR_MCP_PATH,
-    DEFAULT_WORKER_PACKAGE,
-    BUILTIN_ALIASES,
     ResolvedTarget,
-    _parse_fiber_tags,
-    discover_builtin_workers,
-    _resolve_all_builtin_specs,
-    resolve_connector_spec,
-    _specs_from_mapped_entries,
-    _sync_to_anchor_config,
-    _collect_specs_and_envs,
+    collect_target_specs,
+    sync_target_specs,
 )
-
 from xphi.node.space.tunnel.factory import TunnelFactory
-from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("bridge.action.connect")
 
 
 async def _notify_standalone_attachment(spec: ResolvedTarget, attach: bool):
-    """McpWorkerDaemon이 직접 PID 생존 여부를 확인하고 레지스트리에 통합할 수 있도록 Standalone 상태를 기록/해제합니다."""
+    """Register or clear standalone PID presence in tunnel storage for McpWorkerDaemon reconciliation."""
     try:
         tunnel = await TunnelFactory.get_default()
         raw = await tunnel.get(STANDALONE_ATTACHED_TUNNEL_KEY)
@@ -58,7 +49,7 @@ async def _notify_standalone_attachment(spec: ResolvedTarget, attach: bool):
 
 
 async def _filter_unmounted_specs(specs: List[ResolvedTarget]) -> List[ResolvedTarget]:
-    """데몬 또는 다른 살아있는 Standalone 프로세스에서 이미 떠 있는 타겟을 제외하여 중복 실행 방지"""
+    """Exclude targets already active in McpWorkerDaemon or another live standalone process."""
     try:
         tunnel = await TunnelFactory.get_default()
         raw = await tunnel.get(ACTIVE_TARGETS_TUNNEL_KEY)
@@ -112,32 +103,29 @@ def run_connect_copy(
     target: Optional[str] = None,
     mode: Optional[str] = None,
     preflight: Optional[str] = None,
+    include_builtins: bool = False,
 ) -> Path:
-    if agent is None and exec_cmd is None and config is None:
-        log.error(
-            "[Fiber] Specify an agent to sync (e.g., 'fiber connect claude', 'fiber connect all'), "
-            "--config (-c), or --exec (-e)."
-        )
-        raise typer.Exit(1)
+    if agent is None and exec_cmd is None and config is None and not include_builtins:
+        agent = "builtin"
 
-    specs, env_lookup = _collect_specs_and_envs(
+    specs, out_path = sync_target_specs(
         agent=agent,
         exec_cmd=exec_cmd,
         config=config,
         target=target,
         mode=mode,
         preflight=preflight,
+        include_builtins=include_builtins,
     )
     if not specs:
         log.error("[Fiber] No MCP targets found to sync.")
         raise typer.Exit(1)
 
-    out_path = _sync_to_anchor_config(specs, env_lookup=env_lookup)
     for s in specs:
         guard_info = f" (Pre-Flight: {s.preflight})" if s.preflight else ""
         tags_info = f" (Tags: {','.join(s.tags)})" if s.tags else ""
         log.info(f"  ├─ [{s.target_id}] -> {s.exec_cmd} [{s.mode.upper()}]{guard_info}{tags_info}")
-    return out_path or ANCHOR_MCP_PATH
+    return out_path
 
 
 def run_connect_standalone(
@@ -146,21 +134,22 @@ def run_connect_standalone(
     target: Optional[str] = None,
     mode: Optional[str] = None,
     preflight: Optional[str] = None,
+    include_builtins: bool = False,
 ):
-    # standalone 실행 시 외부 인자가 없으면 오직 ~/.anchor/mcp.json("fiber")에 등록된 타겟만 실행
-    default_agent = "fiber" if (exec_cmd is None and config is None) else None
-    specs, _ = _collect_specs_and_envs(
+    default_agent = "fiber" if (exec_cmd is None and config is None and not include_builtins) else None
+    specs = collect_target_specs(
         agent=default_agent,
         exec_cmd=exec_cmd,
         config=config,
         target=target,
         mode=mode,
         preflight=preflight,
+        include_builtins=include_builtins,
     )
     if not specs:
         log.error(
             "[Fiber] No valid MCP target resolved for standalone execution. "
-            "Provide --exec (-e), --config (-c), or register targets via 'fiber connect'."
+            "Provide --exec (-e), --config (-c), --builtins (-b), or register targets via 'fiber connect'."
         )
         raise typer.Exit(1)
 

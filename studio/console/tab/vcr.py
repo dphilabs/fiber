@@ -81,10 +81,8 @@ def _discover_compat_models_and_dirs() -> dict[str, Path]:
             mapping[fallback_id] = adapters_root
     return mapping
 
-
 def discover_compat_models() -> list[str]:
     return list(_discover_compat_models_and_dirs().keys())
-
 
 class VcrTab(StudioTab):
     title = "VCR"
@@ -94,7 +92,7 @@ class VcrTab(StudioTab):
 
     def __init__(self) -> None:
         self._fixture_preview_box: ui.code | None = None
-        self._fixture_meta_label: ui.label | None = None
+        self._fixture_meta_label: kit.Tag | None = None
         self._last_inspected_key: str = ""
 
     async def _run_compat_verify(self) -> None:
@@ -144,8 +142,8 @@ class VcrTab(StudioTab):
                     keys_info = "valid JSON"
 
                 if self._fixture_meta_label:
-                    self._fixture_meta_label.set_text(
-                        f"🟢 {target_file.parent.name}/{target_file.name} ({size_kb:.1f} KB | {keys_info})"
+                    self._fixture_meta_label.set(
+                        f"[●] {target_file.parent.name}/{target_file.name} ({size_kb:.1f} KB | {keys_info})", "green"
                     )
                 if self._fixture_preview_box:
                     preview_lines = "\n".join(raw_text.splitlines()[:28])
@@ -155,11 +153,11 @@ class VcrTab(StudioTab):
                 return
             except Exception as e:
                 if self._fixture_meta_label:
-                    self._fixture_meta_label.set_text(f"⚠️ Parse error in {target_file.name}: {e}")
+                    self._fixture_meta_label.set(f"[!] Parse error in {target_file.name}: {e}", "red")
                 return
 
         if self._fixture_meta_label:
-            self._fixture_meta_label.set_text(f"⚪ No local fixture found for '{model_id}' ({fixture_kind})")
+            self._fixture_meta_label.set(f"[○] No local fixture found for '{model_id}' ({fixture_kind})", "muted")
         if self._fixture_preview_box:
             self._fixture_preview_box.set_content(
                 json.dumps(
@@ -176,7 +174,6 @@ class VcrTab(StudioTab):
     def compose_left(self) -> None:
         p = state.pipeline
         compat_models = discover_compat_models()
-        # if not getattr(p, "compat_model", None) or p.compat_model not in compat_models:
         if p.compat_model not in compat_models:
             setattr(p, "compat_model", compat_models[0])
         if not hasattr(p, "compat_fixture_kind"):
@@ -184,7 +181,7 @@ class VcrTab(StudioTab):
         if not hasattr(p, "vcr_chaos"):
             setattr(p, "vcr_chaos", 0.0)
 
-        ui.label("Target Model & VCR Options").classes("text-[11px] font-bold text-cyan-400 shrink-0")
+        kit.section("Target Model & VCR Options")
         with kit.row():
             kit.select(compat_models, "Model (-m)", p, "compat_model", width="flex-grow")
             kit.select(["replay", "record"], "Mode (--vcr)", p, "vcr_mode", width="w-28")
@@ -201,9 +198,7 @@ class VcrTab(StudioTab):
             ).tooltip("Run 'fiber compat fixture -m <model> --vcr <mode> --vcr-speed <speed>'")
 
         with kit.row(align="items-center justify-between"):
-            ui.label("Fixture Inspector (`fiber-compats/adapters`):").classes(
-                "text-[11px] font-bold text-slate-400 shrink-0"
-            )
+            kit.section("Fixture Inspector (fiber-compats/adapters)", "muted")
             kit.select(
                 ["stream_compat_traverser.json", "sync_declarative_rule.json"],
                 "Fixture File",
@@ -212,68 +207,65 @@ class VcrTab(StudioTab):
                 width="w-56",
             )
 
-        self._fixture_meta_label = ui.label("").classes("text-[11px] font-mono text-emerald-400 shrink-0")
-        self._fixture_preview_box = (
-            ui.code("{}", language="json")
-            .classes("w-full flex-grow text-[11px] font-mono bg-slate-950 border border-slate-800 rounded overflow-y-auto")
-        )
+        self._fixture_meta_label = kit.tag("", "green", framed=False).classes("shrink-0")
+        self._fixture_preview_box = ui.code("{}", language="json").classes("w-full flex-grow text-[11px] overflow-y-auto")
         self._refresh_fixture_inspector(force=True)
 
     def compose_right(self) -> None:
         s, f, p = state.security, state.finops, state.pipeline
 
-        # 1. 실시간 토큰 카운터 + VCR 배속 + 절감액 KPI 바
+        # Token counter + VCR speedup + savings KPI bar
         with kit.bar():
             with ui.row().classes("items-center gap-2 no-wrap"):
-                ui.badge().bind_text_from(
-                    p,
-                    "vcr_bench_replay_ms",
-                    lambda rep: (
-                        f"⚡ Speedup: {round(p.vcr_bench_live_ms / max(float(rep or 0.1), 0.1), 1)}x "
-                        f"({p.vcr_bench_live_ms:.0f}ms ➔ {float(rep or 0.0):.1f}ms)"
+                kit.tag(
+                    bind=(
+                        p,
+                        "vcr_bench_replay_ms",
+                        lambda rep: (
+                            f"[SPEEDUP {round(p.vcr_bench_live_ms / max(float(rep or 0.1), 0.1), 1)}x "
+                            f"{p.vcr_bench_live_ms:.0f}ms -> {float(rep or 0.0):.1f}ms]"
+                        ),
                     ),
-                ).props("color=slate-8 text-color=emerald-3").classes("text-[11px] font-mono font-bold px-2 py-0.5")
+                    tone="green",
+                ).classes("font-bold")
+                kit.tag(
+                    bind=(
+                        f,
+                        "saved_tokens",
+                        lambda tok: f"REPLAY SAVED {int(tok or 0):,} tok (${float(f.saved_usd or 0.0):.3f})",
+                    ),
+                    tone="amber",
+                    framed=False,
+                ).classes("font-bold")
 
-                ui.label().bind_text_from(
-                    f,
-                    "saved_tokens",
-                    lambda tok: f"🪙 Replay Saved: {int(tok or 0):,} tok (${float(f.saved_usd or 0.0):.3f})",
-                ).classes("text-xs font-mono font-bold text-amber-300")
+            kit.tag(bind=(s, "total_processed_tokens", lambda tot: f"[TOKENS {int(tot or 0):,}]"), tone="cyan")
 
-            ui.badge().bind_text_from(
-                s,
-                "total_processed_tokens",
-                lambda tot: f"📊 Total Tokens: {int(tot or 0):,}",
-            ).props("color=slate-9 text-color=cyan-3").classes("text-[10px] font-mono border border-slate-700 px-1.5")
-
-        # 2. 표준화된 `--vcr-*` CLI 커맨드 프리뷰 바
-        with ui.row().classes(
-            "w-full items-center justify-between bg-slate-950/90 px-3 py-1.5 rounded border border-slate-800 shrink-0"
-        ):
-            ui.label().bind_text_from(
-                p,
-                "compat_model",
-                lambda m: (
-                    f"$ fiber compat fixture -m {m} --vcr {p.vcr_mode} --vcr-speed {p.vcr_speed}"
-                    + (f" --vcr-chaos {getattr(p, 'vcr_chaos', 0.0)}" if float(getattr(p, "vcr_chaos", 0.0) or 0.0) > 0 else "")
+        # Standardized `--vcr-*` CLI command preview
+        with kit.bar():
+            kit.tag(
+                bind=(
+                    p,
+                    "compat_model",
+                    lambda m: (
+                        f"$ fiber compat fixture -m {m} --vcr {p.vcr_mode} --vcr-speed {p.vcr_speed}"
+                        + (f" --vcr-chaos {getattr(p, 'vcr_chaos', 0.0)}" if float(getattr(p, "vcr_chaos", 0.0) or 0.0) > 0 else "")
+                    ),
                 ),
-            ).classes("text-[11px] font-mono text-cyan-300 truncate")
+                tone="cyan",
+                framed=False,
+            ).classes("truncate min-w-0 flex-1")
+            kit.tag(
+                bind=(p, "vcr_speed", lambda spd: "[FAST-FORWARD 0ms]" if spd == "max" else "[REAL-TIME]"),
+                tone="muted",
+            ).classes("shrink-0")
 
-            ui.badge().bind_text_from(
-                p,
-                "vcr_speed",
-                lambda spd: "🚀 0ms Fast-Forward" if spd == "max" else "⏱️ Real-Time Pacing",
-            ).props("color=slate-8 text-color=slate-3").classes("text-[10px] font-mono shrink-0")
-
-        # 3. Live LLM vs VCR Replay 레이턴시 비교 바 차트
-        ui.label("Live LLM Network I/O vs. Deterministic VCR Replay Latency (ms):").classes(
-            "text-xs text-slate-400 mt-1 shrink-0"
-        )
+        # Live LLM vs VCR replay latency bar chart
+        kit.section("Live LLM Network I/O vs. Deterministic VCR Replay Latency (ms)", "muted").classes("mt-1")
         refs.vcr_chart = kit.bar_chart(
             categories=["VCR Replay", "Live LLM"],
             data=[
-                {"value": p.vcr_bench_replay_ms, "itemStyle": {"color": "#10b981"}},
-                {"value": p.vcr_bench_live_ms, "itemStyle": {"color": "#f59e0b"}},
+                {"value": p.vcr_bench_replay_ms, "itemStyle": {"color": "#50fa7b"}},  # TUI green
+                {"value": p.vcr_bench_live_ms, "itemStyle": {"color": "#e0af68"}},  # TUI amber
             ],
             formatter="{c} ms",
         )

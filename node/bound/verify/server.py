@@ -1,22 +1,22 @@
 # fiber.node.bound.verify.server
+from __future__ import annotations
+
 import asyncio
+from dataclasses import dataclass
 import inspect
 import json
+import os
+from pathlib import Path
 import re
 import shutil
-import uuid
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Awaitable, Dict, List, Optional, Protocol, Tuple, Union
+import uuid
 
 import httpx
 import jmespath
 from jmespath.exceptions import JMESPathError
 from jsonschema import Draft202012Validator, SchemaError
 from pydantic import ValidationError
-
-from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
-from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT
 
 from fiber.node.bound.verify.models import (
     BinaryProbeSpec,
@@ -25,6 +25,8 @@ from fiber.node.bound.verify.models import (
     SemanticCheckSpec,
     VerifyRulesRegistry,
 )
+from xphi.arch.bound.adapter.gateway import DPoPClientGenerator
+from xphi.arch.contract.config.env import DEFAULT_GATEWAY_PORT
 
 DEFAULT_RULES_PATH = Path(__file__).with_name("rules.json")
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
@@ -41,7 +43,6 @@ class SemanticEvaluator(Protocol):
 
 class VerificationError(Exception):
     """규칙 미등록, 파라미터 누락, 미등록 시맨틱 검증기 호출, 실행 실패 시 발생하는 예외"""
-    pass
 
 
 @dataclass(frozen=True)
@@ -51,16 +52,23 @@ class _CompiledCheck:
     semantic: Optional[SemanticCheckSpec] = None
 
 
-def _bind_placeholders(template: str, params: Dict[str, Any]) -> str:
+def _bind_placeholders(template: str, params: Dict[str, Any], *, forbid_cli_flags: bool = False) -> str:
     merged = {"gateway_port": DEFAULT_GATEWAY_PORT, **params}
 
     def _replace(match: re.Match[str]) -> str:
         key = match.group(1)
-        if key not in merged:
+        if key not in merged or merged[key] is None:
             raise VerificationError(f"Missing required template parameter: '{key}'")
         val = str(merged[key])
         if "\x00" in val or "\r" in val or "\n" in val:
             raise VerificationError(f"Control characters are not allowed in parameter: '{key}'")
+        if forbid_cli_flags:
+            stripped = val.strip()
+            if stripped.startswith("-"):
+                raise VerificationError(f"Leading '-' (CLI option injection) is forbidden in parameter: '{key}'")
+            norm_parts = stripped.replace("\\", "/").split("/")
+            if ".." in norm_parts:
+                raise VerificationError(f"Parent directory traversal ('..') is forbidden in parameter: '{key}'")
         return val
 
     return _PLACEHOLDER_RE.sub(_replace, template)
@@ -74,8 +82,8 @@ class VerificationServer:
         workspace_root: str = ".",
         rules_path: Optional[str] = None,
         evaluators: Optional[Dict[str, SemanticEvaluator]] = None,
-    ):
-        self.workspace_root = Path(workspace_root).resolve()
+    ) -> None:
+        self.workspace_root = Path(workspace_root).expanduser().resolve()
         self.rules_path = Path(rules_path).expanduser().resolve() if rules_path else DEFAULT_RULES_PATH
 
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -123,6 +131,8 @@ class VerificationServer:
 
         try:
             registry = VerifyRulesRegistry.model_validate_json(path.read_text(encoding="utf-8"))
+        except OSError as e:
+            raise VerificationError(f"Cannot read rules file '{path}': {e}") from e
         except ValidationError as e:
             raise VerificationError(f"Invalid rules.json format: {e}") from e
 
@@ -153,10 +163,13 @@ class VerificationServer:
             headers.update({
                 "x-idempotency-key": uuid.uuid4().hex,
                 "x-nonce": nonce,
-                "X-Fiber-Fuel-Receipt": headers.get("X-Fiber-Fuel-Receipt", "valid_receipt"),
                 "x-spiffe-id": spec.spiffe_id,
                 "DPoP": self._dpop_gen.generate_proof(url=url, method=spec.method, nonce=nonce),
             })
+            # 하드코딩된 더미 영수증("valid_receipt") 제거: 명시적 설정이 있을 때만 헤더 부착
+            env_receipt = os.environ.get("FIBER_FUEL_RECEIPT", "").strip()
+            if "X-Fiber-Fuel-Receipt" not in headers and env_receipt:
+                headers["X-Fiber-Fuel-Receipt"] = env_receipt
         return headers
 
     async def aclose(self) -> None:
@@ -202,6 +215,7 @@ class VerificationServer:
     def list_rules(self) -> Dict[str, Any]:
         return {
             "rules_path": str(self.rules_path),
+            "workspace_root": str(self.workspace_root),
             "registered_evaluators": sorted(self._semantic_evaluators.keys()),
             "payload_rules": {k: v[0].description for k, v in self._payload_checks.items()},
             "http_probes": {k: v[0].description for k, v in self._http_checks.items()},
@@ -281,6 +295,7 @@ class VerificationServer:
             "url": bound_url,
             "status_code": resp.status_code,
             "passed": len(violations) == 0,
+            "violation_count": len(violations),
             "violations": violations,
         }
 
@@ -300,15 +315,21 @@ class VerificationServer:
         if bin_path is None:
             raise VerificationError(f"Required local binary not found in PATH: '{spec.executable}'")
 
-        target_cwd = (self.workspace_root / rel_cwd).resolve()
+        clean_cwd = rel_cwd.strip() or "."
+        target_cwd = (self.workspace_root / clean_cwd).resolve()
         if not target_cwd.is_relative_to(self.workspace_root) or not target_cwd.is_dir():
             raise VerificationError(f"Invalid or out-of-workspace directory: '{rel_cwd}'")
 
-        bound_args = [_bind_placeholders(arg, params or {}) for arg in spec.args]
+        bound_args = [
+            _bind_placeholders(arg, params or {}, forbid_cli_flags=True)
+            for arg in spec.args
+        ]
 
+        # stdin=DEVNULL 필수: Stdio 멀티플렉스 워커의 표준입력(JSON-RPC 스트림)을 자식 프로세스가 훔쳐 읽는 현상 차단
         proc = await asyncio.create_subprocess_exec(
             bin_path,
             *bound_args,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(target_cwd),
@@ -356,6 +377,7 @@ class VerificationServer:
             "executable": spec.executable,
             "exit_code": exit_code,
             "passed": len(violations) == 0,
+            "violation_count": len(violations),
             "violations": violations,
             "stderr_tail": stderr_text[-500:] if stderr_text else "",
         }

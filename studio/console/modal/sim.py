@@ -1,4 +1,4 @@
-# fiber.studio.console.ui.sim
+# fiber.studio.console.modal.sim
 from __future__ import annotations
 
 from nicegui import ui
@@ -6,7 +6,7 @@ from nicegui import ui
 from fiber.node.account.state import state, refs
 from fiber.studio.console.bridge.sign import oob
 from fiber.studio.console.env import get_slack_status
-from fiber.studio.console.ui.guide import open_guide_modal
+from fiber.studio.console.modal.guide import open_guide_modal
 import fiber.studio.console.ui.kit as kit
 from fiber.studio.console.ui.kit import ModalTemplate
 
@@ -14,18 +14,15 @@ SIM_TARGET = "postgres-prod-db"
 SIM_TOOL = "drop_table"
 SIM_ARGS = {"table": "customer_ledgers", "cascade": True}
 
-
 def _open_hitl_guide() -> None:
     try:
         open_guide_modal("hitl")  # type: ignore[arg-type]
     except TypeError:
         open_guide_modal()
 
-
 async def _run_console_sim(dialog: ui.dialog) -> None:
     dialog.close()
     await oob.open_hitl_modal(f"{SIM_TARGET}.{SIM_TOOL}", SIM_ARGS)
-
 
 async def _run_slack_sim() -> None:
     st = get_slack_status()
@@ -40,39 +37,34 @@ async def _run_slack_sim() -> None:
 
 class HitlSimulatorModal(ModalTemplate):
     width_cls = "w-[460px] max-w-[95vw]"
-    border_cls = "border border-amber-500/70"
+    border_cls = "tui-border-amber"
     persistent = False
+    title = "HITL Dry-Run Simulator"
 
     def compose(self, dialog: ui.dialog) -> None:
         setattr(refs, "hitl_sim_dialog", dialog)
         s = state.security
 
-        with ui.row().classes("w-full items-center justify-between border-b border-slate-800 pb-2 mb-1"):
-            ui.label("🧪 HITL Dry-Run Simulator").classes("text-sm font-bold text-amber-400")
-            ui.button(icon="close", on_click=dialog.close).props("flat dense round size=sm color=slate-4")
+        with ui.row().classes("w-full justify-end -mt-2"):
+            kit.button("[x]", dialog.close, color="muted", flat=True, size="xs")
 
-        ui.label(f"Payload: {SIM_TARGET}.{SIM_TOOL}({SIM_ARGS})").classes(
-            "w-full px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300"
-        )
+        kit.tag(f"Payload: {SIM_TARGET}.{SIM_TOOL}({SIM_ARGS})", "muted").classes("w-full truncate")
 
         with kit.bar():
-            ui.label().bind_text_from(s, "admin_user", lambda u: f"Attester: {u}").classes(
-                "text-xs font-mono text-cyan-300"
-            )
+            kit.tag(bind=(s, "admin_user", lambda u: f"Attester: {u}"), tone="cyan", framed=False)
             kit.switch("Require 6-Digit TOTP", s, "oob_require_totp", color="cyan")
 
         with ui.row().classes("w-full items-center gap-2 mt-1"):
             kit.button(
-                "🖥️ Console Popup",
+                "Console Popup",
                 lambda: _run_console_sim(dialog),
                 color="amber",
-                text_color="black",
                 flex=True,
             )
             kit.button(
-                "💬 Slack OOB Test",
+                "Slack OOB Test",
                 _run_slack_sim,
-                color="indigo",
+                color="cyan",
                 outline=True,
                 flex=True,
             )

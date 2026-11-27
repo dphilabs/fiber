@@ -1,5 +1,4 @@
 # fiber.node.account.state
-## @lineage: fiber.node.auth.account.state
 from __future__ import annotations
 
 from collections import deque

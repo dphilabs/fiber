@@ -1,26 +1,30 @@
-# fiber.node.worker.deployer
+# fiber.node.worker.internal.deployer
 import os
 import sys
 import json
 import logging
 import hashlib
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Literal, Optional
 
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.exceptions import InvalidSignature
 
+from xphi.arch.contract.protocol.binder import tool
 from xphi.arch.contract.protocol.worker import AsyncWorkerProtocol
 from xphi.arch.bound.adapter.pta import NodeSigner
 
-log = logging.getLogger("worker.deployer")
+log = logging.getLogger("worker.internal.deployer")
 
+TargetEnv = Literal["development", "staging", "production"]
 
 class ExecutionDeployer(AsyncWorkerProtocol):
+    """Deployment worker enforcing cryptographic HITL attestation on destructive production migrations."""
+
     def __init__(self):
-        super().__init__(agent_name="execution.deployer")
         self.validator_pub_key: Optional[ed25519.Ed25519PublicKey] = self._load_validator_public_key()
         self.pending_prompts: Dict[str, asyncio.Future] = {}
+        super().__init__(agent_name="execution.deployer")
 
     def _load_validator_public_key(self) -> Optional[ed25519.Ed25519PublicKey]:
         pub_key_hex = os.environ.get("DPHI_VALIDATOR_PUBLIC_KEY")
@@ -69,33 +73,22 @@ class ExecutionDeployer(AsyncWorkerProtocol):
 
         await super()._route_request_async(req)
 
-    async def handle_tools_list(self, req_id: Any):
-        tools = [
-            {
-                "name": "execute_db_migration",
-                "description": "Execute SQL schema migration on a target service environment with cryptographic HITL attestation for destructive production queries.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "service_name": {
-                            "type": "string",
-                            "description": "Target microservice or database identifier",
-                        },
-                        "target_env": {
-                            "type": "string",
-                            "enum": ["development", "staging", "production"],
-                            "description": "Deployment environment",
-                        },
-                        "sql_script": {
-                            "type": "string",
-                            "description": "SQL DDL/DML migration script to execute",
-                        },
-                    },
-                    "required": ["service_name", "target_env", "sql_script"],
-                },
-            }
-        ]
-        await self.send_response(req_id, {"tools": tools})
+    @tool
+    async def execute_db_migration(
+        self,
+        service_name: str,
+        target_env: TargetEnv,
+        sql_script: str,
+        meta: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Execute SQL schema migration on a target service environment with cryptographic HITL attestation for destructive production queries.
+
+        Args:
+            service_name: Target microservice or database identifier.
+            target_env: Deployment environment (development, staging, production).
+            sql_script: SQL DDL/DML migration script to execute.
+        """
+        return "Migration executed successfully."
 
     async def handle_tools_call(self, req_id: Any, tool_name: str, arguments: Dict[str, Any], meta: Dict[str, Any]):
         if tool_name == "execute_db_migration":
@@ -145,7 +138,7 @@ class ExecutionDeployer(AsyncWorkerProtocol):
             try:
                 delegate_res = await asyncio.wait_for(future, timeout=20.0)
 
-                # Case A: JSON-RPC 레벨 에러 (Connector 대행 실패 등)
+                # Case A: JSON-RPC transport/connector delegation error
                 if "error" in delegate_res:
                     err_info = delegate_res["error"]
                     code = err_info.get("code", -502) if isinstance(err_info, dict) else -502
@@ -154,7 +147,7 @@ class ExecutionDeployer(AsyncWorkerProtocol):
 
                 rpc_response = delegate_res.get("result", {})
 
-                # Case B: 핸들러(ValidatorService) 내부 도메인 에러 반환 처리
+                # Case B: Domain-level error returned by ValidatorService
                 if isinstance(rpc_response, dict) and rpc_response.get("error"):
                     return await self.send_error(
                         req_id,
@@ -172,7 +165,7 @@ class ExecutionDeployer(AsyncWorkerProtocol):
                 self.pending_prompts.pop(delegate_req_id, None)
                 return await self.send_error(req_id, -500, f"Delegation processing failed: {str(e)}")
 
-            # 로컬에서 NodeSigner Public Key로 Ed25519 서명 검증 (무결성 보장)
+            # Verify Ed25519 attestation signature locally with NodeSigner public key
             try:
                 self.validator_pub_key.verify(bytes.fromhex(signature_hex), payload_hash)
                 self.log.info("Cryptographic Attestation Verified. Authorization Granted.")
@@ -193,7 +186,7 @@ class ExecutionDeployer(AsyncWorkerProtocol):
         future = loop.create_future()
         self.pending_prompts[prompt_req_id] = future
 
-        # Gateway로 Elicitation (YIELD 트리거) 요청 전송
+        # Emit elicitation (YIELD trigger) request to Gateway
         await self.send_request(
             req_id=prompt_req_id,
             method="elicitation/createMessage",

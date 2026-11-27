@@ -27,11 +27,15 @@ _BLOCKED_SQL_RE = re.compile(
 _SQL_COMMENT_OR_STR_RE = re.compile(
     r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\""
 )
+_PATH_TRAVERSAL_TOKEN_RE = re.compile(r"(?:^|[\s'\"(/\\])\.\.(?:[\s'\")/\\]|$)")
 _READ_FN_PATH_RE = re.compile(
     r"read_(?:csv_auto|csv|json_auto|json|parquet)\s*\(\s*'((?:''|[^'])+)'\s*\)",
     re.IGNORECASE,
 )
-_FROM_JOIN_PATH_RE = re.compile(r"\b(FROM|JOIN)\s+'((?:''|[^'])+)'", re.IGNORECASE)
+_CLAUSE_PATH_RE = re.compile(
+    r"\b(FROM|JOIN|DESCRIBE|SUMMARIZE)\s+'((?:''|[^'])+)'",
+    re.IGNORECASE,
+)
 _GLOB_CHARS = frozenset("*?[")
 
 _DUCK_READER_BY_EXT: dict[str, str] = {
@@ -80,13 +84,13 @@ class TabularSandbox:
     def validate_sql(sql: str) -> str:
         cleaned = sql.strip().rstrip(";").strip()
         if not cleaned:
-            raise ValueError("SQL query must not be empty.")
-        if ".." in cleaned:
-            raise ValueError("Parent directory traversal ('..') is not allowed in SQL queries.")
+            raise ToolError("SQL query must not be empty.")
+        if _PATH_TRAVERSAL_TOKEN_RE.search(cleaned):
+            raise ToolError("Parent directory traversal ('..') is not allowed in SQL queries.")
 
         scrubbed = _SQL_COMMENT_OR_STR_RE.sub(" ", cleaned).strip()
         if not _READONLY_PREFIX_RE.match(scrubbed) or _BLOCKED_SQL_RE.search(scrubbed):
-            raise ValueError(
+            raise ToolError(
                 "Only read-only analytical queries (SELECT, WITH, DESCRIBE, SUMMARIZE, EXPLAIN) are allowed."
             )
         return cleaned
@@ -95,59 +99,62 @@ class TabularSandbox:
     def read_xlsx(cls, path: Path) -> tuple[list[str], list[dict[str, Any]]]:
         """원천 .xlsx 파일을 셀 좌표(r='C2') 그대로 읽으며 문서용 정규화를 적용하지 않습니다."""
         local_tag = lambda el: el.tag.rsplit("}", 1)[-1]
-        with zipfile.ZipFile(path, "r") as zf:
-            shared: list[str] = []
-            if "xl/sharedStrings.xml" in zf.namelist():
-                for si in ET.fromstring(zf.read("xl/sharedStrings.xml")):
-                    if local_tag(si) == "si":
-                        shared.append(
-                            "".join(t.text or "" for t in si.iter() if local_tag(t) == "t")
-                        )
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                shared: list[str] = []
+                if "xl/sharedStrings.xml" in zf.namelist():
+                    for si in ET.fromstring(zf.read("xl/sharedStrings.xml")):
+                        if local_tag(si) == "si":
+                            shared.append(
+                                "".join(t.text or "" for t in si.iter() if local_tag(t) == "t")
+                            )
 
-            sheets = sorted(
-                n
-                for n in zf.namelist()
-                if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")
-            )
-            if not sheets:
-                return [], []
+                sheets = sorted(
+                    n
+                    for n in zf.namelist()
+                    if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")
+                )
+                if not sheets:
+                    return [], []
 
-            raw_rows: list[list[str]] = []
-            max_cols = 0
-            for row_el in ET.fromstring(zf.read(sheets[0])).iter():
-                if local_tag(row_el) != "row":
-                    continue
-                row_map: dict[int, str] = {}
-                next_col = 0
-                for c_el in row_el:
-                    if local_tag(c_el) != "c":
+                raw_rows: list[list[str]] = []
+                max_cols = 0
+                for row_el in ET.fromstring(zf.read(sheets[0])).iter():
+                    if local_tag(row_el) != "row":
                         continue
-                    coord = _CELL_REF_RE.match(c_el.attrib.get("r", "").strip())
-                    if coord:
-                        col_idx = 0
-                        for ch in coord.group(1).upper():
-                            col_idx = col_idx * 26 + (ord(ch) - ord("A") + 1)
-                        col_idx -= 1
-                    else:
-                        col_idx = next_col
-                    next_col = col_idx + 1
+                    row_map: dict[int, str] = {}
+                    next_col = 0
+                    for c_el in row_el:
+                        if local_tag(c_el) != "c":
+                            continue
+                        coord = _CELL_REF_RE.match(c_el.attrib.get("r", "").strip())
+                        if coord:
+                            col_idx = 0
+                            for ch in coord.group(1).upper():
+                                col_idx = col_idx * 26 + (ord(ch) - ord("A") + 1)
+                            col_idx -= 1
+                        else:
+                            col_idx = next_col
+                        next_col = col_idx + 1
 
-                    t_attr = c_el.attrib.get("t", "")
-                    v_txt = next((ch.text or "" for ch in c_el if local_tag(ch) == "v"), "")
-                    if t_attr == "s" and v_txt.isdigit() and int(v_txt) < len(shared):
-                        val = shared[int(v_txt)]
-                    elif t_attr == "inlineStr":
-                        val = "".join(t.text or "" for t in c_el.iter() if local_tag(t) == "t")
-                    elif t_attr == "b":
-                        val = "TRUE" if v_txt == "1" else "FALSE"
-                    else:
-                        val = v_txt
-                    row_map[col_idx] = val.strip()
+                        t_attr = c_el.attrib.get("t", "")
+                        v_txt = next((ch.text or "" for ch in c_el if local_tag(ch) == "v"), "")
+                        if t_attr == "s" and v_txt.isdigit() and int(v_txt) < len(shared):
+                            val = shared[int(v_txt)]
+                        elif t_attr == "inlineStr":
+                            val = "".join(t.text or "" for t in c_el.iter() if local_tag(t) == "t")
+                        elif t_attr == "b":
+                            val = "TRUE" if v_txt == "1" else "FALSE"
+                        else:
+                            val = v_txt
+                        row_map[col_idx] = val.strip()
 
-                if row_map and any(row_map.values()):
-                    width = max(row_map) + 1
-                    max_cols = max(max_cols, width)
-                    raw_rows.append([row_map.get(i, "") for i in range(width)])
+                    if row_map and any(row_map.values()):
+                        width = max(row_map) + 1
+                        max_cols = max(max_cols, width)
+                        raw_rows.append([row_map.get(i, "") for i in range(width)])
+        except (zipfile.BadZipFile, ET.ParseError, KeyError, OSError) as exc:
+            raise ToolError(f"Invalid or unreadable .xlsx file '{path.name}': {exc}") from None
 
         if len(raw_rows) < 2:
             return (cls.dedupe_headers(raw_rows[0]) if raw_rows else []), []
@@ -171,16 +178,16 @@ class TabularSandbox:
     def resolve_files(self, raw_spec: str) -> tuple[list[Path], str]:
         clean = raw_spec.strip().replace("\\", "/")
         if not clean:
-            raise ValueError("Source path must not be empty.")
+            raise ToolError("Source path must not be empty.")
         if clean.startswith("/") or ".." in clean.split("/"):
-            raise ValueError(f"Path outside workspace root is forbidden: {raw_spec}")
+            raise ToolError(f"Path outside workspace root is forbidden: {raw_spec}")
 
         if any(ch in clean for ch in _GLOB_CHARS):
             matched: list[Path] = []
             for hit in sorted(pyglob.glob(str(self.root / clean), recursive=True)):
                 p = Path(hit).resolve()
                 if not p.is_relative_to(self.root):
-                    raise ValueError(f"Glob matched path outside workspace root: {raw_spec}")
+                    raise ToolError(f"Glob matched path outside workspace root: {raw_spec}")
                 if p.is_file():
                     matched.append(p)
             if not matched:
@@ -189,7 +196,7 @@ class TabularSandbox:
 
         candidate = (self.root / clean).resolve()
         if not candidate.is_relative_to(self.root):
-            raise ValueError(f"Path outside workspace root is forbidden: {raw_spec}")
+            raise ToolError(f"Path outside workspace root is forbidden: {raw_spec}")
         if not candidate.is_file():
             raise ToolError(f"File not found: {raw_spec}")
         return [candidate], candidate.relative_to(self.root).as_posix()
@@ -197,7 +204,7 @@ class TabularSandbox:
     def describe(self, rel_source: str) -> list[dict[str, Any]]:
         files, _ = self.resolve_files(rel_source)
         if len(files) > 1:
-            raise ValueError("'describe_data' requires a single file path, not a glob pattern.")
+            raise ToolError("'describe_data' requires a single file path, not a glob pattern.")
         with self._locked_session({"_desc_target": files}) as db:
             rel = db.sql('DESCRIBE SELECT * FROM "_desc_target"')
             cols = [d[0] for d in rel.description]
@@ -251,11 +258,11 @@ class TabularSandbox:
             if not unescaped:
                 return None
             if pinned_sources is not None:
-                if unescaped.startswith("/"):
-                    raise ValueError(f"Path outside workspace root is forbidden: {unescaped}")
+                if unescaped.startswith("/") or ".." in unescaped.replace("\\", "/").split("/"):
+                    raise ToolError(f"Path outside workspace root is forbidden: {unescaped}")
                 cand = (self.root / unescaped).resolve()
                 if not cand.is_relative_to(self.root):
-                    raise ValueError(f"Path outside workspace root is forbidden: {unescaped}")
+                    raise ToolError(f"Path outside workspace root is forbidden: {unescaped}")
                 alias = alias_by_key.get(cand.relative_to(self.root).as_posix())
                 return f'"{alias}"' if alias else None
 
@@ -272,7 +279,7 @@ class TabularSandbox:
         rewritten = _READ_FN_PATH_RE.sub(
             lambda m: _resolve_literal(m.group(1)) or m.group(0), cleaned_sql
         )
-        rewritten = _FROM_JOIN_PATH_RE.sub(
+        rewritten = _CLAUSE_PATH_RE.sub(
             lambda m: f"{m.group(1)} {mapped}"
             if (mapped := _resolve_literal(m.group(2)))
             else m.group(0),

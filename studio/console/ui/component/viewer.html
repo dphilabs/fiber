@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="doc">
+<head>
+<meta charset="utf-8">
+<title>runbook viewer</title>
+<!-- Runbook viewer: view model JSON -> HTML. Standalone; the console embeds it in an iframe.
+     Entry: window.__VIEWER__.render(model). Host may also postMessage({type:"model", payload}). -->
+<style>
+  :root, [data-theme="doc"] {
+    --bg: #f1f5f9; --card: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #cbd5e1;
+    --accent: #2563eb; --soft: #eff6ff; --head: #f8fafc;
+    --ok: #16a34a; --fail: #dc2626; --run: #2563eb; --wait: #64748b; --dry: #d97706;
+    --font: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
+    --radius: 6px;
+  }
+  [data-theme="tui"] {
+    --bg: #090a0f; --card: #0d0f17; --ink: #d8dee9; --muted: #6c7689; --line: #262b3d;
+    --accent: #7dcfff; --soft: #050608; --head: #050608;
+    --ok: #50fa7b; --fail: #f7768e; --run: #7dcfff; --wait: #6c7689; --dry: #e0af68;
+    --font: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    --radius: 0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font); padding: 14px; }
+  .doc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  h1 { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  .stages { display: flex; gap: 6px; font-size: 11px; margin-bottom: 12px; color: var(--muted); }
+  .stages .done { color: var(--ok); } .stages .cur { color: var(--accent); font-weight: 700; }
+  .block { margin-top: 12px; }
+  .block-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .para { color: var(--ink); }
+  .callout { padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--soft); font-weight: 600; }
+  .callout.t-ok { border-color: var(--ok); color: var(--ok); }
+  .callout.t-fail { border-color: var(--fail); color: var(--fail); }
+  .callout.t-dry { border-color: var(--dry); color: var(--dry); }
+  .callout.t-none { border-color: var(--wait); color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); background: var(--head); border-bottom: 1px solid var(--line); padding: 4px 8px; }
+  td { border-bottom: 1px solid var(--line); padding: 4px 8px; vertical-align: top; }
+  ol.flow, ol.timeline { list-style: none; }
+  ol.flow li, ol.timeline li { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--line); }
+  .num { color: var(--muted); width: 18px; flex-shrink: 0; }
+  .label { font-weight: 700; min-width: 160px; }
+  .detail, .note { color: var(--muted); }
+  .st { font-size: 11px; min-width: 44px; }
+  .st-ok { color: var(--ok); } .st-fail { color: var(--fail); } .st-run { color: var(--run); }
+  .st-wait, .st-none { color: var(--wait); } .st-dry { color: var(--dry); }
+  .tag { font-size: 11px; border: 1px solid var(--line); padding: 0 5px; color: var(--accent); }
+  pre.code { background: var(--soft); border: 1px solid var(--line); padding: 8px 10px; font: 12px/1.5 "JetBrains Mono", ui-monospace, monospace;
+             white-space: pre-wrap; word-break: break-word; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .compare div { border: 1px solid var(--line); padding: 8px; white-space: pre-line; }
+  .empty { color: var(--muted); padding: 20px 0; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .doc { border: none; }
+  }
+</style>
+</head>
+<body>
+<div class="doc" id="root"><div class="empty">no model</div></div>
+<script id="model-data" type="application/json">/*__MODEL__*/null</script>
+<script>
+(function () {
+  const STAGES = ["template", "draft", "dryrun", "run"];
+  const STAGE_LABEL = { template: "TEMPLATE", draft: "DRAFT", dryrun: "DRY RUN", run: "TRIGGER" };
+  const root = document.getElementById("root");
+  let lastReport = { blocks: 0, errors: [] };
+
+  function esc(v) { const d = document.createElement("div"); d.textContent = v == null ? "" : String(v); return d.innerHTML; }
+  const st = (s) => `<span class="st st-${esc(s || "none")}">[${esc((s || "none").toUpperCase())}]</span>`;
+
+  const KINDS = {
+    paragraph: (b) => `<p class="para">${esc(b.text)}</p>`,
+    callout: (b) => `<div class="callout t-${esc(b.tone || "run")}">${esc(b.text)}</div>`,
+    table: (b) => `<table><thead><tr>${(b.headers || []).map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>` +
+      `<tbody>${(b.rows || []).map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`,
+    flow: (b) => `<ol class="flow">${(b.steps || []).map((s, i) =>
+      `<li><span class="num">${i + 1}</span><span class="label">${esc(s.label)}</span>${st(s.status)}` +
+      `<span class="detail">${esc(s.detail || "")}</span></li>`).join("")}</ol>`,
+    timeline: (b) => `<ol class="timeline">${(b.events || []).map((e) =>
+      `<li><span class="label">${esc(e.node)}</span>${st(e.status)}` +
+      (e.tag ? `<span class="tag">${esc(e.tag)}</span>` : "") +
+      `<span class="note">${esc([e.dur, e.note].filter(Boolean).join(" · "))}</span></li>`).join("")}</ol>`,
+    code: (b) => `<pre class="code" data-lang="${esc(b.lang || "")}">${esc(b.text)}</pre>`,
+    compare: (b) => `<div class="compare"><div><b>${esc(b.left.heading)}</b>\n${esc(b.left.body)}</div>` +
+      `<div><b>${esc(b.right.heading)}</b>\n${esc(b.right.body)}</div></div>`,
+  };
+
+  function stagesHtml(stage) {
+    const idx = STAGES.indexOf(stage);
+    return STAGES.map((s, i) => `<span class="${i < idx ? "done" : i === idx ? "cur" : ""}">${STAGE_LABEL[s]}</span>`)
+      .join(`<span>${"&#9654;"}</span>`);
+  }
+
+  function render(model) {
+    const errors = [];
+    if (!model) { root.innerHTML = `<div class="empty">no model</div>`; return; }
+    const blocks = (model.blocks || []).map((b, i) => {
+      const fn = KINDS[b.kind];
+      if (!fn) { errors.push(`unknown kind '${b.kind}' at ${i}`); return ""; }
+      const title = b.title ? `<div class="block-title">${esc(b.title)}</div>` : "";
+      return `<section class="block">${title}${fn(b)}</section>`;
+    }).join("");
+    root.innerHTML = `<h1>${esc(model.title || model.flow)}</h1><div class="stages">${stagesHtml(model.stage)}</div>${blocks}`;
+    lastReport = { flow: model.flow, version: model.version, blocks: (model.blocks || []).length, errors };
+  }
+
+  window.__VIEWER__ = { render, report: () => lastReport };
+  window.addEventListener("message", (e) => {
+    const m = e.data || {};
+    if (m.type === "model") render(m.payload);
+  });
+  render(JSON.parse(document.getElementById("model-data").textContent));
+})();
+</script>
+</body>
+</html>

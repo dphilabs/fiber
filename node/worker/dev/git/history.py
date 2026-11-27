@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from xphi.arch.contract.protocol.binder import ToolError, tool
 from xphi.arch.contract.protocol.worker import AsyncWorkerProtocol
 
-__deps__ = {"bins": ["git"],}
+__deps__ = {"bins": ["git"]}
 GIT = shutil.which("git")
 GIT_HINT = "git is not installed or not on PATH (macOS: xcode-select --install, Debian/Ubuntu: apt install git)."
 
@@ -28,10 +28,20 @@ _DATE_RE = re.compile(r"^[0-9A-Za-z .:+-]{1,40}$")
 
 async def _git(cwd: Path, *args: str, timeout: int = TIMEOUT_SEC) -> str:
     """Run a read-only git command; non-zero exit -> ToolError with stderr."""
+    if GIT is None:
+        raise ToolError(GIT_HINT)
     env = {**os.environ, "GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
     proc = await asyncio.create_subprocess_exec(
-        GIT, "-c", "core.quotepath=off", "--no-pager", *args,
-        cwd=cwd, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        GIT,
+        "-c",
+        "core.quotepath=off",
+        "--no-pager",
+        *args,
+        cwd=cwd,
+        env=env,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -46,6 +56,7 @@ async def _git(cwd: Path, *args: str, timeout: int = TIMEOUT_SEC) -> str:
 
 def _iso(epoch: str) -> str:
     return dt.datetime.fromtimestamp(int(epoch), tz=dt.timezone.utc).isoformat() if epoch.isdigit() else ""
+
 
 class GitHistoryWorker(AsyncWorkerProtocol):
     def __init__(self, root: str = ".") -> None:
@@ -63,17 +74,22 @@ class GitHistoryWorker(AsyncWorkerProtocol):
             self._repo = Path(top).resolve()
         return self._repo
 
-    def _rel_path(self, repo: Path, path: str) -> str:
-        target = (self.root / path).resolve()
+    def _rel_path(self, repo: Path, path: str, *, must_be_file: bool = False) -> str:
+        clean = path.strip()
+        if not clean:
+            raise ToolError("Path must not be empty.")
+        target = (self.root / clean).resolve()
         if not target.is_relative_to(self.root) or not target.is_relative_to(repo):
-            raise ValueError("Path is outside the workspace root / repository.")
+            raise ToolError("Path is outside the workspace root / repository.")
+        if must_be_file and not target.is_file():
+            raise ToolError(f"File not found: {path}")
         return target.relative_to(repo).as_posix() or "."
 
     @staticmethod
     def _check_rev(rev: str) -> str:
         rev = rev.strip()
         if not _REV_RE.match(rev):
-            raise ValueError(f"Invalid revision: {rev!r}")
+            raise ToolError(f"Invalid revision: {rev!r}")
         return rev
 
     @tool
@@ -95,16 +111,23 @@ class GitHistoryWorker(AsyncWorkerProtocol):
             limit: Maximum commits to return.
         """
         repo = await self._repo_root()
-        args = ["log", f"--format=%H{_SEP}%an{_SEP}%ae{_SEP}%aI{_SEP}%s", f"-n{max(1, min(limit, MAX_COMMITS))}"]
+        capped = max(1, min(limit, MAX_COMMITS))
+        args = ["log", f"--format=%H{_SEP}%an{_SEP}%ae{_SEP}%aI{_SEP}%s", f"-n{capped}"]
         if query:
             args.append(f"-S{query}")
         if author:
             args.append(f"--author={author}")
         if since:
-            if not _DATE_RE.match(since):
-                raise ValueError(f"Invalid 'since': {since!r}")
-            args.append(f"--since={since}")
-        args += ["--", self._rel_path(repo, path)] if path else []
+            clean_since = since.strip()
+            if clean_since.startswith("-") or not _DATE_RE.match(clean_since):
+                raise ToolError(f"Invalid 'since': {since!r}")
+            args.append(f"--since={clean_since}")
+
+        base_rel = self._rel_path(repo, path) if path.strip() else (
+            self.root.relative_to(repo).as_posix() if self.root != repo and self.root.is_relative_to(repo) else ""
+        )
+        if base_rel and base_rel != ".":
+            args += ["--", base_rel]
 
         commits = []
         for line in (await _git(repo, *args)).splitlines():
@@ -125,13 +148,14 @@ class GitHistoryWorker(AsyncWorkerProtocol):
         """
         repo = await self._repo_root()
         if start_line < 1:
-            raise ValueError("'start_line' must be >= 1.")
-        end = end_line or start_line + 99
+            raise ToolError("'start_line' must be >= 1.")
+        end = end_line if end_line != 0 else start_line + 99
         if end < start_line:
-            raise ValueError("'end_line' must be >= 'start_line'.")
+            raise ToolError("'end_line' must be >= 'start_line'.")
         end = min(end, start_line + MAX_BLAME_LINES - 1)
 
-        raw = await _git(repo, "blame", "--line-porcelain", f"-L{start_line},{end}", "--", self._rel_path(repo, path))
+        rel_file = self._rel_path(repo, path, must_be_file=True)
+        raw = await _git(repo, "blame", "--line-porcelain", f"-L{start_line},{end}", "--", rel_file)
         lines: List[Dict[str, Any]] = []
         meta: Dict[str, str] = {}
         current: Tuple[str, int] = ("", 0)
@@ -165,7 +189,7 @@ class GitHistoryWorker(AsyncWorkerProtocol):
         """
         repo = await self._repo_root()
         rev = self._check_rev(commit)
-        scope = ["--", self._rel_path(repo, path)] if path else []
+        scope = ["--", self._rel_path(repo, path)] if path.strip() else []
 
         header = await _git(repo, "show", "-s", f"--format=%H{_SEP}%an{_SEP}%aI{_SEP}%B", "--end-of-options", rev)
         sha, author, date, message = (header.split(_SEP, 3) + [""] * 4)[:4]
@@ -174,9 +198,14 @@ class GitHistoryWorker(AsyncWorkerProtocol):
 
         files = []
         for row in stat.splitlines():
+            if not row.strip():
+                continue
             added, deleted, name = (row.split("\t") + ["", "", ""])[:3]
-            files.append({"path": name, "added": None if added == "-" else int(added or 0),
-                          "deleted": None if deleted == "-" else int(deleted or 0)})
+            files.append({
+                "path": name,
+                "added": None if added == "-" else int(added or 0),
+                "deleted": None if deleted == "-" else int(deleted or 0),
+            })
         cap = max(500, min(max_chars, 100_000))
         return {
             "commit": sha.strip(),

@@ -118,7 +118,7 @@ def run_ops(
             log.error(f"[Fiber] ops module not found: {module_path} ({e})")
             raise typer.Exit(1)
 
-        # sys.argv 패스스루: 하위 모듈이 argparse, typer, sys.argv[1:] 무엇을 쓰든 호환 보장
+        # Forward sys.argv for compatibility with argparse, typer, or raw sys.argv[1:] consumers
         sys.argv = [f"fiber ops {target}", *ctx.args]
         if hasattr(mod, "main"):
             return mod.main(ctx.args) if inspect.signature(mod.main).parameters else mod.main()
@@ -128,6 +128,7 @@ def run_ops(
         import runpy
         runpy.run_module(module_path, run_name="__main__", alter_sys=True)
     _run_guarded(f"ops [{target}]", _invoke)
+
 
 @app.command("daemon")
 def run_daemon(
@@ -168,23 +169,26 @@ def run_daemon(
 def run_console(
     port: Annotated[int, typer.Option("--port", "-p", help="Port for Control Studio UI")] = CONSOLE_PORT,
     auto_daemon: Annotated[bool, typer.Option("--auto-daemon/--no-auto-daemon", help="Auto-spawn local daemon (:8356) if offline")] = True,
+    reflexor: Annotated[bool, typer.Option("--reflexor", help="Also show Reflexor flow tabs")] = False,
     env_file: EnvFileOpt = None,
 ):
     """Launches Fiber Control Studio (:8357) and ensures the local gateway daemon (:8356) is active."""
     _load_env(env_file)
     from fiber.studio.console.app import launch_console
-    launch_console(port=port, auto_daemon=auto_daemon, env_file=env_file)
+    launch_console(port=port, auto_daemon=auto_daemon, env_file=env_file, reflexor=reflexor)
 
 
 @app.command("connect")
 def run_connect_cmd(
     agent: Annotated[
         Optional[str],
-        typer.Argument(help="IDE agent to scan & sync ('claude', 'cursor', 'vscode', 'all') or 'standalone' to run in foreground"),
+        typer.Argument(
+            help="Source to scan & sync ('builtin', 'claude', 'cursor', 'vscode', 'all') or 'standalone' to run in foreground"
+        ),
     ] = None,
     exec_cmd: Annotated[
         Optional[str],
-        typer.Option("--exec", "-e", help="Shell command, bin_root dir, or HTTP(S) URL"),
+        typer.Option("--exec", "-e", help="Shell command, builtin alias, bin_root dir, or HTTP(S) URL"),
     ] = None,
     config: Annotated[
         Optional[Path],
@@ -192,7 +196,7 @@ def run_connect_cmd(
     ] = None,
     target: Annotated[
         Optional[str],
-        typer.Option("--target", "-t", help="Optional Target ID override (auto-inferred if omitted)"),
+        typer.Option("--target", "-t", help="Optional Target ID override or filter (auto-inferred if omitted)"),
     ] = None,
     mode: Annotated[
         Optional[str],
@@ -202,19 +206,30 @@ def run_connect_cmd(
         Optional[str],
         typer.Option("--preflight", "-p", help="Regex pattern to lock as FIBER_PREFLIGHT_PATTERN (HITL YIELD)"),
     ] = None,
+    builtins: Annotated[
+        bool,
+        typer.Option("--builtins", "-b", help="Include built-in fiber.node.worker targets (excludes internal)"),
+    ] = False,
     standalone: Annotated[
         bool,
         typer.Option("--standalone", "-s", help="Run MCP server(s) directly in the foreground without writing to ~/.anchor/mcp.json"),
     ] = False,
     env_file: EnvFileOpt = None,
 ):
-    """Syncs IDE/external MCP configs into ~/.anchor/mcp.json (or runs in foreground via 'standalone' / '-s')."""
+    """Syncs built-in/IDE/external MCP configs into ~/.anchor/mcp.json (or runs in foreground via 'standalone' / '-s')."""
     _load_env(env_file)
     from fiber.gateway.bridge.action.connect import run_connect_standalone, run_connect_copy
 
     norm_agent = agent.strip().lower() if agent else None
     if standalone or norm_agent == "standalone":
-        run_connect_standalone(exec_cmd=exec_cmd, config=config, target=target, mode=mode, preflight=preflight)
+        run_connect_standalone(
+            exec_cmd=exec_cmd,
+            config=config,
+            target=target,
+            mode=mode,
+            preflight=preflight,
+            include_builtins=builtins,
+        )
         return
 
     effective_agent = "all" if norm_agent == "copy" and not (exec_cmd or config) else (None if norm_agent == "copy" else norm_agent)
@@ -225,6 +240,7 @@ def run_connect_cmd(
         target=target,
         mode=mode,
         preflight=preflight,
+        include_builtins=builtins,
     )
 
 
