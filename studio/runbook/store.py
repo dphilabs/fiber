@@ -1,86 +1,31 @@
 # fiber.studio.runbook.store
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
 import time
 from typing import Any
 
-from xphi.arch.reflex.flow import Shape
-from xphi.arch.reflex.compiler import compile_to_asl
-from xphi.arch.xor.asl.evaluator import verify_asl
-from xphi.node.runtime.reflex.manifest import ManifestStore, OutputPolicy, OutputWidget, ReflexManifest
-from xphi.node.runtime.trigger.scheduler import SchedulePlanner, ScheduleVerdict
-from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerSpec
 from xphi.arch.model.content.artifact import ArtifactStore
 from xphi.arch.model.content.intake import ContentSchema, SlotVerifier
+from xphi.arch.reflex.compiler import compile_to_asl
+from xphi.arch.reflex.flow import Shape
+from xphi.arch.xor.asl.evaluator import verify_asl
+from xphi.node.runtime.reflex.manifest import ManifestStore, OutputPolicy, ReflexManifest
+from xphi.node.runtime.trigger.scheduler import SchedulePlanner
+from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS
 
-from fiber.studio.runbook.simulator import DryMode, DryRunSimulator
-from fiber.studio.runbook.stepper import emit_flow_dsl, inspect_flow
 from fiber.studio.runbook.runtime.viewport import ViewportRuntime
+from fiber.studio.runbook.simulator import DryMode, DryRunSimulator
+from fiber.studio.runbook.spec import (
+    PinReceipt,
+    PinnedRelease,
+    default_widget_for_shape as _default_widget_for_shape,
+)
+from fiber.studio.runbook.stepper import emit_flow_dsl, inspect_flow
 
-
-def _default_widget_for_shape(shape: Shape) -> OutputWidget:
-    if shape.is_list:
-        return "table"
-    if shape.base == "num":
-        return "metric"
-    return "text"
-
-
-@dataclass(frozen=True, slots=True)
-class PinnedRelease:
-    flow_name: str
-    version: int
-    pinned_at: float
-    flow_dsl: str
-    compiled_asl: dict[str, Any]
-    unit_shas: dict[str, str]
-    manifest: ReflexManifest
-    triggers: tuple[TriggerSpec, ...] = DEFAULT_TRIGGERS
-    fixture_id: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "flow_name": self.flow_name,
-            "version": self.version,
-            "pinned_at": self.pinned_at,
-            "flow_dsl": self.flow_dsl,
-            "compiled_asl": self.compiled_asl,
-            "unit_shas": dict(self.unit_shas),
-            "manifest": self.manifest.to_dict(),
-            "triggers": [t.to_dict() for t in self.triggers],
-            "fixture_id": self.fixture_id,
-        }
-
-    @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> PinnedRelease:
-        raw_trigs = raw.get("triggers") or [{"kind": "manual"}]
-        triggers = tuple(
-            TriggerSpec.from_raw(t)
-            for t in raw_trigs
-            if isinstance(t, (dict, str, TriggerSpec))
-        )
-        return cls(
-            flow_name=str(raw["flow_name"]),
-            version=int(raw["version"]),
-            pinned_at=float(raw["pinned_at"]),
-            flow_dsl=str(raw["flow_dsl"]),
-            compiled_asl=dict(raw.get("compiled_asl") or {}),
-            unit_shas=dict(raw.get("unit_shas") or {}),
-            manifest=ReflexManifest.from_dict(raw["manifest"]),
-            triggers=triggers or DEFAULT_TRIGGERS,
-            fixture_id=raw.get("fixture_id"),
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class PinReceipt:
-    release: PinnedRelease
-    change_summary: str
-    schedule: ScheduleVerdict
+__all__ = ["PinReceipt", "PinnedRelease", "ReleaseStudio"]
 
 
 class ReleaseStudio:
@@ -166,7 +111,10 @@ class ReleaseStudio:
             flow_name,
             {
                 "outputs": {
-                    k: OutputPolicy(key=k, widget=_default_widget_for_shape(flow.out_shape(k))).to_dict()
+                    k: OutputPolicy(
+                        key=k,
+                        widget=_default_widget_for_shape(flow.out_shapes.get(k, Shape())),
+                    ).to_dict()
                     for k in missing_outs
                 }
             },
@@ -274,6 +222,9 @@ class ReleaseStudio:
         diff_summary = self._summarize_diff(prev, rel, tuple(inspection.warnings))
         verdict = self.planner.evaluate(manifest, triggers)
         return PinReceipt(release=rel, change_summary=diff_summary, schedule=verdict)
+
+    def list_versions(self, flow_name: str) -> list[int]:
+        return [r.version for r in self._pins.get(flow_name, [])]
 
     def load_active(self, flow_name: str, version: int | None = None) -> PinnedRelease:
         history = self._pins.get(flow_name) or []

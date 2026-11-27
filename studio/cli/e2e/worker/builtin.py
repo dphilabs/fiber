@@ -1,7 +1,5 @@
 # fiber.studio.cli.e2e.worker.builtin
-"""
-@desc: Fixture-driven Built-in Workers (7-Target) E2E Validation Suite powered by xphi.arch.reflex.harness.suite
-"""
+"""@desc: Fixture-driven Built-in Workers (7-Target) E2E Validation Suite powered by xphi.arch.reflex.harness.suite"""
 from __future__ import annotations
 
 import asyncio

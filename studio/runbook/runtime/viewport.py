@@ -6,15 +6,19 @@ import time
 from typing import Any
 
 from xphi.arch.contract.registry.flow import FlowRegistry, load_sample_registry, parse_unit_dsl
-from xphi.arch.reflex.compiler import compile_to_asl
 from xphi.arch.reflex.auth import missing_credentials, unit_auth
-from xphi.node.runtime.reflex.engine import DispatcherFn, FlowEngine
-from xphi.arch.reflex.flow import UnitContract
+from xphi.arch.reflex.compiler import compile_to_asl
+from xphi.arch.reflex.flow import StepSpec, UnitContract, split_unit_ref
 from xphi.arch.xor.asl.evaluator import verify_asl
-
-from fiber.studio.runbook.unit.indexer import UnitsIndexer
-from fiber.studio.runbook.unit.loader import UnitsLoader
+from xphi.node.runtime.reflex.engine import DispatcherFn, FlowEngine
 from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerSpec
+
+from fiber.studio.runbook.runtime.projector import (
+    SynthesisReport,
+    TelemetryEvent,
+    ViewportProjector,
+    ViewportSnapshot,
+)
 from fiber.studio.runbook.stepper import (
     emit_flow_dsl,
     emit_unit_dsl,
@@ -22,12 +26,20 @@ from fiber.studio.runbook.stepper import (
     format_llm_diagnostic,
     inspect_flow,
 )
-from fiber.studio.runbook.runtime.projector import (
-    SynthesisReport,
-    TelemetryEvent,
-    ViewportProjector,
-    ViewportSnapshot,
-)
+from fiber.studio.runbook.unit.indexer import UnitsIndexer
+from fiber.studio.runbook.unit.loader import UnitsLoader
+
+
+def _apply_step_bindings(step: StepSpec, bindings: dict[str, str]) -> StepSpec:
+    """Updates step input bindings without mutating shared UnitContract definitions."""
+    merged = dict(step.bindings)
+    for k, v in bindings.items():
+        if v == "" or v == k:
+            merged.pop(k, None)
+        else:
+            merged[k] = v
+    return replace(step, bindings=merged)
+
 
 class ViewportRuntime:
     format_llm_diagnostic = staticmethod(format_llm_diagnostic)
@@ -147,13 +159,27 @@ class ViewportRuntime:
 
         try:
             flow_contract = shadow_reg.register_flow(flow_name, proposed_dsl, desc)
-            inspection = inspect_flow(shadow_reg, flow_name)
-            if inspection.errors:
-                return SynthesisReport(flow_name=flow_name, dsl=proposed_dsl, valid=False, errors=tuple(inspection.errors))
-            asl = FlowDSL.compile_to_asl(flow_name, shadow_reg)
-            if asl_errors := verify_asl(asl):
-                return SynthesisReport(flow_name=flow_name, dsl=proposed_dsl, valid=False, errors=tuple(asl_errors))
-            FlowEngine.compile_asl_nodes(asl, validate=False)
+        except Exception as exc:
+            return SynthesisReport(flow_name=flow_name, dsl=proposed_dsl, valid=False, errors=(str(exc),))
+
+        inspection = inspect_flow(shadow_reg, flow_name)
+        errors: list[str] = list(inspection.errors)
+
+        if not errors:
+            try:
+                asl = compile_to_asl(flow_name, shadow_reg)
+                if asl_errors := verify_asl(asl):
+                    errors.extend(asl_errors)
+                else:
+                    FlowEngine.compile_asl_nodes(asl, validate=False)
+            except Exception as exc:
+                errors.append(str(exc))
+
+        is_valid = not errors
+
+        # Always build a snapshot when possible so View/Draft UI can render unbound/mismatch diagnostics
+        snap: ViewportSnapshot | None = None
+        try:
             snap = ViewportProjector.project(
                 shadow_reg,
                 flow_name,
@@ -164,7 +190,9 @@ class ViewportRuntime:
                 published=False if commit else (flow_name in self.published_flows),
             )
         except Exception as exc:
-            return SynthesisReport(flow_name=flow_name, dsl=proposed_dsl, valid=False, errors=(str(exc),))
+            if not errors:
+                errors.append(str(exc))
+                is_valid = False
 
         if commit:
             self.registry.units = shadow_reg.units
@@ -175,8 +203,9 @@ class ViewportRuntime:
         new_steps = [s.name for s in flow_contract.steps]
         return SynthesisReport(
             flow_name=flow_name,
-            dsl=snap.formula_dsl,
-            valid=True,
+            dsl=snap.formula_dsl if snap is not None else emit_flow_dsl(flow_contract),
+            valid=is_valid,
+            errors=tuple(errors),
             warnings=tuple(inspection.warnings),
             snapshot=snap,
             added_steps=tuple(s for s in new_steps if s not in old_steps),
@@ -200,10 +229,11 @@ class ViewportRuntime:
         flow_name: str,
         step_name: str,
         *,
-        new_defaults: dict[str, Any] | None = None,
+        new_bindings: dict[str, str] | None = None,
         new_cfg: dict[str, Any] | None = None,
         new_gate_expr: str | None = None,
         swap_with: str | None = None,
+        commit: bool = False,
     ) -> SynthesisReport:
         if flow_name not in self.registry.flows:
             raise KeyError(f"Flow '{flow_name}' not found in registry.")
@@ -211,25 +241,33 @@ class ViewportRuntime:
         shadow_reg = self._clone_registry()
         target_step = swap_with or step_name
 
-        if new_defaults is not None and target_step in shadow_reg.units:
-            u = shadow_reg.units[target_step]
-            shadow_reg.units[target_step] = replace(u, in_defaults={**u.in_defaults, **new_defaults})
-
         merged_cfg = dict(flow.cfg_values)
         if new_cfg is not None:
-            merged_cfg.update({f"{target_step}.{k}": v for k, v in new_cfg.items()})
+            unit_obj = shadow_reg.units.get(target_step) or shadow_reg.units.get(split_unit_ref(target_step)[0])
+            unit_defaults = unit_obj.cfg_defaults if unit_obj is not None else {}
+            for k, v in new_cfg.items():
+                scoped_key = f"{target_step}.{k}"
+                if k in unit_defaults and unit_defaults[k] == v:
+                    merged_cfg.pop(scoped_key, None)
+                else:
+                    merged_cfg[scoped_key] = v
 
-        updated_steps = tuple(
-            replace(s, gate_expr=new_gate_expr)
-            if (s.name == step_name and new_gate_expr is not None and s.gate_expr is not None)
-            else replace(s, name=swap_with)
-            if (s.name == step_name and swap_with is not None)
-            else s
-            for s in flow.steps
-        )
+        updated_steps = []
+        for s in flow.steps:
+            if s.name != step_name:
+                updated_steps.append(s)
+                continue
+            cur = s
+            if swap_with is not None:
+                cur = replace(cur, name=swap_with)
+            if new_gate_expr is not None and cur.gate_expr is not None:
+                cur = replace(cur, gate_expr=new_gate_expr)
+            if new_bindings is not None:
+                cur = _apply_step_bindings(cur, new_bindings)
+            updated_steps.append(cur)
 
-        candidate_dsl = emit_flow_dsl(replace(flow, steps=updated_steps, cfg_values=merged_cfg))
-        return self._synthesize_on_registry(shadow_reg, flow_name, candidate_dsl, desc=flow.desc, commit=True)
+        candidate_dsl = emit_flow_dsl(replace(flow, steps=tuple(updated_steps), cfg_values=merged_cfg))
+        return self._synthesize_on_registry(shadow_reg, flow_name, candidate_dsl, desc=flow.desc, commit=commit)
 
     def _default_dispatch(self, scheme: str, target: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         if scheme == "flow":
@@ -278,7 +316,9 @@ class ViewportRuntime:
             ev_kind = "dry_run_skip" if is_dry_skip else ("hitl_parked" if is_hitl else "step_ok")
             score = out.get("_score") if isinstance(out, dict) else None
             emitted = tuple(out.keys()) if isinstance(out, dict) else ()
-            snap.trace.append(TelemetryEvent(seq=seq, timestamp=time.time(), state=current_node, event=ev_kind, score=score, emitted_keys=emitted))
+            snap.trace.append(
+                TelemetryEvent(seq=seq, timestamp=time.time(), state=current_node, event=ev_kind, score=score, emitted_keys=emitted)
+            )
             return out
 
         engine = FlowEngine.from_contract(flow_name, dispatcher=_traced_dispatcher, registry=self.registry)

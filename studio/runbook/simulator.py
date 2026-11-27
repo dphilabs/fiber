@@ -1,81 +1,43 @@
 # fiber.studio.runbook.simulator
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 import json
 from pathlib import Path
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 import uuid
 
-from xphi.arch.reflex.flow import Shape, UnitContract
 from xphi.arch.model.content.artifact import ArtifactStore
+from xphi.arch.reflex.flow import UnitContract
+
+from fiber.studio.runbook.spec import (
+    DRY_SKIP_FLAG,
+    DryMode,
+    NodeSourceMode,
+    StepFixture,
+    is_write_unit,
+    summarize_step_delta,
+    summarize_value_brief,
+    synthesize_dry_output,
+)
 
 if TYPE_CHECKING:
     from fiber.studio.runbook.runtime.projector import ViewportSnapshot
     from fiber.studio.runbook.runtime.viewport import ViewportRuntime
 
-DryMode = Literal["fixture", "hybrid"]
-
-_WRITE_KEYWORDS = (
-    "send", "post", "write", "create", "mutate", "apply", "commit",
-    "push", "append", "update", "delete", "exec", "act", "deploy", "rewrite", "notify",
-)
-
-
-@dataclass(frozen=True, slots=True)
-class StepFixture:
-    step_name: str
-    input_sha: str
-    output_sha: str
-    expected_summary: str
-
-
-def _mock_value_for_shape(shape: Shape, count: int) -> Any:
-    if shape.is_list:
-        return []
-    if shape.base == "num":
-        return count
-    if shape.base == "bool":
-        return True
-    if shape.base == "obj":
-        return {"dry_run": True, "count": count}
-    return f"dry_preview_{count}"
-
-
-def _infer_write_delta(payload: dict[str, Any]) -> tuple[int, str]:
-    for key in ("rows", "valid_rows", "records", "items", "blocks", "entries"):
-        if isinstance(payload.get(key), list):
-            cnt = len(payload[key])
-            return cnt, f"◌ dry · +{cnt}행"
-    for val in payload.values():
-        if isinstance(val, list):
-            return len(val), f"◌ dry · +{len(val)}건"
-    return 1, "◌ dry · ▸미리보기"
-
-
-def summarize_step_delta(payload: dict[str, Any], output: dict[str, Any]) -> str:
-    """S2/L3 스텝 요약 문자열 계산 ('3 → 2', '+2행 반영', '◌ dry · +2행' 등)."""
-    if output.get("__dry_run_skipped__") and "_dry_preview_note" in output:
-        return str(output["_dry_preview_note"])
-    if isinstance(output.get("_summary"), str) and output["_summary"]:
-        return output["_summary"]
-
-    in_lists = [len(v) for v in payload.values() if isinstance(v, list)]
-    out_lists = [len(v) for k, v in output.items() if not k.startswith("_") and isinstance(v, list)]
-    if in_lists and out_lists:
-        return f"{in_lists[0]} → {out_lists[0]}"
-    if out_lists:
-        return f"{out_lists[0]}행"
-
-    for k in ("rows_written", "written", "updated", "inserted", "count"):
-        if isinstance(output.get(k), int):
-            return f"+{output[k]}행"
-    return "통과"
+__all__ = [
+    "DryMode",
+    "DryRunSimulator",
+    "NodeSourceMode",
+    "StepFixture",
+    "summarize_step_delta",
+    "summarize_value_brief",
+]
 
 
 class DryRunSimulator:
-    """Recorded step-fixture manager and dual-mode (`fixture` / `hybrid`) dry-run engine."""
+    """Recorded step-fixture manager and node-aware (`fixture` / `hybrid` / per-node source) dry-run engine."""
 
     def __init__(
         self,
@@ -87,6 +49,7 @@ class DryRunSimulator:
         self.fixture_dir = fixture_dir if fixture_dir is not None else self.artifacts.io_dir
         self._fixtures: dict[str, dict[str, StepFixture]] = {}
         self.last_step_summaries: dict[str, str] = {}
+        self.last_step_inputs: dict[str, dict[str, str]] = {}
 
     def capture_fixture(
         self,
@@ -97,7 +60,7 @@ class DryRunSimulator:
         fid = fixture_id or f"fx_{flow_name}_{uuid.uuid4().hex[:6]}"
         steps: dict[str, StepFixture] = {}
         for step_name, (in_pay, out_pay) in step_outputs.items():
-            clean_out = {k: v for k, v in out_pay.items() if k != "__dry_run_skipped__"}
+            clean_out = {k: v for k, v in out_pay.items() if k != DRY_SKIP_FLAG}
             in_ref = self.artifacts.put(in_pay, source_uri=f"fx://{fid}/{step_name}/in")
             out_ref = self.artifacts.put(clean_out, source_uri=f"fx://{fid}/{step_name}/out")
             steps[step_name] = StepFixture(
@@ -132,18 +95,19 @@ class DryRunSimulator:
         raise KeyError(f"Fixture '{fixture_id}' not found.")
 
     @staticmethod
-    def _is_write_unit(unit: UnitContract | None, target: str) -> bool:
-        haystack = f"{unit.name if unit else ''} {target}".lower()
-        return any(kw in haystack for kw in _WRITE_KEYWORDS)
+    def _is_write_unit(
+        scheme_or_unit: str | UnitContract | None,
+        target: str = "",
+        unit: UnitContract | None = None,
+    ) -> bool:
+        if isinstance(scheme_or_unit, str):
+            return is_write_unit(scheme_or_unit, target, unit)
+        u = scheme_or_unit
+        return is_write_unit(u.scheme if u is not None else "", target, u)
 
     @staticmethod
     def _synthesize_write_preview(unit: UnitContract | None, payload: dict[str, Any]) -> dict[str, Any]:
-        count, note = _infer_write_delta(payload)
-        out: dict[str, Any] = {}
-        if unit is not None:
-            for out_k in unit.out_keys:
-                out[out_k] = payload[out_k] if out_k in payload else _mock_value_for_shape(unit.out_shape(out_k), count)
-        return {**out, "_score": out.get("_score", 1.0), "_dry_preview_note": note, "__dry_run_skipped__": True}
+        return synthesize_dry_output(unit, payload)
 
     def simulate(
         self,
@@ -153,25 +117,64 @@ class DryRunSimulator:
         *,
         mode: DryMode = "hybrid",
         fixture_id: str | None = None,
+        node_sources: dict[str, str] | None = None,
     ) -> tuple[ViewportSnapshot, dict[str, Any], float]:
-        fx_steps = self.load_fixture_steps(fixture_id) if (fixture_id and mode == "fixture") else None
+        need_fx = bool(fixture_id) and (
+            mode == "fixture"
+            or any(v.upper() in ("FIXTURE", "REPLAY") for v in (node_sources or {}).values())
+        )
+        fx_steps = self.load_fixture_steps(fixture_id) if (need_fx and fixture_id) else None
         step_summaries: dict[str, str] = {}
+        step_inputs: dict[str, dict[str, str]] = {}
+
+        flow_obj = viewport.registry.flows.get(flow_name)
+        no_by_step = {
+            s.name: f"{idx:02d}" for idx, s in enumerate(flow_obj.steps, 1)
+        } if flow_obj is not None else {}
+        flow_unit_names = set(no_by_step)
+
+        def _resolve_unit(scheme: str, target: str) -> UnitContract | None:
+            for name, u in viewport.registry.units.items():
+                if name in flow_unit_names and u.scheme == scheme and u.target == target:
+                    return u
+            return next(
+                (u for u in viewport.registry.units.values() if u.scheme == scheme and u.target == target),
+                None,
+            )
 
         def _dry_dispatcher(scheme: str, target: str, payload: dict[str, Any]) -> dict[str, Any] | None:
             if scheme == "flow":
                 _, sub_ctx, _ = self.simulate(viewport, target, payload, mode=mode, fixture_id=fixture_id)
                 return sub_ctx
 
-            unit = next((u for u in viewport.registry.units.values() if u.scheme == scheme and u.target == target), None)
+            unit = _resolve_unit(scheme, target)
             step_key = unit.name if unit is not None else target
+            step_no = no_by_step.get(step_key, "")
+            step_inputs[step_key] = {
+                k: summarize_value_brief(v) for k, v in payload.items() if not k.startswith("_")
+            }
 
-            if mode == "fixture" and fx_steps is not None and step_key in fx_steps:
-                rec = {**dict(self.artifacts.get(fx_steps[step_key].output_sha)), "__dry_run_skipped__": True}
-                step_summaries[step_key] = fx_steps[step_key].expected_summary
-                return rec
+            src_override = None
+            if node_sources:
+                raw_src = (
+                    node_sources.get(step_no)
+                    or node_sources.get(step_key)
+                    or node_sources.get(f"{step_key}@{step_no}")
+                )
+                src_override = raw_src.upper() if raw_src else None
 
-            if mode == "fixture" or self._is_write_unit(unit, target):
-                preview = self._synthesize_write_preview(unit, payload)
+            use_fx = (src_override in ("FIXTURE", "REPLAY")) or (src_override is None and mode == "fixture")
+            if use_fx and fx_steps is not None:
+                fx_rec = fx_steps.get(f"{step_key}@{step_no}") or fx_steps.get(step_key)
+                if fx_rec is not None:
+                    rec = {**dict(self.artifacts.get(fx_rec.output_sha)), DRY_SKIP_FLAG: True}
+                    step_summaries[step_key] = fx_rec.expected_summary
+                    return rec
+
+            force_dry = src_override in ("DRY", "FIXTURE", "REPLAY")
+            force_live = src_override == "LIVE"
+            if force_dry or (not force_live and (mode == "fixture" or is_write_unit(scheme, target, unit))):
+                preview = synthesize_dry_output(unit, payload)
                 step_summaries[step_key] = summarize_step_delta(payload, preview)
                 return preview
 
@@ -186,5 +189,6 @@ class DryRunSimulator:
             allow_incomplete_auth=True,
         )
         self.last_step_summaries = step_summaries
+        self.last_step_inputs = step_inputs
         clean_final = {k: v for k, v in final_ctx.items() if not k.startswith("_dry_")}
         return snap, clean_final, float(final_ctx.get("_score", 1.0))
