@@ -10,11 +10,11 @@ Fiber is a local-first alternative to cloud-hosted AI gateways and agent platfor
 
 | Section | Target Focus & Key Capabilities | Quick Jump |
 | :--- | :--- | :--- |
-| **1. Local MCP Gateway** | Loopback Daemon for Agents & IDEs, Pre-Flight Human Approval, Zero-Key LLM Routing, Config Sync | **[1. Local MCP Gateway](#1-local-mcp-gateway)** |
+| **1. Local MCP Gateway** | Loopback Daemon for Agents & IDEs, Pre-Flight Human Approval, Built-in Workspace Workers, Zero-Key LLM Routing | **[1.1 Gateway](#11-gateway-governance--ide-onboarding)** · **[1.2 Built-in Workers](#12-built-in-workspace-workers)** |
 | **2. LLM Guardrails & Replay** | In-Flight DLP Guardrails, Mid-Stream Kill-Switch, Deterministic VCR Replay, Multi-Provider Schema Normalization | **[2.1 LLM Guardrails](#21-llm-guardrails)** · **[2.2 VCR](#22-deterministic-replay-llm-vcr--fixtures)** · **[2.3 Schema Traverser](#23-schema-traverser--compat-registry)** |
 | **3. CLI & Installation** | Connect CLI, Spend Limits & Quota, Sandbox Provisioning (`uv pip`), Node Identity (`fiber init`) & Homebrew | **[3.1 Connect CLI](#31-fiber-connect-cli)** · **[3.2 Python (uv pip)](#32-python-environment-via-uv-pip-recommended-for-sdk--local-control-plane)** · **[3.3 Homebrew](#33-macos-homebrew-tap-for-local-daemon--mcp-gateway)** |
 | **4. Execution Planes** | Optional Self-Hosted Edge Offload | **[4.1 Edge V8 Plane](#41-edge-v8-execution-plane)** |
-| **5. Benchmarks & Validation** | Pipeline Benchmarks, End-to-End Validation Logs (HITL, Guardrail, VCR, WASM, Edge, FinOps) | **[5.1 Benchmarks](#51-pipeline-performance-benchmarks-apple-m2-32gb-ram)** · **[5.2 Validation Logs](#52-system-validation-logs)** |
+| **5. Benchmarks & Validation** | Pipeline Benchmarks, End-to-End Validation Logs (HITL, Built-in Workers, Guardrail, VCR, WASM, Edge, FinOps) | **[5.1 Benchmarks](#51-pipeline-performance-benchmarks-apple-m2-32gb-ram)** · **[5.2 Validation Logs](#52-system-validation-logs)** |
 
 ---
 
@@ -75,6 +75,8 @@ asyncio.run(main())
 ---
 
 ## 1. Local MCP Gateway
+
+### 1.1. Gateway Governance & IDE Onboarding
 
 The **Fiber Connect CLI** (`fiber`) is the single entrypoint for the local control plane. It registers your MCP servers and IDE configs, mounts them as managed workers under one host-local daemon, and—when needed—extends the same governance across remote nodes with zero boilerplate.
 
@@ -160,6 +162,29 @@ $ fiber connect -t local-fs -e "npx -y @modelcontextprotocol/server-filesystem /
 ```
 
 > **Slack HITL Setup & Gateway Specs:** Provision a Socket Mode Slack app in 30s via `fiber ops channel.slack guide --open`. For the approval protocol and wire format, refer to: **[MCP Connector Spec](./xyz/spec/gateway/mcp.connector.md)** · **[Slack HITL Spec](./xyz/spec/gateway/hitl.slack.md)**
+
+---
+
+### 1.2. Built-in Workspace Workers
+
+Beyond governing third-party MCP servers, Fiber ships a zero-NPM standard library of resident, multiplexed Python workers (`fiber connect builtin`). Instead of granting agents unconfined shell access or dumping whole files into context, these workers confine local data, docs, history, and media strictly to `--root`—returning bounded, structured evidence and recoverable tool errors (`isError: true`) so agents can self-correct:
+
+| Worker | Key Tools | Workspace-Confined Purpose |
+| :--- | :--- | :--- |
+| **`duck`** | `describe_data`, `query_sql` | Read-only in-memory DuckDB analytics over local `.csv`/`.jsonl`/`.parquet`/`.xlsx` (`enable_external_access=false`). |
+| **`reader`** | `list_modules`, `retrieve_scoped`, `compare_table` | Token-budgeted section retrieval, freshness checks, and Markdown-to-CSV/XLSX table diffing. |
+| **`pin`** | `set`, `resolve`, `list`, `scope` | Persistent architectural constraints & decisions live-verified against on-disk code, docs, and Git HEAD. |
+| **`verifier`** | `verify_payload`, `verify_http`, `verify_binary` | Deterministic JSON Schema, JMESPath, DPoP HTTP, and lock-safe CLI binary probes (`rules.json`). |
+| **`git.history`** | `search_commits`, `blame`, `show_commit` | Lock-free (`GIT_OPTIONAL_LOCKS=0`) pickaxe commit search, line blame, and bounded patches. |
+| **`mailbox`** | `search_mail`, `read_mail` | Symlink-safe, read-only search and retrieval over local `.eml` and `.mbox` archives. |
+| **`media`** | `probe`, `trim`, `convert` | Non-destructive `ffprobe`/`ffmpeg` inspection and transcoding with atomic partial-file cleanup. |
+
+```bash
+# Mount all built-in workers into ~/.anchor/mcp.json (and gate mutating pins with 1-Click approval)
+$fiber connect builtin$ fiber connect -t worker.memory.pin -e builtin -p "button:set|drop"
+```
+
+> **Full Tool Schemas & Isolation Rules:** **[Built-in Workers Spec](./xyz/spec/worker/builtin.md)**
 
 ---
 
@@ -434,8 +459,10 @@ Method and full results: **[Validation Spec §1](./xyz/spec/validation.md#1-pipe
 
 ### 5.2. System Validation Logs
 
-Fiber enforces execution determinism and runtime safety through automated CI gates (on every PR and release tag) alongside targeted end-to-end validation suites across each subsystem.
+Fiber enforces execution determinism and runtime safety through automated CI gates (on every PR and release tag) alongside reproducible `fiber e2e <suite>` validation suites across every plane:
 
-Suites: Pre-Flight HITL over Slack · LLM Guardrail · LLM VCR · Host WASM Plane · Edge V8 Plane · FinOps Budget & Kill-Switch.
+- **MCP Gateway & Tools:** [Pre-Flight Slack HITL](./xyz/spec/validation.md#21-pre-flight-hitl-over-slack) (`gateway.hitl.slack`) · [Built-in Workspace Workers](./xyz/spec/validation.md#27-built-in-workers) (`worker.builtin`)
+- **LLM Pipeline:** [In-Flight DLP Guardrails](./xyz/spec/validation.md#22-llm-guardrail) (`gateway.llm.guardrail`) · [Deterministic VCR Replay](./xyz/spec/validation.md#23-llm-vcr) (`gateway.llm.vcr`)
+- **Compute & FinOps:** [Host WASM Plane](./xyz/spec/validation.md#24-host-wasm-plane-phasewasm) (`infra.wasm.phase`) · [Edge V8 Isolates](./xyz/spec/validation.md#25-edge-v8-plane) (`infra.plane.flare`) · [FinOps Kill-Switch](./xyz/spec/validation.md#26-finops-budget--kill-switch) (`inter.finops`)
 
-Run commands, verified phases, and log output: **[Validation Spec §2](./xyz/spec/validation.md#2-system-validation-logs)**
+Run commands, phase breakdowns, and sealed log outputs: **[Validation Spec §2](./xyz/spec/validation.md#2-system-validation-logs)**

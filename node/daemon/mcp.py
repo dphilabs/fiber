@@ -6,26 +6,28 @@ from typing import Any, Dict, List, Optional
 
 import orjson
 
-from fiber.node.mcp.connector import MCPServerConnector
-from fiber.node.mcp.mapper.config import McpConfigMapper
+from fiber.gateway.bridge.emitter import get_emitter
 from fiber.node.bound.verify.deps import WorkerDepsChecker
+from fiber.node.mcp.connector import MCPServerConnector
 from fiber.node.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
+    ANCHOR_MCP_PATH,
     STANDALONE_ATTACHED_TUNNEL_KEY,
     ResolvedTarget,
-    _parse_fiber_tags,
-    _specs_from_mapped_entries,
+    load_anchor_specs,
+    parse_fiber_tags,
 )
 from xphi.arch.contract.registry.unified import contract
 from xphi.node.ops.daemon.base import AbstractDaemon
 from xphi.node.space.tunnel.factory import TunnelFactory
-from fiber.gateway.bridge.emitter import get_emitter
 
 log = get_emitter("daemon.mcp")
 
 
 @contract.daemon("mcp_worker")
 class McpWorkerDaemon(AbstractDaemon):
+    """Autonomous supervisor daemon managing canonical MCP worker connectors and standalone attachments."""
+
     def __init__(self, ctx):
         super().__init__("McpWorkerDaemon")
         self.ctx = ctx
@@ -36,10 +38,9 @@ class McpWorkerDaemon(AbstractDaemon):
         self._last_anchor_mtime: float = 0.0
 
     def _get_anchor_mtime(self) -> float:
-        anchor_path = McpConfigMapper.get_anchor_config_path()
-        if anchor_path.is_file():
+        if ANCHOR_MCP_PATH.is_file():
             with suppress(OSError):
-                return anchor_path.stat().st_mtime
+                return ANCHOR_MCP_PATH.stat().st_mtime
         return 0.0
 
     @staticmethod
@@ -56,42 +57,17 @@ class McpWorkerDaemon(AbstractDaemon):
         except OSError:
             return False
 
-    # def _build_desired_specs(self) -> Dict[str, ResolvedTarget]:
-    #     desired: Dict[str, ResolvedTarget] = {}
-    #     anchor_path = McpConfigMapper.get_anchor_config_path()
-
-    #     if not anchor_path.is_file():
-    #         log.info(f"[{self.name}] Anchor config not found at {anchor_path}. No workers will be started.")
-    #         self._last_anchor_mtime = 0.0
-    #         return desired
-
-    #     log.info(f"[{self.name}] Loading canonical MCP config from: {anchor_path}")
-    #     anchor_entries = McpConfigMapper.scan_and_parse(agent="fiber")
-
-    #     try:
-    #         for spec in _specs_from_mapped_entries(anchor_entries):
-    #             desired[spec.target_id] = spec
-    #         log.info(f"[{self.name}] Loaded {len(desired)} target(s) from mcp.json: {list(desired.keys())}")
-    #     except BaseException as e:
-    #         log.error(f"[{self.name}] Failed to resolve anchor config entries: {e}")
-
-    #     self._last_anchor_mtime = self._get_anchor_mtime()
-    #     return desired
-
     def _build_desired_specs(self) -> Dict[str, ResolvedTarget]:
         desired: Dict[str, ResolvedTarget] = {}
-        anchor_path = McpConfigMapper.get_anchor_config_path()
 
-        if not anchor_path.is_file():
-            log.info(f"[{self.name}] Anchor config not found at {anchor_path}. No workers will be started.")
+        if not ANCHOR_MCP_PATH.is_file():
+            log.info(f"[{self.name}] Anchor config not found at {ANCHOR_MCP_PATH}. No workers will be started.")
             self._last_anchor_mtime = 0.0
             return desired
 
-        log.info(f"[{self.name}] Loading canonical MCP config from: {anchor_path}")
-        anchor_entries = McpConfigMapper.scan_and_parse(agent="fiber")
-
+        log.info(f"[{self.name}] Loading canonical MCP config from: {ANCHOR_MCP_PATH}")
         try:
-            raw_specs = _specs_from_mapped_entries(anchor_entries)
+            raw_specs = load_anchor_specs()
             desired = WorkerDepsChecker.filter_mountable_specs(
                 raw_specs, logger=log, daemon_name=self.name
             )
@@ -188,7 +164,7 @@ class McpWorkerDaemon(AbstractDaemon):
             log.warning(f"[{self.name}] Failed to sync active targets to tunnel: {e}")
 
     async def _reconcile_standalone_attachments(self, sync_if_changed: bool = True) -> bool:
-        """외부 Standalone 프로세스의 PID 생존 여부를 직접 검증하고 죽은 엔트리를 청소(Reap)합니다."""
+        """Verify live PIDs of external standalone connectors and reap dead entries."""
         try:
             tunnel = await TunnelFactory.get_default()
             raw = await tunnel.get(STANDALONE_ATTACHED_TUNNEL_KEY)
@@ -209,7 +185,7 @@ class McpWorkerDaemon(AbstractDaemon):
                 continue
             pid = info.get("pid")
             if self._is_pid_alive(pid):
-                norm_tags = list(dict.fromkeys([*_parse_fiber_tags(info.get("tags")), "STANDALONE"]))
+                norm_tags = list(dict.fromkeys([*parse_fiber_tags(info.get("tags")), "STANDALONE"]))
                 alive_standalone[str(tid)] = norm_tags
                 cleaned_attached[str(tid)] = {**info, "tags": norm_tags}
             else:

@@ -140,3 +140,45 @@ Verifies the tenant budget lifecycle and kill-switch path: a FinOps JWT is trans
 | 3 | Track A - Dynamic Pub/Sub Kill Switch vs VCR Stream | PASSED | `Published KILL-SWITCH (REVOKE) for tenant 'accounting_dept_e2e_93d96046' via Pub/Sub`<br>`FuelTrap dynamically intercepted and killed the long VCR stream at chunk 1 (2 chars).` |
 
 Phase 2 checks: JWT issued by FinOps worker (SYNC_QUOTA, v1) → translated to AP2 Mandate, budget synced to 50,000,000 Fuel → duplicate JTI exchange ignored → v2 TOP_UP applied (60,000,000 Fuel) → v1 token replay rejected.
+
+### 2.7. Built-in Workers
+
+```bash
+fiber e2e worker.builtin
+```
+
+Log: [worker.builtin.log](../log/worker/builtin.20261127.log)
+
+Verifies all seven built-in workers through the full HTTP Gateway (DPoP + Nonce) → Pub/Sub Tunnel → Connector → Worker path. Each target mounts under a run-scoped ID (`e2e.<target>.<hex>`) so the suite runs cleanly alongside a live `fiber daemon` without queue collisions. Seed data from `reflexor/fixtures/mcp/builtin` is materialized into a temporary workspace (`--root`), and Pin and Reader bind `--db` to temporary SQLite files so `~/.anchor` is never touched. Evaluates snapshot contracts via `diff_snapshot` and verifies that invalid inputs across all workers return recoverable tool errors (`TOOL_ERROR_200`, `isError: true`) rather than `HTTP 502` gateway faults.
+
+| Target | Module | Transport / Mode |
+| :--- | :--- | :--- |
+| `duck` | `fiber.node.worker.duck` | STDIO / MULTIPLEX |
+| `verifier` | `fiber.node.worker.dev.verifier` | STDIO / MULTIPLEX |
+| `mailbox` | `fiber.node.worker.daily.mailbox` | STDIO / MULTIPLEX |
+| `media` | `fiber.node.worker.daily.media` | STDIO / MULTIPLEX |
+| `reader` | `fiber.node.worker.reader` | STDIO / MULTIPLEX |
+| `pin` | `fiber.node.worker.memory.pin` | STDIO / MULTIPLEX |
+| `git` | `fiber.node.worker.dev.git.history` | STDIO / MULTIPLEX |
+
+| Phase | Verifies | Status | Log Output |
+| :--- | :--- | :--- | :--- |
+| 1 | 7-Worker Boot, Schema Snapshot & Unified Route | PASSED | `[discovery.unified_describe_csv] -> OK` |
+| 2 | [Duck] Fixture Cases & 10x Async Concurrency | PASSED | `[duck.describe_file_clause_a2] -> OK`<br>`[duck.block_copy_egress] -> TOOL_ERROR_200`<br>`[duck.block_outside_path] -> TOOL_ERROR_200` |
+| 3 | [Verifier] Fixture Cases | PASSED | `[verifier.list_rules_schema] -> OK`<br>`[verifier.reject_malformed_json] -> TOOL_ERROR_200` |
+| 4 | [Mailbox] Fixture Cases & Symlink Escape Audit | PASSED | `[mailbox.read_mbox_by_index] -> OK`<br>`[mailbox.block_symlink_escape] -> TOOL_ERROR_200` |
+| 5 | [Media] Fixture Cases (FFprobe/FFmpeg) | PASSED | `[media.convert_wav_to_flac] -> OK`<br>`[media.cleanup_partial_on_ffmpeg_fail_md2] -> TOOL_ERROR_200` |
+| 6 | [Reader] Partial-Sync Guard, Scoped Retrieval & Table Diff | PASSED | `[reader.step2_full_outline_after_partial] -> OK`<br>`[reader.compare_markdown_table_to_csv] -> OK` |
+| 7 | [Pin] Full Lifecycle Fixture Cases | PASSED | `[pin.step5_scope_with_locked_base_rev] -> OK`<br>`[pin.step6_drop_pin] -> OK` |
+| 8 | [GitHistory] Commit/Blame/Show Fixture Cases | PASSED | `[git.pickaxe_commit_search] -> OK`<br>`[git.show_head_patch] -> OK` |
+| 9 | [Cross-Worker] 12-Case Error Contract Audit | PASSED | `[error_contracts.reader_escape] -> TOOL_ERROR_200`<br>`[error_contracts.verifier_empty_probe] -> TOOL_ERROR_200` |
+
+Phase 2 cases: ellipsis literal (`'wait...now'`) in a string filter, standalone `DESCRIBE '<file>'` mounting, blocking of `COPY` egress, `ATTACH`, and outside-root paths, plus 10 concurrent multiplexed queries.
+
+Phase 4 cases: `.eml` search with attachment metadata, `.mbox` read by `#<index>`, skipping of a symlink pointing outside `--root` (yielding no match), and rejection of offset timestamps in `since` and `.mbox` IDs missing `#<index>`.
+
+Phase 5 cases: `ffprobe` stream inspection, segment trim, WAV → FLAC conversion, duplicate-output overwrite guard, and atomic partial-file cleanup after a failed `ffmpeg` encode (confirmed absent on subsequent probe).
+
+Phase 6 cases: subfolder-first partial sync followed by full-root outline expansion, scoped token retrieval, and Markdown section table vs. CSV join diffing.
+
+Phase 9 cases (12): `duck_bad_sql`, `mailbox_bad_date`, `mailbox_bad_id`, `media_bad_time`, `media_bad_fmt`, `reader_escape`, `reader_empty_q`, `pin_empty_key`, `pin_empty_addrs`, `git_bad_rev`, `git_bad_range`, `verifier_empty_probe`.

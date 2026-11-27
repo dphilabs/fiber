@@ -1,4 +1,4 @@
-# fiber.studio.console.ui.guide
+# fiber.studio.console.modal.guide
 from __future__ import annotations
 
 from typing import Optional

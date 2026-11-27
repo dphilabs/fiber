@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 import time
 from typing import Any
+
 from nicegui import ui
 import orjson
 
@@ -22,14 +23,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 _last_config_stat_sig: tuple[tuple[str, int, int], ...] = ()
-_cached_mapped_entries: list[Any] = []
+_cached_anchor_specs: list[Any] = []
 
 
 def _inspect_and_sanitize_config_candidates(
     candidate_map: dict[str, list[Path]],
 ) -> tuple[list[McpConfigCandidate], tuple[tuple[str, int, int], ...]]:
     config_list: list[McpConfigCandidate] = []
-    stat_sig: list[tuple[str, int, int]] = []
+    stat_sig: list[tuple[str, int, int], ...] = []
 
     for agent_name, paths in candidate_map.items():
         existing = next((p for p in paths if p.is_file()), None)
@@ -71,10 +72,11 @@ def _inspect_and_sanitize_config_candidates(
 
 
 async def scan_mcp_topology_and_health(gateway_url: str, *, force_parse: bool = False) -> McpTopologyScanResult:
-    global _last_config_stat_sig, _cached_mapped_entries
+    global _last_config_stat_sig, _cached_anchor_specs
     import httpx
+    from fiber.node.mcp.mapper.builtin import classify_builtin_source, get_builtin_entry
     from fiber.node.mcp.mapper.config import McpConfigMapper
-    from fiber.gateway.bridge.action.connect import discover_builtin_workers, resolve_connector_spec
+    from fiber.node.mcp.mapper.spec import ACTIVE_TARGETS_TUNNEL_KEY, load_anchor_specs
     from xphi.node.space.tunnel.factory import TunnelFactory
 
     candidate_map = McpConfigMapper._resolve_candidate_paths()
@@ -86,7 +88,7 @@ async def scan_mcp_topology_and_health(gateway_url: str, *, force_parse: bool = 
     try:
         tunnel = await TunnelFactory.get_default()
         if tunnel:
-            raw = await tunnel.get("mcp:registry:active_targets")
+            raw = await tunnel.get(ACTIVE_TARGETS_TUNNEL_KEY)
             if raw:
                 parsed = orjson.loads(raw)
                 if isinstance(parsed, (list, dict)):
@@ -94,36 +96,30 @@ async def scan_mcp_topology_and_health(gateway_url: str, *, force_parse: bool = 
     except Exception:
         pass
 
-    # 오직 canonical ~/.anchor/mcp.json ("fiber")에 등록된 항목만 워커 목록으로 로드
+    # Load canonical specs strictly from ~/.anchor/mcp.json via public mapper API
     if force_parse or current_stat_sig != _last_config_stat_sig:
-        _cached_mapped_entries = await asyncio.to_thread(McpConfigMapper.scan_and_parse, "fiber")
+        _cached_anchor_specs = await asyncio.to_thread(load_anchor_specs)
         _last_config_stat_sig = current_stat_sig
 
-    builtins = await asyncio.to_thread(discover_builtin_workers)
-    builtin_default_modes: dict[str, tuple[str, str]] = {
-        canon_id: (cmd, def_mode) for _, (canon_id, cmd, def_mode) in builtins.items()
-    }
+    # Ensure builtin AST cache is warm off the event loop
+    await asyncio.to_thread(get_builtin_entry, "")
 
     workers_by_id: dict[str, McpWorkerInfo] = {}
-    for entry in _cached_mapped_entries:
-        env_mode = entry.env.get("FIBER_MODE") if entry.env else None
-        fallback_mode = builtin_default_modes.get(entry.target_id, ("", None))[1]
-        effective_mode = env_mode or fallback_mode
-
-        env_preflight = entry.env.get("FIBER_PREFLIGHT_PATTERN") if entry.env else None
-        spec = resolve_connector_spec(
-            target=entry.target_id,
-            exec_cmd=entry.exec_cmd,
-            mode=effective_mode,
-            preflight=env_preflight,
+    for spec in _cached_anchor_specs:
+        builtin_meta = get_builtin_entry(spec.target_id) or get_builtin_entry(spec.exec_cmd)
+        effective_mode = (
+            spec.env_dict.get("FIBER_MODE")
+            or (builtin_meta.default_mode if builtin_meta else None)
+            or spec.mode
         )
-        source_label = "builtin" if spec.target_id in builtin_default_modes else entry.source_agent
+        source_label = classify_builtin_source(spec.target_id, spec.exec_cmd, fallback="fiber")
+
         workers_by_id[spec.target_id] = McpWorkerInfo(
             target_id=spec.target_id,
             source=source_label,
             transport=spec.transport,
-            mode=spec.mode,
-            preflight=env_preflight or spec.preflight or "",
+            mode=effective_mode,
+            preflight=spec.preflight or "",
             is_live=spec.target_id in live_targets,
             exec_cmd=spec.exec_cmd,
         )
@@ -186,6 +182,5 @@ class McpActionBridge:
         while True:
             await self.scan_mcp_topology_and_health(silent=True)
             await asyncio.sleep(3.0)
-
 
 mcp = McpActionBridge()

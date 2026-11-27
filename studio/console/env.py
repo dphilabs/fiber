@@ -6,7 +6,6 @@ from typing import Any, Dict
 
 from fiber.node.account.state import state
 
-
 def get_slack_status() -> Dict[str, Any]:
     s = state.security
     bot = os.environ.get("FIBER_SLACK_BOT_TOKEN", "").strip()

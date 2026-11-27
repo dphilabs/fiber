@@ -1,44 +1,44 @@
-# fiber.node.worker.reaper
+# fiber.node.worker.internal.reaper
 import asyncio
 import time
 from contextlib import suppress
 from typing import Dict, Any, Optional
 
 from xphi.arch.bound.client.rpc import InternalRpcClient
+from xphi.arch.contract.protocol.binder import tool
 from xphi.arch.contract.protocol.worker import AsyncWorkerProtocol
 from xphi.state.anchor.store import AnchorStore
 
-
 class WorkerReaper(AsyncWorkerProtocol):
-    def __init__(self, anchor_store: AnchorStore, rpc_client: InternalRpcClient, sweep_interval: float = 5.0):
-        super().__init__(agent_name="worker.reaper")
+    """Autonomous reaper daemon that detects and rolls back orphaned transactions."""
 
+    def __init__(self, anchor_store: AnchorStore, rpc_client: InternalRpcClient, sweep_interval: float = 5.0):
         self.anchor_store = anchor_store
         self.rpc = rpc_client
         self.sweep_interval = sweep_interval
         self.running = False
         self.ttl_thresholds = {
-            "transition.pending": 30.0,   # OTP/인간 개입 대기: 30초 초과 시 롤백
-            "transition.invoke": 120.0,   # 일반 블로킹 I/O 대기: 120초 초과 시 롤백
+            "transition.pending": 30.0,   # OTP / HITL wait: rollback after 30s
+            "transition.invoke": 120.0,   # Blocking I/O wait: rollback after 120s
         }
+        super().__init__(agent_name="worker.reaper")
 
-    async def handle_tools_list(self, req_id: Any):
-        tools = [
-            {
-                "name": "trigger_manual_reconciliation",
-                "description": "Force an immediate anchor store sweep to detect and rollback orphaned transactions.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "override_threshold": {
-                            "type": "number",
-                            "description": "Override default TTL (seconds)",
-                        }
-                    },
-                },
-            }
-        ]
-        await self.send_response(req_id, {"tools": tools})
+    @tool
+    async def trigger_manual_reconciliation(self, override_threshold: Optional[float] = None) -> str:
+        """Force an immediate anchor store sweep to detect and rollback orphaned transactions.
+
+        Args:
+            override_threshold: Override default TTL (seconds).
+        """
+        original_pending = self.ttl_thresholds["transition.pending"]
+        if override_threshold is not None:
+            self.ttl_thresholds["transition.pending"] = float(override_threshold)
+        try:
+            swept_count = await self._sweep_and_reconcile()
+        finally:
+            if override_threshold is not None:
+                self.ttl_thresholds["transition.pending"] = original_pending
+        return f"Manual reconciliation complete. Swept {swept_count} orphaned streams."
 
     async def handle_tools_call(self, req_id: Any, tool_name: str, arguments: Dict[str, Any], meta: Dict[str, Any]):
         if tool_name == "trigger_manual_reconciliation":
@@ -114,7 +114,7 @@ class WorkerReaper(AsyncWorkerProtocol):
         return len(stale_streams)
 
     async def _enforce_rollback(self, stream: Any):
-        """단일 트랜잭션에 대한 강제 롤백 및 자원 회수 절차"""
+        """Forcefully roll back a single orphaned transaction and reclaim locked resources."""
         handle_id = stream.id
         target_node = stream.metadata.get("target")
         locked_fuel = stream.metadata.get("fuel_locked", 0)
@@ -122,7 +122,7 @@ class WorkerReaper(AsyncWorkerProtocol):
 
         self.log.info(f"Reconciling {handle_id} on target [{target_node}]...")
 
-        # Phase 1: 파이프라인 강제 해제 (Unblocking the Legacy Process)
+        # Phase 1: Force-unblock the target pipeline
         rollback_payload = {
             "handle_id": handle_id,
             "action": "RESUME_OR_KILL",
@@ -139,7 +139,7 @@ class WorkerReaper(AsyncWorkerProtocol):
             payload=rollback_payload,
         )
 
-        # Phase 2: 원장 씰링 및 증거 기록 (Sealing the Truth)
+        # Phase 2: Seal the ledger state and record fault evidence
         await self.anchor_store.force_transition(
             handle_id=handle_id,
             new_action="transition.resolve",
@@ -163,7 +163,6 @@ async def main():
 
     sentinel = WorkerReaper(anchor_store=MockStore(), rpc_client=InternalRpcClient())
     await sentinel.ignite()
-
 
 if __name__ == "__main__":
     try:

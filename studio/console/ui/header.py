@@ -17,8 +17,9 @@ from fiber.node.account.state import (
 )
 from fiber.node.account.finops.console import finops_manager
 import fiber.studio.console.ui.diag as diag
-from fiber.studio.console.ui.guide import open_guide_modal
+from fiber.studio.console.modal.guide import open_guide_modal
 import fiber.studio.console.ui.kit as kit
+from fiber.studio.console.ui.theme import strip_emoji, tui_tag
 from xphi.node.space.bind.resolver import resolve_path
 
 DIAG_LOG_PATH = resolve_path("log") / "ui_diag.log"
@@ -30,7 +31,7 @@ _sync_lock = asyncio.Lock()
 
 
 def has_console_fixtures() -> bool:
-    """로컬 fixture 디렉토리에 console용 픽스처가 존재하는지 확인합니다."""
+    """True if console fixtures exist in the local compats dir."""
     console_dir = COMPATS_LOCAL_DIR / "console"
     return console_dir.exists() and any(console_dir.rglob("*.json"))
 
@@ -40,7 +41,7 @@ def _update_compats_badge_state(status: str) -> None:
 
 
 def _download_and_extract_compats() -> int:
-    """GitHub에서 fiber-compats tarball을 스트리밍 다운로드하여 로컬 fixture 경로에 압축 해제합니다."""
+    """Download the fiber-compats tarball and extract it into the local compats dir."""
     COMPATS_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(COMPATS_TARBALL_URL, headers={"User-Agent": "Fiber-Control-Studio"})
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -51,7 +52,7 @@ def _download_and_extract_compats() -> int:
         for member in tar.getmembers():
             if not member.isfile() or "/" not in member.name:
                 continue
-            # 최상위 루트 폴더명(fiber-compats-main/) 제거 후 상대 경로 추출
+            # Strip the top-level archive dir (fiber-compats-main/)
             rel_path = member.name.split("/", 1)[1]
             if not rel_path or ".." in Path(rel_path).parts:
                 continue
@@ -65,40 +66,39 @@ def _download_and_extract_compats() -> int:
 
 
 async def ensure_console_compats(*, force: bool = False, silent: bool = False) -> bool:
-    """
-    로컬에 fiber-compats/console 픽스처가 없으면 백그라운드로 다운로드합니다.
-    - silent=True: 콘솔 초기 부팅 시 조용히 프리페치
-    - force=True: 헤더 배지 클릭 시 최신 픽스처 강제 재동기화
+    """Fetch fiber-compats console fixtures if missing.
+
+    silent: quiet prefetch on boot. force: re-sync on header tag click.
     """
     if not hasattr(state.pipeline, "compats_badge_text"):
-        _update_compats_badge_state("🟢 Compats: Ready" if has_console_fixtures() else "🟡 Compats: Missing")
+        _update_compats_badge_state("● Compats: Ready" if has_console_fixtures() else "○ Compats: Missing")
 
     if not force and has_console_fixtures():
-        _update_compats_badge_state("🟢 Compats: Ready")
+        _update_compats_badge_state("● Compats: Ready")
         return True
 
     if _sync_lock.locked():
         return False
 
     async with _sync_lock:
-        _update_compats_badge_state("⏳ Compats: Syncing...")
+        _update_compats_badge_state("~ Compats: Syncing")
         if not silent:
-            ui.notify(f"📥 Syncing fixtures from {COMPATS_REPO}...", type="info")
+            ui.notify(f"[SYNC] Syncing fixtures from {COMPATS_REPO}...", type="info")
         refs.push_cli(f"$ fetch https://github.com/{COMPATS_REPO} -> {COMPATS_LOCAL_DIR}")
 
         try:
             count = await asyncio.to_thread(_download_and_extract_compats)
-            _update_compats_badge_state(f"🟢 Compats: Ready ({count})")
-            refs.push_cli(f"  ✓ [fiber-compats] Synced {count} fixture/compat JSON files into {COMPATS_LOCAL_DIR}")
+            _update_compats_badge_state(f"● Compats: Ready ({count})")
+            refs.push_cli(f"  [OK] fiber-compats: synced {count} fixture/compat JSON files into {COMPATS_LOCAL_DIR}")
             if not silent:
-                ui.notify(f"✅ Synced {count} fixtures from fiber-compats", type="positive")
+                ui.notify(f"[OK] Synced {count} fixtures from fiber-compats", type="positive")
             return True
         except Exception as exc:
-            _update_compats_badge_state("🔴 Compats: Offline (Click to Retry)")
-            refs.push_cli(f"  ⚠️ [fiber-compats] Sync failed: {exc}")
+            _update_compats_badge_state("! Compats: Offline (click to retry)")
+            refs.push_cli(f"  [WARN] fiber-compats: sync failed: {exc}")
             diag.exception("Failed to sync fiber-compats", exc=exc)
             if not silent:
-                ui.notify(f"⚠️ Failed to download fiber-compats: {exc}", type="warning")
+                ui.notify(f"[WARN] Failed to download fiber-compats: {exc}", type="warning")
             return False
 
 
@@ -106,99 +106,120 @@ def act_manual_save_state() -> None:
     """Persist current console state to disk immediately."""
     ok = save_state_to_disk(force=True)
     if ok:
-        refs.push_cli(f"💾 Saved state to {STATE_FILE_PATH} (at {state.last_saved_at})")
+        refs.push_cli(f"[SAVE] Saved state to {STATE_FILE_PATH} (at {state.last_saved_at})")
         diag.info("state manually saved", path=str(STATE_FILE_PATH))
-        ui.notify(f"💾 Saved to {STATE_FILE_PATH.name}", type="positive")
+        ui.notify(f"[SAVE] Saved to {STATE_FILE_PATH.name}", type="positive")
     else:
         diag.error("Failed to save state", path=str(STATE_FILE_PATH))
-        ui.notify("Failed to save state.json", type="negative")
+        ui.notify("[ERR] Failed to save state.json", type="negative")
 
 
 def act_reload_state_from_disk() -> None:
     """Reload state.json after external editor modifications."""
     if load_or_init_state(STATE_FILE_PATH):
         state.finops.chart_dirty = True
-        refs.push_cli(f"🔄 Reloaded state from {STATE_FILE_PATH}")
+        refs.push_cli(f"[RELOAD] Reloaded state from {STATE_FILE_PATH}")
         diag.info("State reloaded from disk", path=str(STATE_FILE_PATH))
-        ui.notify(f"🔄 Reloaded {STATE_FILE_PATH.name} from disk", type="info")
+        ui.notify(f"[RELOAD] Reloaded {STATE_FILE_PATH.name} from disk", type="info")
     else:
-        ui.notify("Failed to reload state file", type="warning")
+        ui.notify("[WARN] Failed to reload state file", type="warning")
+
+
+def _open_hitl_settings() -> None:
+    """Open the HITL settings modal mounted by the console shell (refs only; no tab import)."""
+    dlg = getattr(refs, "hitl_settings_dialog", None)
+    if dlg is None:
+        ui.notify("[WARN] HITL settings are not mounted", type="warning")
+        return
+    dlg.open()
 
 
 def build_header() -> None:
-    """Render the 2-deck cockpit header (Row 1: Identity & Emergency / Row 2: Live KPIs & State/Diag Clusters)."""
+    """Two-row tmux-style statusline.
+
+    Row 1: identity + status tags | HITL settings + guide + emergency stream break.
+    Row 2: live KPIs | state file controls | diag controls.
+    """
     diag.install_browser_hooks()
     if not hasattr(state.pipeline, "compats_badge_text"):
-        _update_compats_badge_state("🟢 Compats: Ready" if has_console_fixtures() else "🟡 Compats: Sync")
+        _update_compats_badge_state("● Compats: Ready" if has_console_fixtures() else "○ Compats: Sync")
 
-    with ui.header().classes("bg-slate-900 border-b border-slate-800 px-5 py-2"):
-        with ui.column().classes("w-full gap-1.5"):
+    with ui.header().classes("tui-header px-4 py-1.5"):
+        with ui.column().classes("w-full gap-1"):
+            # Row 1: identity & emergency
             with ui.row().classes("w-full items-center justify-between no-wrap"):
-                with ui.row().classes("items-center gap-3"):
-                    ui.label("Runtime Harness").classes("text-base font-extrabold tracking-wider text-white")
-                    ui.badge().bind_text_from(state, "tunnel_badge_text").props(
-                        "color=slate-8 text-color=emerald-3"
-                    ).classes("text-xs px-2 py-0.5")
-                    ui.badge().bind_text_from(state.security, "ssh_badge_text").props(
-                        "color=slate-8 text-color=cyan-3"
-                    ).classes("text-xs px-2 py-0.5")
-
-                    # fiber-compats 상태 확인 및 1-Click 강제 최신화 배지
+                with ui.row().classes("items-center gap-2 no-wrap"):
+                    with ui.row().classes("items-center gap-0 no-wrap"):
+                        ui.label("▌").classes("tui-title tui-text-green")
+                        ui.label("Fiber Control Plane").classes("tui-title")
+                    # Tags are formatted at render time; legacy emoji state values are normalized by tui_tag.
+                    ui.label().bind_text_from(state, "tunnel_badge_text", backward=tui_tag).classes(
+                        "tui-tag tui-text-green"
+                    )
+                    ui.label().bind_text_from(state.security, "ssh_badge_text", backward=tui_tag).classes(
+                        "tui-tag tui-text-cyan"
+                    )
+                    # fiber-compats status; click to force re-sync
                     compats_badge = (
-                        ui.badge()
-                        .bind_text_from(state.pipeline, "compats_badge_text")
-                        .props("color=slate-8 text-color=amber-3")
-                        .classes("text-xs px-2 py-0.5 cursor-pointer")
+                        ui.label()
+                        .bind_text_from(state.pipeline, "compats_badge_text", backward=tui_tag)
+                        .classes("tui-tag tui-text-amber cursor-pointer")
                         .tooltip(f"Click to sync latest model fixtures from github.com/{COMPATS_REPO}")
                     )
                     compats_badge.on("click", lambda: asyncio.create_task(ensure_console_compats(force=True, silent=False)))
 
-                with ui.row().classes("items-center gap-2.5"):
+                with ui.row().classes("items-center gap-2 no-wrap"):
                     kit.button(
-                        "Setup Guide",
-                        open_guide_modal,
-                        color="cyan",
+                        "[HITL]",
+                        _open_hitl_settings,
+                        color="amber",
                         outline=True,
-                    ).classes("px-2.5").tooltip("IDE LLM Gateway & MCP Gateway configuration guide")
+                    ).tooltip("MCP pre-flight guards, Slack OOB approval & admin TOTP identity")
 
                     kit.button(
-                        "LLM STREAM BREAK (10s)",
+                        "[? GUIDE]",
+                        open_guide_modal,
+                        color="info",
+                        outline=True,
+                    ).tooltip("IDE LLM Gateway & MCP Gateway configuration guide")
+
+                    kit.button(
+                        "[! STREAM BREAK 10s]",
                         finops_manager.temporary_stream_kill,
-                        color="red",
+                        color="negative",
                     ).classes("font-bold px-3").tooltip(
                         "Sever active streams immediately (0 Fuel) and auto-restore previous balance after 10s"
                     )
 
-            with ui.row().classes(
-                "w-full items-center justify-between bg-slate-950 px-3 py-1 rounded border border-slate-800 no-wrap"
-            ):
-                with ui.row().classes("items-center gap-4"):
-                    ui.label().bind_text_from(state, "fuel_kpi_text").classes(
-                        "text-xs font-mono font-bold text-emerald-400"
+            # Row 2: telemetry strip
+            with ui.row().classes("tui-statusline w-full items-center justify-between no-wrap"):
+                with ui.row().classes("items-center gap-2 no-wrap"):
+                    ui.label().bind_text_from(state, "fuel_kpi_text", backward=strip_emoji).classes(
+                        "text-xs font-bold tui-text-green"
                     )
-                    ui.label("|").classes("text-xs text-slate-700")
-                    ui.label().bind_text_from(state, "saved_kpi_text").classes(
-                        "text-xs font-mono font-bold text-cyan-400"
+                    ui.label("│").classes("tui-sep")
+                    ui.label().bind_text_from(state, "saved_kpi_text", backward=strip_emoji).classes(
+                        "text-xs font-bold tui-text-cyan"
                     )
 
-                with ui.row().classes("items-center gap-2"):
+                with ui.row().classes("items-center gap-1.5 no-wrap"):
                     ui.label().bind_text_from(
                         state,
                         "last_saved_at",
-                        lambda ts: f"State ({STATE_FILE_PATH.name} @ {ts}):",
-                    ).classes("text-[11px] font-mono text-slate-400")
+                        backward=lambda ts: f"STATE {STATE_FILE_PATH.name} @ {ts}",
+                    ).classes("text-[11px] tui-text-muted")
                     kit.file_link(
                         STATE_FILE_PATH,
                         label="",
                         tooltip=f"Edit {STATE_FILE_PATH} in external editor",
                     )
-                    ui.button(icon="refresh", on_click=act_reload_state_from_disk).props(
-                        "flat dense round size=xs color=slate-4"
+                    kit.button("[RELOAD]", act_reload_state_from_disk, color="info", flat=True).classes(
+                        "px-1"
                     ).tooltip(f"Reload modified {STATE_FILE_PATH.name} from disk")
-                    kit.button("💾 Save", act_manual_save_state, color="emerald", outline=True).classes("px-2")
+                    kit.button("[SAVE]", act_manual_save_state, color="positive", outline=True).classes("px-2")
 
-                    ui.label("|").classes("text-xs text-slate-700 mx-0.5")
-                    ui.label(f"Diag ({DIAG_LOG_PATH.name}):").classes("text-[11px] font-mono text-slate-400")
+                    ui.label("│").classes("tui-sep mx-1")
+                    ui.label(f"DIAG {DIAG_LOG_PATH.name}").classes("text-[11px] tui-text-muted")
                     kit.file_link(
                         DIAG_LOG_PATH,
                         label="",
@@ -206,8 +227,8 @@ def build_header() -> None:
                         default_content="",
                     )
                     kit.button(
-                        "Snapshot",
+                        "[SNAP]",
                         lambda: diag.snapshot("header_btn"),
-                        color="cyan",
+                        color="info",
                         outline=True,
                     ).classes("px-2")

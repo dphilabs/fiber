@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 from pathlib import Path
 import socket
@@ -27,10 +28,10 @@ from fiber.studio.console.tab.mcp import McpGatewayTab, HitlModal, QrModal
 from fiber.studio.console.tab.guardrail import LLMGuardrailTab
 from fiber.studio.console.tab.metering import MeteringTab
 from fiber.studio.console.tab.vcr import VcrTab
-from fiber.studio.console.tab.hitl import HitlNSettingTab
+from fiber.studio.console.modal.hitl import HitlSettingsModal
 
-from fiber.studio.console.ui.guide import GuideModal
-from fiber.studio.console.ui.sim import HitlSimulatorModal
+from fiber.studio.console.modal.guide import GuideModal
+from fiber.studio.console.modal.sim import HitlSimulatorModal
 import fiber.studio.console.observer.plane as plane
 import fiber.studio.console.ui.diag as diag
 import fiber.studio.console.ui.header as header
@@ -128,28 +129,32 @@ def _ensure_local_daemon(env_file: Optional[str] = None) -> None:
         diag.exception("Failed to auto-spawn Fiber Gateway Daemon", exc=exc)
 
 def _build_drawer() -> None:
+    """Dual log terminals: CLI stdout (left) and control-plane event bus (right)."""
     with kit.dual_drawer() as (left_col, right_col):
         with left_col:
-            with ui.row().classes("w-full justify-between items-center mb-1"):
-                ui.label("CLI Output").classes("text-xs text-cyan-400 font-mono font-bold")
-                ui.button("Clear", on_click=lambda: refs.cli_log.clear() if refs.cli_log else None).props(
-                    "flat dense size=xs color=slate-4"
-                )
-            refs.cli_log = kit.log(max_lines=250, color="text-slate-200", height="h-64")
+            ui.label(" stdout // cli ").classes("tui-legend-title")
+            with ui.row().classes("tui-legend-actions"):
+                kit.button(
+                    "[CLEAR]",
+                    lambda: refs.cli_log.clear() if refs.cli_log else None,
+                    color="grey-6",
+                    flat=True,
+                ).classes("px-1")
+            refs.cli_log = kit.log(max_lines=250, color="tui-text-fg", height="h-64", bordered=False)
 
         with right_col:
-            with ui.row().classes("w-full justify-between items-center mb-1"):
-                ui.label("Control Plane Event (finops:* / mcp:* / sign:*)").classes(
-                    "text-xs text-amber-400 font-mono font-bold"
+            ui.label(" event_bus // finops:* mcp:* sign:* ").classes("tui-legend-title tui-text-amber")
+            with ui.row().classes("tui-legend-actions"):
+                ui.label().bind_text_from(state.pipeline, "pubsub_eps", backward=lambda n: f"[EVT {n}]").classes(
+                    "tui-tag tui-text-amber"
                 )
-                with ui.row().classes("items-center gap-2"):
-                    ui.badge().bind_text_from(state.pipeline, "pubsub_eps", lambda n: f"Events: {n}").props(
-                        "color=slate-8 text-color=amber-3"
-                    )
-                    ui.button("Clear", on_click=lambda: refs.pubsub_log.clear() if refs.pubsub_log else None).props(
-                        "flat dense size=xs color=slate-4"
-                    )
-            refs.pubsub_log = kit.log(max_lines=250, color="text-amber-200", height="h-64")
+                kit.button(
+                    "[CLEAR]",
+                    lambda: refs.pubsub_log.clear() if refs.pubsub_log else None,
+                    color="grey-6",
+                    flat=True,
+                ).classes("px-1")
+            refs.pubsub_log = kit.log(max_lines=250, color="tui-text-amber", height="h-64", bordered=False)
 
     refs.push_cli(
         f"Fiber-Console initialized (State file: {STATE_FILE_PATH}). Syncing local keys, accounts, and MCP topology..."
@@ -173,15 +178,32 @@ def _on_tick(tabs: Sequence[StudioTab]) -> None:
     except Exception as exc:
         diag.exception("100ms tick flush error", exc=exc)
 
-def build_tabs() -> list[StudioTab]:
-    return [McpGatewayTab(), LLMGuardrailTab(), HitlNSettingTab(), VcrTab(), MeteringTab()]
+def _build_reflexor_tabs() -> list[StudioTab]:
+    """Opt-in Reflexor tabs (`fiber console --reflexor`), imported lazily from tab/reflex.py.
+
+    The module only needs `build_tabs() -> list[StudioTab]`; until it exists the console runs without it.
+    """
+    try:
+        mod = importlib.import_module("fiber.studio.console.tab.reflex")
+    except ImportError as exc:
+        diag.info("Reflexor tabs not available", reason=str(exc))
+        return []
+    return list(mod.build_tabs())
+
+
+def build_tabs(*, reflexor: bool = False) -> list[StudioTab]:
+    tabs: list[StudioTab] = [McpGatewayTab(), LLMGuardrailTab(), VcrTab(), MeteringTab()]
+    if reflexor:
+        tabs += _build_reflexor_tabs()
+    return tabs
 
 def build_modals() -> list[ModalTemplate]:
-    return [HitlModal(), QrModal(), GuideModal(), HitlSimulatorModal()]
+    # HitlSettingsModal last: its tab reuses dialogs mounted above (refs.hitl_sim_dialog).
+    return [HitlModal(), QrModal(), GuideModal(), HitlSimulatorModal(), HitlSettingsModal()]
 
-def build_console_shell() -> ConsoleTemplate:
+def build_console_shell(*, reflexor: bool = False) -> ConsoleTemplate:
     shell = ConsoleTemplate(
-        tabs=build_tabs(),
+        tabs=build_tabs(reflexor=reflexor),
         modals=build_modals(),
         header_builder=header.build_header,
         drawer_builder=_build_drawer,
@@ -221,7 +243,12 @@ async def _on_shutdown() -> None:
 
     save_state_to_disk(force=False)
 
-def launch_console(port: int = 8357, auto_daemon: bool = True, env_file: Optional[str] = None) -> None:
+def launch_console(
+    port: int = 8357,
+    auto_daemon: bool = True,
+    env_file: Optional[str] = None,
+    reflexor: bool = False,
+) -> None:
     if os.environ.get("FIBER_CONSOLE_ACTIVE") == "1":
         return
 
@@ -240,7 +267,7 @@ def launch_console(port: int = 8357, auto_daemon: bool = True, env_file: Optiona
     loaded = load_or_init_state()
     diag.info("Console state initialized", path=str(STATE_FILE_PATH), loaded_existing=loaded)
 
-    build_console_shell()
+    build_console_shell(reflexor=reflexor)
     app.on_exception(lambda exc: diag.exception("Unhandled NiceGUI server exception", exc=exc))
     app.on_startup(lambda: _on_startup(url))
     app.on_shutdown(_on_shutdown)

@@ -1,17 +1,23 @@
 # fiber.node.worker.dev.verifier
+from __future__ import annotations
+
+import argparse
 import asyncio
 import json
+import os
+import sys
 from typing import Any, Dict, Optional
 
+from fiber.node.bound.verify.server import VerificationError, VerificationServer
 from xphi.arch.contract.protocol.binder import ToolError, tool
 from xphi.arch.contract.protocol.worker import AsyncWorkerProtocol
-from fiber.node.bound.verify.server import VerificationError, VerificationServer
 
 class VerifierWorker(AsyncWorkerProtocol):
-    """상주형 VerificationServer를 MCP 프로토콜로 노출하는 데몬 워커"""
+    """Daemon worker exposing a resident VerificationServer over MCP."""
 
-    def __init__(self, workspace_root: str = ".", rules_path: Optional[str] = None):
-        self.server = VerificationServer(workspace_root=workspace_root, rules_path=rules_path)
+    def __init__(self, workspace_root: str = ".", rules_path: Optional[str] = None) -> None:
+        effective_rules = (rules_path or os.environ.get("FIBER_VERIFY_RULES_PATH") or "").strip() or None
+        self.server = VerificationServer(workspace_root=workspace_root, rules_path=effective_rules)
         super().__init__(agent_name="worker.verifier")
 
     async def close(self) -> None:
@@ -19,7 +25,7 @@ class VerifierWorker(AsyncWorkerProtocol):
 
     @tool
     async def list_rules(self) -> Dict[str, Any]:
-        """현재 검증 서버에 로드된 페이로드 규약, HTTP 프로브, 로컬 바이너리 프로브 목록을 조회합니다."""
+        """List loaded payload rules, HTTP probes, and local binary probes."""
         return self.server.list_rules()
 
     @tool
@@ -29,22 +35,26 @@ class VerifierWorker(AsyncWorkerProtocol):
         payload_json: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """JSON 데이터가 지정된 rule_id의 스키마 및 선택적 시맨틱 규약을 충족하는지 검증합니다.
+        """Validate a JSON payload against the schema and semantic rules of rule_id.
 
         Args:
-            rule_id: rules.json의 payload_rules에 정의된 규칙 ID
-            payload_json: 검증할 대상 JSON 문자열
-            context: 시맨틱 검증기에 전달할 선택적 비교 맥락 (예: {"query": "...", "scope_prefix": "auth"})
+            rule_id: Rule ID defined under payload_rules in rules.json.
+            payload_json: Target JSON string to validate.
+            context: Optional semantic verification context (e.g., {"query": "...", "scope_prefix": "auth"}).
         """
-        try:
-            data = json.loads(payload_json)
-        except json.JSONDecodeError as e:
-            raise ToolError(f"Invalid JSON input: {e}")
+        clean_rule = rule_id.strip()
+        if not clean_rule:
+            raise ToolError("'rule_id' must not be empty.")
 
         try:
-            return await self.server.verify_payload(rule_id=rule_id, payload=data, context=context)
+            data = json.loads(payload_json)
+        except (TypeError, json.JSONDecodeError) as e:
+            raise ToolError(f"Invalid JSON input: {e}") from None
+
+        try:
+            return await self.server.verify_payload(rule_id=clean_rule, payload=data, context=context)
         except VerificationError as e:
-            raise ToolError(str(e))
+            raise ToolError(str(e)) from None
 
     @tool
     async def verify_http(
@@ -54,23 +64,27 @@ class VerifierWorker(AsyncWorkerProtocol):
         body_override: Optional[Dict[str, Any]] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """로컬 DPoP 게이트웨이 또는 외부 HTTP 엔드포인트를 호출하고 응답 상태와 스키마를 검증합니다.
+        """Probe a local DPoP gateway or HTTP endpoint and validate its response status and schema.
 
         Args:
-            probe_id: rules.json의 http_probes에 정의된 프로브 ID (예: fiber.gateway.tools_list)
-            params: URL 경로 템플릿 치환 파라미터 (예: {"worker": "worker.duck"})
-            body_override: 기본 요청 본문을 덮어쓸 JSON 객체 (선택)
-            context: 시맨틱 검증기에 전달할 추가 맥락 (선택)
+            probe_id: Probe ID defined under http_probes in rules.json (e.g., 'fiber.gateway.tools_list').
+            params: URL path template parameters (e.g., {"worker": "worker.duck"}).
+            body_override: Optional JSON object overriding the default request body.
+            context: Optional semantic verification context.
         """
+        clean_probe = probe_id.strip()
+        if not clean_probe:
+            raise ToolError("'probe_id' must not be empty.")
+
         try:
             return await self.server.verify_http(
-                probe_id=probe_id,
+                probe_id=clean_probe,
                 params=params,
                 body_override=body_override,
                 context=context,
             )
         except VerificationError as e:
-            raise ToolError(str(e))
+            raise ToolError(str(e)) from None
 
     @tool
     async def verify_binary(
@@ -80,27 +94,31 @@ class VerifierWorker(AsyncWorkerProtocol):
         rel_cwd: str = ".",
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """사전 등록된 로컬 CLI 바이너리 프로파일(git, rg 등)을 실행하고 종료 코드와 출력을 검증합니다.
+        """Run a pre-registered CLI binary profile (e.g., git, rg) and validate its exit code and output.
 
         Args:
-            probe_id: rules.json의 binary_probes에 정의된 프로브 ID (예: git.worktree_clean)
-            params: 인자 템플릿 치환 파라미터 (예: {"target_path": "src/"})
-            rel_cwd: 워크스페이스 기준 실행 하위 디렉토리
-            context: 시맨틱 검증기에 전달할 추가 맥락 (선택)
+            probe_id: Probe ID defined under binary_probes in rules.json (e.g., 'git.worktree_clean').
+            params: Argument template parameters (e.g., {"target_path": "src/"}).
+            rel_cwd: Working directory relative to workspace root.
+            context: Optional semantic verification context.
         """
+        clean_probe = probe_id.strip()
+        if not clean_probe:
+            raise ToolError("'probe_id' must not be empty.")
+
         try:
             return await self.server.verify_binary(
-                probe_id=probe_id,
+                probe_id=clean_probe,
                 params=params,
                 rel_cwd=rel_cwd,
                 context=context,
             )
         except VerificationError as e:
-            raise ToolError(str(e))
+            raise ToolError(str(e)) from None
 
 
-async def _serve() -> None:
-    worker = VerifierWorker()
+async def _serve(workspace_root: str = ".", rules_path: Optional[str] = None) -> None:
+    worker = VerifierWorker(workspace_root=workspace_root, rules_path=rules_path)
     try:
         await worker.serve_forever_async()
     finally:
@@ -108,10 +126,15 @@ async def _serve() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Fiber Resident Verification MCP Worker")
+    parser.add_argument("--root", default=".", help="Workspace root directory for binary probes")
+    parser.add_argument("--rules", default="", help="Optional path to custom rules.json")
+    args = parser.parse_args()
+
     try:
-        asyncio.run(_serve())
+        asyncio.run(_serve(workspace_root=args.root, rules_path=args.rules or None))
     except KeyboardInterrupt:
-        pass
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

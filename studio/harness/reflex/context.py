@@ -5,7 +5,10 @@ import ast
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 import hashlib
+import json
+import os
 from pathlib import Path
+from typing import Any
 
 from fiber.studio.runbook.unit.indexer import UnitsIndexer
 from fiber.studio.runbook.unit.loader import UnitLoaderError, UnitsLoader
@@ -14,6 +17,7 @@ from xphi.arch.contract.registry.flow import FlowRegistry
 _REPO_PKG_PREFIX = "reflexor."
 _REPO_TOP_PACKAGES = ("core", "adapters")
 _FATAL_NOTE_PREFIXES = ("[UNRESOLVED]", "[MISSING-FILE]", "[READ-ERR]", "[SYNTAX-ERR]")
+ENV_DIR = "REFLEXOR_DIR"
 
 
 class ContextError(RuntimeError):
@@ -212,3 +216,95 @@ def collect_flow_markdown(root: Path, flow_name: str, *, live: bool = False) -> 
     ctx = FlowContextCollector(indexer, live=live).collect(flow_name)
     has_fatal = any(n.startswith(_FATAL_NOTE_PREFIXES) for n in ctx.notes)
     return (not has_fatal), render_markdown(ctx), ctx.notes
+
+
+# --- read-only catalog (console runbook tabs) -------------------------------------
+
+
+@dataclass
+class Scenario:
+    flow: str
+    seeds: dict[str, dict[str, Any]]
+    mock_outputs: dict[str, Any]
+    file: str
+
+
+class FlowCatalog:
+    """Flows/units from the units index; seed + mock_outputs scanned from flow/**/*.json. Never writes back."""
+
+    def __init__(self, root: Path | None, *, live: bool = False) -> None:
+        self.root = root.resolve() if root is not None else None
+        self.idx: dict[str, Any] = {}
+        self.scenarios: dict[str, Scenario] = {}
+        self.notes: list[str] = []
+        if self.root is not None:
+            self.reload(live=live)
+
+    @classmethod
+    def from_env(cls) -> FlowCatalog:
+        raw = os.environ.get(ENV_DIR, "").strip()
+        return cls(Path(raw).expanduser() if raw else None)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.idx.get("flows"))
+
+    def reload(self, *, live: bool = False) -> None:
+        self.idx, self.scenarios, self.notes = {}, {}, []
+        if self.root is None:
+            return
+        if not (self.root / "flow").is_dir():
+            self.notes.append("[MISSING-FILE] 'flow/'")
+            return
+        try:
+            self.idx = UnitsIndexer(UnitsLoader(local_repo_dir=self.root)).load_catalog_index(force_refresh=live)
+        except (UnitLoaderError, OSError, ValueError) as exc:
+            self.notes.append(f"[READ-ERR] index: {exc}")
+        self._scan_scenarios()
+
+    def _scan_scenarios(self) -> None:
+        """Definition files (units/flows) belong to the index; only seed/mock_outputs files are read here."""
+        assert self.root is not None
+        for path in sorted((self.root / "flow").rglob("*.json")):
+            rel = path.relative_to(self.root).as_posix()
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                self.notes.append(f"[READ-ERR] '{rel}': {exc}")
+                continue
+            if not isinstance(data, dict) or "units" in data or "flows" in data:
+                continue
+            if "seed" in data or "mock_outputs" in data:
+                entries = {str(data.get("flow") or path.stem): data}
+            else:
+                entries = {k: v for k, v in data.items() if isinstance(v, dict) and ("seed" in v or "mock_outputs" in v)}
+            for flow, spec in entries.items():
+                self.scenarios[flow] = Scenario(flow, _seeds(spec.get("seed")), dict(spec.get("mock_outputs") or {}), rel)
+
+    def flows(self) -> list[tuple[str, str, str]]:
+        """(name, spec, desc), same shape as FlowContext.flows."""
+        meta = self.idx.get("flows", {})
+        return [(n, meta[n].get("flow", ""), meta[n].get("desc", "")) for n in sorted(meta)]
+
+    def flow(self, name: str) -> tuple[str, str, str] | None:
+        m = self.idx.get("flows", {}).get(name)
+        return (name, m.get("flow", ""), m.get("desc", "")) if m else None
+
+    def samples(self, flow: str) -> dict[str, dict[str, Any]]:
+        sc = self.scenarios.get(flow)
+        return dict(sc.seeds) if sc else {}
+
+    def mock_outputs(self, flow: str) -> dict[str, Any]:
+        sc = self.scenarios.get(flow)
+        return dict(sc.mock_outputs) if sc else {}
+
+
+def _seeds(seed: Any) -> dict[str, dict[str, Any]]:
+    """list -> seed#n; dict of dicts -> named samples; plain dict -> one sample named 'seed'."""
+    if isinstance(seed, list):
+        return {f"seed#{i + 1}": s for i, s in enumerate(seed) if isinstance(s, dict)}
+    if isinstance(seed, dict):
+        if seed and all(isinstance(v, dict) for v in seed.values()):
+            return dict(seed)
+        return {"seed": seed}
+    return {}

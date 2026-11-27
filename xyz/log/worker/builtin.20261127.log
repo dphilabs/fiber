@@ -1,0 +1,252 @@
+(self) wittgena@wittgenas-MacBook-Pro self % fiber-dev e2e worker.builtin   
+ LOG | SYSTEM | INFO  |  console.cli.main: [Fiber] Igniting E2E Test Suite(s): worker.builtin
+[Registry] DAEMON Registered: rpc_worker -> RpcWorkerDaemon
+ LOG | SYSTEM | INFO  |  console.cli.main: 
+============================================================
+Launching Suite: fiber.studio.cli.e2e.worker.builtin
+============================================================
+[Reactor] macOS detected. Native CPU Affinity pinning is bypassed (OS constraint).
+[Reactor] UVLoop (epoll) Policy injected.
+[Reactor] Ignition... Loop: EventLoopPolicy | CPU: Core Virtual-86062
+ LOG | SYSTEM | INFO  |  e2e.pipeline: 
+=== Starting Suite: Built-in Workers (Fixture-Driven 7-Target) E2E Suite ===
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E Setup] Seed loaded from /usr/local/self/reflexor/fixtures/mcp/builtin -> /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1
+ LOG | KERNEL | INFO  |  anchor.store: [AnchorStore] Lock held by another node. Operating as PROPOSER (Read-Only/Proposer).
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [BasePipeline] Live Master Node detected (Operating as PROPOSER). Delegating RPC & Real AnchorStore transitions directly to live node.
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: Init Secure MCP Server...
+/Users/wittgena/.pyenv/versions/self/lib/python3.13/site-packages/pydantic_settings/sources/utils.py:51: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(  # noqa: B028  (called from many sources at differing depths, so no stacklevel is correct)
+ LOG | NETWORK | INFO  |  arch.contract.server: [MCP Adapter] Safely registered 0 FastAPI routes via Whitelist.
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [BasePipeline] REST Edge Bootstrapped.
+ LOG | KERNEL | INFO  |  adapter.pta: [Crypto] Node identity loaded. PubKey: b77bda9b...
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.duck.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.verifier.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.mailbox.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.media.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.reader.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.pin.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [E2E-Isolated] Mounted connector [e2e.git.ee7bd8] (Transport: STDIO, Mode: MULTIPLEX)
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: Starting DPHI REST Edge API Payload (Stateless Mode)...
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: Initializing Origin Registry and verifying cryptographic state...
+ LOG | SYSTEM | INFO  |  contract.origin: Loading and verifying Origin Config from: /usr/local/self/anchor/origin.json
+ LOG | SYSTEM | INFO  |  contract.origin: Origin Config cryptographically verified. (Network: xphi.origin, Signers: 3)
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: Origin Registry integrated successfully. Active signers: 3
+ LOG | SYSTEM | INFO  |  fiber.gateway.security: Provisioning Cryptographic Secret Auditor (Manager: local)...
+ LOG | SYSTEM | INFO  |  fiber.gateway.security: Loaded persistent cipher key from local disk (/usr/local/self/anchor/sign/local_cipher.key).
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: SecretAuditor mounted successfully to app.state.
+ LOG | SYSTEM | INFO  |  interceptor.registry: No external interceptor config found. Using default pipeline configuration.
+ LOG | SYSTEM | INFO  |  vcr.injector: VCRInjector: Applying VCRAdapterProxy to AdapterRegistry (record mode)
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: VCRAdapterProxy mounted (Default Mode: LIVE | Fixture Root: /usr/local/self/anchor/compats/suites/base)
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: WasmBroker initialized (timeout: 5.0s).
+ LOG | SYSTEM | INFO  |  parser.otlp: [Parser] Compiled StrictOtlpExtractionEngine. Enforcing keys: ['resourceLogs']
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: StrictOtlpExtractionEngine initialized.
+ LOG | SYSTEM | INFO  |  serv.gateway: [TransitionBridge] Mounted. Pure MCP-to-RPC translation & Zero-Latency Gateway Active.
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: REST Edge API Payload is fully READY.
+ LOG | SYSTEM | INFO  |  xphi.node.space.tunnel.subs: DistributedPubSub started listening on tunnel channel: audit_channel
+ LOG | SYSTEM | INFO  |  e2e.pipeline: [BasePipeline] Igniting 7 Connectors...
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.media.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.media.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.daily.media --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.mailbox.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.mailbox.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.daily.mailbox --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.reader.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.reader.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.reader --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1 --db /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_out_vwzfgeb4/dbs/reader.db
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.git.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.git.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.dev.git.history --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.pin.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.pin.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.memory.pin --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1 --db /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_out_vwzfgeb4/dbs/pin.db
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.verifier.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.verifier.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.dev.verifier --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector:e2e.duck.ee7bd8] Listening for Intents on DPHI Bus (Mode: MULTIPLEX, Transport: STDIO)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.duck.ee7bd8] Booting stdio sandbox: /Users/wittgena/.pyenv/versions/self/bin/python -m fiber.node.worker.duck --root /private/var/folders/83/h_zklvgd6zn9ngl1gfm77pc40000gn/T/fiber_e2e_ws_jt7qjvz1
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.media.ee7bd8] Sandbox running (PID: 86111)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.mailbox.ee7bd8] Sandbox running (PID: 86112)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.reader.ee7bd8] Sandbox running (PID: 86113)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.git.ee7bd8] Sandbox running (PID: 86114)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.pin.ee7bd8] Sandbox running (PID: 86115)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.verifier.ee7bd8] Sandbox running (PID: 86116)
+ LOG | SYSTEM | INFO  |  network.transport: [Transport:shared-e2e.duck.ee7bd8] Sandbox running (PID: 86117)
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Async Agent 'worker.media' Ignited. Listening on async stdin...
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Async Agent 'worker.git.history' Ignited. Listening on async stdin...
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Async Agent 'worker.local.mailbox' Ignited. Listening on async stdin...
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Async Agent 'worker.duck' Ignited. Listening on async stdin...
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Async Agent 'worker.reader' Ignited. Listening on async stdin...
+ LOG | SYSTEM | WARN  |  network.transport: [Sandbox:RAW] LOG | KERNEL | INFO  |  adapter.pta: [Crypto] Node identity loaded. PubKey: b77bda9b...
+SUMMARY🔥| SYSTEM | INFO  |  [G:1.0] [Acc:0.2] network.transport: [Sandbox] Async Agent 'worker.memory.pin' Ignited. Listening on async stdin...
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.9] [Acc:-1.3] network.transport: [Sandbox] Async Agent 'worker.verifier' Ignited. Listening on async stdin...
+ LOG | SYSTEM | INFO  |  e2e.pipeline: 
+[PHASE 1/9] Phase 1: 7-Worker Boot, Schema Snapshot & Unified Route
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Start] Ingress request received
+ LOG | SYSTEM | INFO  |  serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/list
+SUMMARY🔥| SYSTEM | INFO  |  [G:1.0] [Acc:2.4] serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.9] [Acc:2.5] serv.gateway: [Bridge:Start] Ingress request received
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.9] [Acc:2.6] serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [discovery.unified_describe_csv          ] -> OK
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   └─ Status: PASSED
+ LOG | SYSTEM | INFO  |  e2e.pipeline: 
+[PHASE 2/9] Phase 2: [Duck] Fixture Cases & 10x Async Concurrency
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [duck.ellipsis_literal_filter            ] -> OK
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.03) Den: 14.00)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.1] [Acc:3.0] serv.gateway: [Bridge:Start] Ingress request received
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [duck.describe_file_clause_a2            ] -> OK
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.03) Den: 16.00)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [duck.block_copy_egress                  ] -> TOOL_ERROR_200
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [duck.block_attach_db                    ] -> TOOL_ERROR_200
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [duck.block_outside_path                 ] -> TOOL_ERROR_200
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.03) Den: 22.50)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.75) Den: 26.00)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.90) Den: 27.00)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+ LOG | SYSTEM | INFO  |  network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+SUMMARY🔥| SYSTEM | INFO  |  [G:1.0] [Acc:1.5] network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 4.15) Den: 30.00)
+[Telemetry] System Stabilized on 'SYSTEM:serv.gateway'
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.01) Den: 31.50)
+[Telemetry] System Stabilized on 'SYSTEM:e2e.pipeline'
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   └─ Status: PASSED
+ LOG | SYSTEM | INFO  |  e2e.pipeline: 
+[PHASE 3/9] Phase 3: [Verifier] Fixture Cases
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.69) Den: 35.00)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.92) Den: 36.00)
+[Telemetry] System Stabilized on 'SYSTEM:e2e.pipeline'
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [verifier.list_rules_schema              ] -> OK
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.98) Den: 36.50)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 4.02) Den: 37.50)
+[Telemetry] System Stabilized on 'SYSTEM:e2e.pipeline'
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [verifier.reject_malformed_json          ] -> TOOL_ERROR_200
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   └─ Status: PASSED
+ LOG | SYSTEM | INFO  |  e2e.pipeline: 
+[PHASE 4/9] Phase 4: [Mailbox] Fixture Cases & Symlink Escape Audit
+[Telemetry] Burst Alert Triggered on 'SYSTEM:serv.gateway' (Acc: 3.45) Den: 38.00)
+[Telemetry] System Stabilized on 'SYSTEM:network.transport'
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [mailbox.search_eml_with_attachment      ] -> OK
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [mailbox.read_mbox_by_index              ] -> OK
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [mailbox.block_symlink_escape            ] -> TOOL_ERROR_200
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [mailbox.reject_offset_timestamp_mb5     ] -> TOOL_ERROR_200
+ LOG | SYSTEM | INFO  |  e2e.pipeline:   ├─ [mailbox.reject_mbox_without_index_mb7   ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:1.0] [Acc:1.1] e2e.pipeline:   └─ Status: PASSED
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.9] [Acc:1.2] e2e.pipeline: 
+[PHASE 5/9] Phase 5: [Media] Fixture Cases (FFprobe/FFmpeg)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.9] [Acc:0.8] e2e.pipeline:   ├─ [media.probe_wav                         ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.8] [Acc:-0.0] e2e.pipeline:   ├─ [media.trim_wav                          ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.8] [Acc:-0.3] e2e.pipeline:   ├─ [media.convert_wav_to_flac               ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.8] [Acc:-0.2] e2e.pipeline:   ├─ [media.guard_duplicate_overwrite         ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.7] [Acc:-0.2] e2e.pipeline:   ├─ [media.cleanup_partial_on_ffmpeg_fail_md2] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.7] [Acc:-0.4] e2e.pipeline:   ├─ [media.retry_after_failed_encode_md2     ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.7] [Acc:-0.2] e2e.pipeline: 
+[PHASE 6/9] Phase 6: [Reader] Partial-Sync Guard (#6) & Scoped Retrieval
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.6] [Acc:-0.2] e2e.pipeline:   ├─ [reader.step1_partial_subpath_sync       ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.6] [Acc:-0.2] e2e.pipeline:   ├─ [reader.step2_full_outline_after_partial ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.6] [Acc:-0.2] e2e.pipeline:   ├─ [reader.scoped_token_retrieval           ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.6] [Acc:-0.2] e2e.pipeline:   ├─ [reader.compare_markdown_table_to_csv    ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.6] [Acc:0.1] e2e.pipeline: 
+[PHASE 7/9] Phase 7: [Pin] Full Lifecycle Fixture Cases (#12)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:0.1] e2e.pipeline:   ├─ [pin.step1_set_pin                       ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:-0.2] e2e.pipeline:   ├─ [pin.step2_list_by_tag_and_prefix        ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:-0.2] e2e.pipeline:   ├─ [pin.step3_list_by_fts                   ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:-0.2] e2e.pipeline:   ├─ [pin.step4_resolve_pin                   ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:-0.3] e2e.pipeline:   ├─ [pin.step5_scope_with_locked_base_rev    ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:-0.4] e2e.pipeline:   ├─ [pin.step6_drop_pin                      ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.5] [Acc:-0.2] e2e.pipeline: 
+[PHASE 8/9] Phase 8: [GitHistory] Commit/Blame/Show Fixture Cases
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [git.pickaxe_commit_search               ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [git.blame_lines                         ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [git.show_head_patch                     ] -> OK
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.3] e2e.pipeline: 
+[PHASE 9/9] Phase 9: [Cross-Worker] 11-Case Error Contract Audit (#8)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [error_contracts.duck_bad_sql            ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [error_contracts.mailbox_bad_date        ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [error_contracts.mailbox_bad_id          ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.4] e2e.pipeline:   ├─ [error_contracts.media_bad_time          ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.3] e2e.pipeline:   ├─ [error_contracts.media_bad_fmt           ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.1] e2e.pipeline:   ├─ [error_contracts.reader_escape           ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.2] e2e.pipeline:   ├─ [error_contracts.reader_empty_q          ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [error_contracts.pin_empty_key           ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.4] [Acc:-0.5] e2e.pipeline:   ├─ [error_contracts.pin_empty_addrs         ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:-0.5] e2e.pipeline:   ├─ [error_contracts.git_bad_rev             ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:-0.2] e2e.pipeline:   ├─ [error_contracts.git_bad_range           ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:-0.1] e2e.pipeline:   ├─ [error_contracts.verifier_empty_probe    ] -> TOOL_ERROR_200
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:0.1] e2e.pipeline: 
+[BasePipeline] Teardown sequence initiated...
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.3] network.transport: [Transport:shared-e2e.duck.ee7bd8] Terminating sandbox (PID: 86117)
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.4] network.transport: [Transport:shared-e2e.verifier.ee7bd8] Terminating sandbox (PID: 86116)
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.4] network.transport: [Transport:shared-e2e.mailbox.ee7bd8] Terminating sandbox (PID: 86112)
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.5] network.transport: [Transport:shared-e2e.media.ee7bd8] Terminating sandbox (PID: 86111)
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.6] network.transport: [Transport:shared-e2e.reader.ee7bd8] Terminating sandbox (PID: 86113)
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.7] network.transport: [Transport:shared-e2e.pin.ee7bd8] Terminating sandbox (PID: 86115)
+ LOG | SYSTEM | INFO  |  mcp.connector: [Connector] Shutdown signal received.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:1.9] network.transport: [Transport:shared-e2e.git.ee7bd8] Terminating sandbox (PID: 86114)
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: Shutting down receptor.rest payload safely...
+ LOG | SYSTEM | INFO  |  vcr.injector: VCRInjector: Teardown complete. Restored 9 original adapters.
+ LOG | SYSTEM | INFO  |  fiber.gateway.payload: API Payload Teardown complete. Goodbye.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:-0.4] e2e.pipeline: [BasePipeline] Teardown complete.
+
+==========================================================================================
+[BUILT-IN WORKERS (FIXTURE-DRIVEN 7-TARGET) E2E VALIDATION REPORT]
+==========================================================================================
+[O] 01. Phase 1: 7-Worker Boot, Schema Snapshot & Unified Route                  | PASSED
+[O] 02. Phase 2: [Duck] Fixture Cases & 10x Async Concurrency                    | PASSED
+[O] 03. Phase 3: [Verifier] Fixture Cases                                        | PASSED
+[O] 04. Phase 4: [Mailbox] Fixture Cases & Symlink Escape Audit                  | PASSED
+[O] 05. Phase 5: [Media] Fixture Cases (FFprobe/FFmpeg)                          | PASSED
+[O] 06. Phase 6: [Reader] Partial-Sync Guard (#6) & Scoped Retrieval             | PASSED
+[O] 07. Phase 7: [Pin] Full Lifecycle Fixture Cases (#12)                        | PASSED
+[O] 08. Phase 8: [GitHistory] Commit/Blame/Show Fixture Cases                    | PASSED
+[O] 09. Phase 9: [Cross-Worker] 11-Case Error Contract Audit (#8)                | PASSED
+------------------------------------------------------------------------------------------
+ALL PHASES PASSED.
+==========================================================================================
+[Reactor] Lifecycle terminated cleanly.
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.1] [Acc:2.6] serv.gateway: [Bridge:PubSub:Resolved] Execution completed successfully (x45)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.1] [Acc:2.0] serv.gateway: [Bridge:Start] Ingress request received (x45)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.1] [Acc:2.4] serv.gateway: [Bridge:Intent] EXECUTE Intent published to queue (x39)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.1] [Acc:3.5] serv.gateway: [serv.gateway] Bursting logs suppressed... (x34)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:0.6] network.transport: [Sandbox] Incoming RPC payload recognized. Action/Method: tools/call (x42)
+SUMMARY🔥| SYSTEM | INFO  |  [G:0.3] [Acc:0.0] e2e.pipeline:   └─ Status: PASSED (x6)

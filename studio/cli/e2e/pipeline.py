@@ -14,7 +14,7 @@ from fiber.studio.cli.e2e.config import (
     PipelineRunner,
     TestResult,
 )
-from fiber.gateway.bridge.action.connect import resolve_connector_spec
+from fiber.node.mcp.mapper.spec import resolve_connector_spec
 from fiber.gateway.payload import Config, create_app
 from fiber.node.mcp.connector import MCPServerConnector
 

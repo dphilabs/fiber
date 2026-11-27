@@ -1,22 +1,26 @@
 # fiber.node.mcp.mapper.spec
+from __future__ import annotations
+
 import os
-import sys
-import ast
 import shlex
-from importlib.metadata import entry_points
-import importlib.util
-from pathlib import Path
-from urllib.parse import urlparse
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, List, Any, Mapping
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+from urllib.parse import urlparse
 
 import orjson
 import typer
-from fiber.node.bound.guard.preflight import PreflightGuard
-from fiber.node.mcp.mapper.config import McpConfigMapper, MappedMcpEntry
 
-from xphi.node.space.bind.resolver import resolve_path
 from fiber.gateway.bridge.emitter import get_emitter
+from fiber.node.bound.guard.preflight import PreflightGuard
+from fiber.node.mcp.mapper.builtin import (
+    BUILTIN_ALIASES,
+    DEFAULT_WORKER_PACKAGE,
+    discover_builtin_workers,
+    is_explicit_internal_target,
+)
+from fiber.node.mcp.mapper.config import MappedMcpEntry, McpConfigMapper
+from xphi.node.space.bind.resolver import resolve_path
 
 log = get_emitter("mcp.mapper.spec")
 
@@ -25,8 +29,6 @@ STANDALONE_ATTACHED_TUNNEL_KEY = "mcp:registry:standalone_attached"
 
 ANCHOR_ROOT = resolve_path("anchor")
 ANCHOR_MCP_PATH = ANCHOR_ROOT / "mcp.json"
-DEFAULT_WORKER_PACKAGE = "fiber.node.worker"
-
 
 @dataclass(frozen=True)
 class ResolvedTarget:
@@ -48,51 +50,8 @@ class ResolvedTarget:
         return dict(self.headers)
 
 
-BUILTIN_ALIASES: Dict[str, str] = {
-    "deployer": "worker.deployer",
-    "finops": "worker.finops",
-    "reaper": "worker.reaper",
-}
-
-_BUILTIN_CACHE: Dict[Tuple[str, ...], Dict[str, Tuple[str, str, str]]] = {}
-
-
-def _freeze_str_map(raw: Optional[Mapping[str, Any]]) -> Tuple[Tuple[str, str], ...]:
-    if not raw or not isinstance(raw, Mapping):
-        return ()
-    return tuple(
-        sorted(
-            (str(k).strip(), str(v))
-            for k, v in raw.items()
-            if str(k).strip() and v is not None
-        )
-    )
-
-
-def _resolve_worker_packages(base_package: Optional[str] = None) -> Tuple[str, ...]:
-    raw = (
-        base_package
-        if base_package and base_package != DEFAULT_WORKER_PACKAGE
-        else os.environ.get("MCP_WORKER_PACKAGE", "")
-    )
-    pkgs: List[str] = [
-        p.strip() for chunk in raw.replace(":", ",").split(",") if (p := chunk.strip())
-    ]
-    pkgs.append(DEFAULT_WORKER_PACKAGE)
-
-    if not base_package or base_package == DEFAULT_WORKER_PACKAGE:
-        try:
-            for ep in entry_points(group="fiber.worker_packages"):
-                if ep.value and ep.value.strip():
-                    pkgs.append(ep.value.strip())
-        except Exception:
-            pass
-
-    return tuple(dict.fromkeys(pkgs))
-
-
-def _parse_fiber_tags(raw: Any) -> Tuple[str, ...]:
-    """FIBER_TAGS="", "[]", ["STANDALONE"], "a,b" 등 모든 입력 포맷을 대문자 튜플로 정규화합니다."""
+def parse_fiber_tags(raw: Any) -> Tuple[str, ...]:
+    """Normalize FIBER_TAGS inputs ('', '[]', ['STANDALONE'], 'a,b') into uppercase tuples."""
     if not raw:
         return ()
     if isinstance(raw, (list, tuple, set)):
@@ -115,114 +74,16 @@ def _parse_fiber_tags(raw: Any) -> Tuple[str, ...]:
     return tuple(dict.fromkeys(str(x).strip().upper() for x in items if str(x).strip()))
 
 
-def _extract_base_name(b: ast.expr) -> str:
-    if isinstance(b, ast.Name):
-        return b.id
-    if isinstance(b, ast.Attribute):
-        return b.attr
-    if isinstance(b, ast.Subscript):
-        return _extract_base_name(b.value)
-    return ""
-
-
-def discover_builtin_workers(
-    base_package: str = DEFAULT_WORKER_PACKAGE,
-) -> Dict[str, Tuple[str, str, str]]:
-    packages = _resolve_worker_packages(base_package)
-    if packages in _BUILTIN_CACHE:
-        return _BUILTIN_CACHE[packages]
-
-    discovered: Dict[str, Tuple[str, str, str]] = {}
-    target_bases = {"WorkerProtocol", "AsyncWorkerProtocol", "BaseWorker", "McpWorker"}
-
-    for pkg in packages:
-        try:
-            spec = importlib.util.find_spec(pkg)
-            if not spec or not spec.submodule_search_locations:
-                continue
-            search_roots = [Path(loc).resolve() for loc in spec.submodule_search_locations]
-        except Exception:
-            continue
-
-        for root_dir in search_roots:
-            if not root_dir.is_dir():
-                continue
-            for py_file in sorted(root_dir.rglob("*.py")):
-                if py_file.name.startswith("_") or "e2e" in py_file.parts or "tests" in py_file.parts:
-                    continue
-                try:
-                    source_text = py_file.read_text(encoding="utf-8")
-                    tree = ast.parse(source_text)
-                except Exception:
-                    continue
-
-                rel_parts = py_file.relative_to(root_dir).with_suffix("").parts
-                rel_key = ".".join(rel_parts)
-                module_path = f"{pkg}.{rel_key}"
-                leaf = rel_parts[-1]
-
-                matched_mode: Optional[str] = None
-                for node in tree.body:
-                    if not isinstance(node, ast.ClassDef):
-                        continue
-                    bases = {_extract_base_name(b) for b in node.bases}
-                    matched = bases & target_bases
-                    if matched or any("Worker" in b for b in bases):
-                        matched_mode = "multiplex" if "AsyncWorkerProtocol" in matched else "linear"
-                        break
-
-                if matched_mode is None and (
-                    rel_key in BUILTIN_ALIASES or leaf in BUILTIN_ALIASES or "__main__" in source_text
-                ):
-                    matched_mode = "multiplex" if "Async" in source_text else "linear"
-
-                if matched_mode is not None:
-                    canonical_id = BUILTIN_ALIASES.get(rel_key, f"worker.{rel_key}")
-                    if canonical_id in discovered:
-                        continue
-                    entry = (canonical_id, f"{sys.executable} -m {module_path}", matched_mode)
-
-                    discovered[canonical_id] = entry
-                    discovered.setdefault(rel_key, entry)
-                    discovered.setdefault(f"worker.{rel_key}", entry)
-                    if leaf not in discovered or BUILTIN_ALIASES.get(leaf) == canonical_id:
-                        discovered[leaf] = entry
-
-                    for alias_key, target_cid in BUILTIN_ALIASES.items():
-                        if target_cid == canonical_id:
-                            discovered.setdefault(alias_key, entry)
-
-    _BUILTIN_CACHE[packages] = discovered
-    return discovered
-
-
-def _resolve_all_builtin_specs(
-    target_filter: Optional[str] = None,
-    mode_override: Optional[str] = None,
-    preflight_override: Optional[str] = None,
-    base_package: str = DEFAULT_WORKER_PACKAGE,
-) -> List[ResolvedTarget]:
-    builtin_map = discover_builtin_workers(base_package)
-    seen_ids: set[str] = set()
-    specs: List[ResolvedTarget] = []
-    normalized_filter = BUILTIN_ALIASES.get(target_filter, target_filter) if target_filter else None
-
-    for tid, cmd, default_mode in builtin_map.values():
-        if tid in seen_ids:
-            continue
-        if normalized_filter and tid != normalized_filter and target_filter != tid.split(".")[-1]:
-            continue
-        seen_ids.add(tid)
-        specs.append(
-            resolve_connector_spec(
-                target=tid,
-                exec_cmd=cmd,
-                mode=mode_override or default_mode,
-                transport="stdio",
-                preflight=preflight_override,
-            )
+def _freeze_str_map(raw: Optional[Mapping[str, Any]]) -> Tuple[Tuple[str, str], ...]:
+    if not raw or not isinstance(raw, Mapping):
+        return ()
+    return tuple(
+        sorted(
+            (str(k).strip(), str(v))
+            for k, v in raw.items()
+            if str(k).strip() and v is not None
         )
-    return specs
+    )
 
 
 def _infer_fallback_target_id(raw_cmd: str, is_http_url: bool) -> str:
@@ -246,12 +107,13 @@ def resolve_connector_spec(
     env: Optional[Mapping[str, Any]] = None,
     headers: Optional[Mapping[str, Any]] = None,
 ) -> ResolvedTarget:
+    """Resolve raw execution input or builtin alias into an immutable ResolvedTarget."""
     raw_cmd = exec_cmd.strip()
     if not raw_cmd:
         log.error("[Fiber] Empty execution command provided.")
         raise typer.Exit(1)
 
-    builtin_map = discover_builtin_workers()
+    builtin_map = discover_builtin_workers(include_internal=True)
     if raw_cmd in builtin_map:
         inferred_target, resolved_cmd, inferred_default_mode = builtin_map[raw_cmd]
     else:
@@ -288,10 +150,42 @@ def resolve_connector_spec(
         mode=resolved_mode,
         transport=resolved_transport,
         preflight=PreflightGuard.resolve_pattern(resolved_target, preflight),
-        tags=_parse_fiber_tags(tags),
+        tags=parse_fiber_tags(tags),
         env=_freeze_str_map(env),
         headers=_freeze_str_map(headers),
     )
+
+
+def _resolve_builtin_specs(
+    target_filter: Optional[str] = None,
+    mode_override: Optional[str] = None,
+    preflight_override: Optional[str] = None,
+    base_package: str = DEFAULT_WORKER_PACKAGE,
+) -> List[ResolvedTarget]:
+    allow_internal = is_explicit_internal_target(target_filter)
+    builtin_map = discover_builtin_workers(base_package, include_internal=allow_internal)
+
+    seen_ids: set[str] = set()
+    specs: List[ResolvedTarget] = []
+    clean_filter = target_filter.strip() if target_filter else None
+    normalized_filter = BUILTIN_ALIASES.get(clean_filter, clean_filter) if clean_filter else None
+
+    for tid, cmd, default_mode in builtin_map.values():
+        if tid in seen_ids:
+            continue
+        if normalized_filter and tid != normalized_filter and clean_filter != tid.split(".")[-1]:
+            continue
+        seen_ids.add(tid)
+        specs.append(
+            resolve_connector_spec(
+                target=tid,
+                exec_cmd=cmd,
+                mode=mode_override or default_mode,
+                transport="stdio",
+                preflight=preflight_override,
+            )
+        )
+    return specs
 
 
 def _specs_from_mapped_entries(
@@ -325,14 +219,63 @@ def _specs_from_mapped_entries(
     return specs
 
 
-def _sync_to_anchor_config(
+def _collect_specs_with_envs(
+    agent: Optional[str] = None,
+    exec_cmd: Optional[str] = None,
+    config: Optional[Path] = None,
+    target: Optional[str] = None,
+    mode: Optional[str] = None,
+    preflight: Optional[str] = None,
+    include_builtins: bool = False,
+) -> Tuple[List[ResolvedTarget], Dict[str, Dict[str, str]]]:
+    specs_by_id: Dict[str, ResolvedTarget] = {}
+    env_lookup: Dict[str, Dict[str, str]] = {}
+
+    def _ingest_mapped(entries: List[MappedMcpEntry]):
+        for e in entries:
+            env_lookup[e.target_id] = dict(e.env)
+        for s in _specs_from_mapped_entries(
+            entries, target_filter=target, mode_override=mode, preflight_override=preflight
+        ):
+            specs_by_id[s.target_id] = s
+
+    if agent is not None:
+        norm_agent = agent.strip().lower()
+        if norm_agent in ("builtin", "builtins"):
+            include_builtins = True
+        else:
+            scan_agent = None if norm_agent == "all" else norm_agent
+            _ingest_mapped(McpConfigMapper.scan_and_parse(agent=scan_agent))
+            if norm_agent == "all":
+                include_builtins = True
+
+    if config is not None:
+        _ingest_mapped(McpConfigMapper.parse_file(config))
+
+    if exec_cmd is not None:
+        if exec_cmd.strip().lower() in ("builtin", "builtins"):
+            include_builtins = True
+        else:
+            s = resolve_connector_spec(
+                target=target,
+                exec_cmd=exec_cmd,
+                mode=mode,
+                preflight=preflight,
+                tags=os.environ.get("FIBER_TAGS"),
+            )
+            specs_by_id[s.target_id] = s
+
+    if include_builtins:
+        for s in _resolve_builtin_specs(target, mode, preflight):
+            specs_by_id.setdefault(s.target_id, s)
+
+    return list(specs_by_id.values()), env_lookup
+
+
+def _upsert_anchor_config(
     specs: List[ResolvedTarget],
     env_lookup: Optional[Dict[str, Dict[str, str]]] = None,
-) -> Optional[Path]:
-    """해석된 ResolvedTarget 목록을 ~/.anchor/mcp.json의 표준 mcpServers 포맷으로 병합(Upsert)합니다."""
-    if not specs:
-        return None
-
+) -> Path:
     ANCHOR_MCP_PATH.parent.mkdir(parents=True, exist_ok=True)
     data: Dict[str, Any] = {"mcpServers": {}}
 
@@ -366,7 +309,7 @@ def _sync_to_anchor_config(
             merged_env["FIBER_PREFLIGHT_PATTERN"] = spec.preflight
         if spec.tags:
             merged_env["FIBER_TAGS"] = ",".join(spec.tags)
-        elif "FIBER_TAGS" in merged_env and not _parse_fiber_tags(merged_env["FIBER_TAGS"]):
+        elif "FIBER_TAGS" in merged_env and not parse_fiber_tags(merged_env["FIBER_TAGS"]):
             merged_env.pop("FIBER_TAGS", None)
 
         merged_headers: Dict[str, str] = {}
@@ -405,47 +348,53 @@ def _sync_to_anchor_config(
     return ANCHOR_MCP_PATH
 
 
-def _collect_specs_and_envs(
+def collect_target_specs(
     agent: Optional[str] = None,
     exec_cmd: Optional[str] = None,
     config: Optional[Path] = None,
     target: Optional[str] = None,
     mode: Optional[str] = None,
     preflight: Optional[str] = None,
-) -> Tuple[List[ResolvedTarget], Dict[str, Dict[str, str]]]:
-    specs_by_id: Dict[str, ResolvedTarget] = {}
-    env_lookup: Dict[str, Dict[str, str]] = {}
+    include_builtins: bool = False,
+) -> List[ResolvedTarget]:
+    """Collect and resolve MCP target specifications from agent configs, files, commands, or builtins."""
+    specs, _ = _collect_specs_with_envs(
+        agent=agent,
+        exec_cmd=exec_cmd,
+        config=config,
+        target=target,
+        mode=mode,
+        preflight=preflight,
+        include_builtins=include_builtins,
+    )
+    return specs
 
-    def _ingest_mapped(entries: List[MappedMcpEntry]):
-        for e in entries:
-            env_lookup[e.target_id] = dict(e.env)
-        for s in _specs_from_mapped_entries(entries, target_filter=target, mode_override=mode, preflight_override=preflight):
-            specs_by_id[s.target_id] = s
 
-    if agent is not None:
-        norm_agent = agent.strip().lower()
-        if norm_agent in ("builtin", "builtins"):
-            for s in _resolve_all_builtin_specs(target, mode, preflight):
-                specs_by_id[s.target_id] = s
-        else:
-            scan_agent = None if norm_agent == "all" else norm_agent
-            _ingest_mapped(McpConfigMapper.scan_and_parse(agent=scan_agent))
+def sync_target_specs(
+    agent: Optional[str] = None,
+    exec_cmd: Optional[str] = None,
+    config: Optional[Path] = None,
+    target: Optional[str] = None,
+    mode: Optional[str] = None,
+    preflight: Optional[str] = None,
+    include_builtins: bool = False,
+) -> Tuple[List[ResolvedTarget], Path]:
+    """Collect target specifications and upsert them into ~/.anchor/mcp.json."""
+    specs, env_lookup = _collect_specs_with_envs(
+        agent=agent,
+        exec_cmd=exec_cmd,
+        config=config,
+        target=target,
+        mode=mode,
+        preflight=preflight,
+        include_builtins=include_builtins,
+    )
+    if not specs:
+        return [], ANCHOR_MCP_PATH
+    out_path = _upsert_anchor_config(specs, env_lookup=env_lookup)
+    return specs, out_path
 
-    if config is not None:
-        _ingest_mapped(McpConfigMapper.parse_file(config))
-
-    if exec_cmd is not None:
-        if exec_cmd.strip().lower() in ("builtin", "builtins"):
-            for s in _resolve_all_builtin_specs(target, mode, preflight):
-                specs_by_id[s.target_id] = s
-        else:
-            s = resolve_connector_spec(
-                target=target,
-                exec_cmd=exec_cmd,
-                mode=mode,
-                preflight=preflight,
-                tags=os.environ.get("FIBER_TAGS"),
-            )
-            specs_by_id[s.target_id] = s
-
-    return list(specs_by_id.values()), env_lookup
+def load_anchor_specs() -> List[ResolvedTarget]:
+    """Load and resolve canonical MCP target specifications from ~/.anchor/mcp.json."""
+    anchor_entries = McpConfigMapper.scan_and_parse(agent="fiber")
+    return _specs_from_mapped_entries(anchor_entries)

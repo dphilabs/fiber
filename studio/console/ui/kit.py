@@ -1,347 +1,60 @@
 # fiber.studio.console.ui.kit
+"""Console UI facade: the only module tabs/app import (`import ...ui.kit as kit`).
+
+Layers (import direction is one-way):
+    kit (facade + shell templates) -> component.layout -> component.widget -> theme
+
+Where new code goes:
+    single element .............. component/widget.py
+    container / pane / chart .... component/layout.py
+    tab / modal / page shell .... this file
+    colors / CSS / text glyphs .. theme.py
+    used by one tab only ........ a private _helper inside that tab
+
+The re-export block below is the public API. Add a name here only when it is used
+in 3+ places across 2+ tabs; never import component.* from tabs directly.
+"""
 from __future__ import annotations
 
-import os
-from pathlib import Path
-import subprocess
-import sys
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
-import inspect
-from typing import Any, Callable, Iterator, Sequence
-from nicegui import Client, ui
+from collections.abc import Callable, Sequence
 
-import fiber.studio.console.ui.diag as diag
+from nicegui import ui
 
-CLS_MONO_LABEL = (
-    "text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1.5 rounded border border-slate-800 w-full truncate"
+from fiber.studio.console.ui.component.layout import (
+    bar as bar,
+    bar_chart as bar_chart,
+    box as box,
+    card as card,  # transitional alias of box
+    dual_drawer as dual_drawer,
+    footer as footer,
+    line_chart as line_chart,
+    meter as meter,
+    row as row,
+    split_studio as split_studio,
 )
-CLS_SECTION_HEADER = "text-xs font-bold text-cyan-400 shrink-0"
+from fiber.studio.console.ui.component.widget import (
+    CLS_MONO_LABEL as CLS_MONO_LABEL,
+    CLS_SECTION_HEADER as CLS_SECTION_HEADER,
+    Tag as Tag,
+    button as button,
+    editor as editor,
+    file_link as file_link,
+    log as log,
+    number as number,
+    open_local_file as open_local_file,
+    section as section,
+    select as select,
+    switch as switch,
+    tag as tag,
+    text as text,
+)
+from fiber.studio.console.ui.theme import apply_webtui_theme, strip_emoji
 
-_orig_notify = ui.notify
-
-def _context_safe_notify(message: Any, **kwargs: Any) -> None:
-    try:
-        _orig_notify(message, **kwargs)
-    except RuntimeError:
-        for client in list(Client.instances.values()):
-            if getattr(client, "has_socket_connection", False):
-                with client:
-                    _orig_notify(message, **kwargs)
-                return
-
-ui.notify = _context_safe_notify
-
-def _wrap_async(handler: Callable[[], Any]) -> Callable[[], Any]:
-    async def _runner() -> None:
-        try:
-            res = handler()
-            if inspect.iscoroutine(res):
-                await res
-        except Exception as exc:
-            diag.exception(
-                "UI button handler failed",
-                exc=exc,
-                handler=getattr(handler, "__name__", "lambda"),
-            )
-
-    return _runner
-
-def open_local_file(
-    path: str | Path,
-    *,
-    default_content: str = "{}\n",
-    create_if_missing: bool = False,
-) -> None:
-    target = Path(path).expanduser().resolve()
-    try:
-        if not target.exists():
-            if not create_if_missing:
-                ui.notify(
-                    f"⚠️ File does not exist yet: {target.name} (Use '+ Init' to create it)",
-                    type="warning",
-                )
-                return
-            if target.suffix:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(default_content, encoding="utf-8")
-        elif target.is_file() and target.stat().st_size == 0 and default_content:
-            target.write_text(default_content, encoding="utf-8")
-
-        editor_cmd = os.environ.get("FIBER_EDITOR") or os.environ.get("EDITOR")
-        if editor_cmd:
-            subprocess.Popen([editor_cmd, str(target)])
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-t", str(target)] if target.is_file() else ["open", str(target)])
-        elif sys.platform.startswith("linux"):
-            subprocess.Popen(["xdg-open", str(target)])
-        else:
-            os.startfile(str(target))  # type: ignore[attr-defined]
-
-        ui.notify(f"📂 Opened in external editor: {target.name}", type="info")
-    except Exception as exc:
-        diag.exception("Failed to open local file in external tool", exc=exc, path=str(target))
-        ui.notify(f"Cannot open {target.name}: {exc}", type="warning")
-
-def file_link(
-    path: str | Path | Callable[[], str | Path],
-    *,
-    label: str = "",
-    tooltip: str = "",
-    default_content: str = "{}\n",
-    create_if_missing: bool = False,
-) -> ui.row:
-    """Compact inline file badge + 1-icon button ('open_in_new' or 'add') to launch external editors."""
-    def _resolve() -> Path:
-        raw = path() if callable(path) else path
-        return Path(raw).expanduser()
-
-    initial_path = _resolve()
-    disp_text = label or initial_path.name
-    tip_text = tooltip or f"Open externally: {initial_path}"
-    icon_name = "add_circle_outline" if create_if_missing and not initial_path.exists() else "open_in_new"
-
-    with ui.row().classes("items-center gap-1 no-wrap shrink-0") as container:
-        if label != "":
-            ui.label(disp_text).classes("text-[11px] font-mono text-slate-400 underline decoration-slate-700")
-        ui.button(
-            icon=icon_name,
-            on_click=lambda: open_local_file(
-                _resolve(),
-                default_content=default_content,
-                create_if_missing=create_if_missing,
-            ),
-        ).props("flat dense round size=xs color=cyan").tooltip(tip_text)
-    return container
 
 def trigger_viewport_resize() -> None:
     ui.run_javascript("setTimeout(() => window.dispatchEvent(new Event('resize')), 30)")
 
-def text(
-    label: str, target: Any, attr: str, *, flex: bool = True, mono: bool = True, width: str = ""
-) -> ui.input:
-    w_cls = width or ("flex-1" if flex else "")
-    m_cls = "font-mono" if mono else ""
-    return (
-        ui.input(label)
-        .bind_value(target, attr)
-        .props("dark outlined dense")
-        .classes(f"{w_cls} {m_cls} text-xs".strip())
-    )
-
-def number(
-    label: str,
-    target: Any,
-    attr: str,
-    *,
-    min_val: float = 0,
-    max_val: float = 100,
-    step: float = 1,
-    width: str = "w-24",
-    as_int: bool = False,
-) -> ui.number:
-    forward_fn = int if as_int else lambda x: x
-    return (
-        ui.number(label, min=min_val, max=max_val, step=step)
-        .bind_value(target, attr, forward=forward_fn)
-        .props("dark outlined dense")
-        .classes(f"{width} font-mono text-xs")
-    )
-
-def select(
-    options: Sequence[str], label: str, target: Any, attr: str, *, width: str = "flex-1"
-) -> ui.select:
-    return (
-        ui.select(list(options), label=label)
-        .bind_value(target, attr)
-        .props("dark outlined dense")
-        .classes(f"{width} text-xs")
-    )
-
-
-def switch(
-    label: str, target: Any | None = None, attr: str = "", *, color: str = "emerald", value: bool = False
-) -> ui.switch:
-    sw = ui.switch(label, value=value).props(f"color={color} dense").classes("text-xs")
-    if target is not None and attr:
-        sw.bind_value(target, attr)
-    return sw
-
-def button(
-    label: str,
-    action: Callable[[], Any],
-    *,
-    color: str = "emerald",
-    outline: bool = False,
-    flex: bool = False,
-    text_color: str = "",
-) -> ui.button:
-    props = f"color={color} dense"
-    if outline:
-        props += " outline"
-    if text_color:
-        props += f" text-color={text_color}"
-    cls = f"{'flex-1 font-bold' if flex else 'px-2.5'} text-xs"
-    return ui.button(label, on_click=_wrap_async(action)).props(props).classes(cls)
-
-def editor(target: Any, attr: str, *, lang: str = "json") -> ui.codemirror:
-    return (
-        ui.codemirror(language=lang, theme="oneDark")
-        .bind_value(target, attr)
-        .classes("w-full flex-1 min-h-0 text-xs border border-slate-800")
-    )
-
-def log(max_lines: int = 100, *, color: str = "text-slate-200", height: str = "flex-1 min-h-0") -> ui.log:
-    return ui.log(max_lines=max_lines).classes(f"w-full {height} bg-black border border-slate-800 p-2 font-mono text-xs {color}")
-
-def bar_chart(
-    categories: list[str],
-    data: list[Any],
-    *,
-    x_max: float | None = None,
-    formatter: str = "{c}",
-) -> ui.echart:
-    """Standardized dark-theme horizontal bar chart."""
-    x_axis: dict[str, Any] = {
-        "type": "value",
-        "splitLine": {"lineStyle": {"color": "#1e293b"}},
-        "axisLabel": {"color": "#64748b", "fontSize": 10},
-    }
-    if x_max is not None:
-        x_axis["max"] = x_max
-
-    return ui.echart({
-        "grid": {"top": 12, "bottom": 25, "left": 95, "right": 45},
-        "xAxis": x_axis,
-        "yAxis": {
-            "type": "category",
-            "data": categories,
-            "axisLabel": {"color": "#cbd5e1", "fontSize": 10},
-        },
-        "series": [{
-            "type": "bar",
-            "data": data,
-            "itemStyle": {"color": "#38bdf8"},
-            "label": {
-                "show": True,
-                "position": "right",
-                "formatter": formatter,
-                "color": "#e2e8f0",
-                "fontSize": 10,
-            },
-        }],
-    }).classes("w-full flex-1 min-h-0")
-
-def line_chart(
-    x_ticks: list[str],
-    y_primary: list[int | float],
-    y_secondary: list[int | float],
-    *,
-    redline: int | float = 0,
-    y_max: int = 75000,
-) -> ui.echart:
-    """Dark-theme dual-series line chart for FinOps ledger telemetry."""
-    return ui.echart({
-        "tooltip": {"trigger": "axis"},
-        "legend": {
-            "data": ["Active Quota (FinOps)", "Ledger Balance (PTA)"],
-            "textStyle": {"color": "#94a3b8", "fontSize": 10},
-            "top": 0,
-        },
-        "grid": {"top": 26, "bottom": 20, "left": 55, "right": 20},
-        "xAxis": {"type": "category", "data": x_ticks, "axisLabel": {"color": "#64748b", "fontSize": 10}},
-        "yAxis": {
-            "type": "value",
-            "min": 0,
-            "max": y_max,
-            "splitLine": {"lineStyle": {"color": "#1e293b"}},
-            "axisLabel": {"color": "#64748b", "fontSize": 10},
-        },
-        "series": [
-            {
-                "name": "Active Quota (FinOps)",
-                "type": "line",
-                "data": y_primary,
-                "smooth": True,
-                "itemStyle": {"color": "#10b981"},
-                "areaStyle": {"color": "rgba(16, 185, 129, 0.12)"},
-                "markLine": {
-                    "silent": True,
-                    "lineStyle": {"color": "#ef4444", "width": 2, "type": "dashed"},
-                    "data": [{"yAxis": redline}],
-                },
-            },
-            {
-                "name": "Ledger Balance (PTA)",
-                "type": "line",
-                "data": y_secondary,
-                "step": "end",
-                "lineStyle": {"color": "#06b6d4", "type": "dotted"},
-                "itemStyle": {"color": "#06b6d4"},
-            },
-        ],
-    }).classes("w-full h-40 shrink-0")
-
-@contextmanager
-def row(*, gap: str = "gap-2", align: str = "items-center") -> Iterator[ui.row]:
-    """Full-width horizontal flex row."""
-    with ui.row().classes(f"w-full {gap} {align} shrink-0") as r:
-        yield r
-
-@contextmanager
-def bar() -> Iterator[ui.row]:
-    """Compact status bar or list item container."""
-    with ui.row().classes(
-        "w-full justify-between items-center bg-slate-950 px-3 py-1.5 rounded border border-slate-800 shrink-0"
-    ) as r:
-        yield r
-
-
-@contextmanager
-def card(*, flex: bool = True, width: str = "") -> Iterator[ui.card]:
-    """Standard dark-theme card container."""
-    w_cls = width or ("flex-1" if flex else "")
-    with ui.card().classes(f"{w_cls} bg-slate-950 border border-slate-800 p-2.5") as c:
-        yield c
-
-
-@contextmanager
-def footer() -> Iterator[ui.row]:
-    """Bottom-anchored action bar (`mt-auto`)."""
-    with ui.row().classes("w-full gap-2 mt-auto pt-1 shrink-0") as r:
-        yield r
-
-
-def split_studio(
-    left_title: str,
-    left_builder: Callable[[], None],
-    right_title: str,
-    right_builder: Callable[[], None],
-    *,
-    ratio: int = 42,
-) -> ui.splitter:
-    with ui.splitter(value=ratio).classes("w-full h-[450px] bg-slate-900 rounded border border-slate-800") as sp:
-        with sp.before:
-            with ui.column().classes("p-4 gap-2.5 w-full h-full min-h-0 overflow-y-auto"):
-                ui.label(left_title).classes(
-                    "text-sm font-bold text-white border-b border-slate-800 pb-1.5 w-full shrink-0"
-                )
-                left_builder()
-        with sp.after:
-            with ui.column().classes("p-4 gap-2.5 w-full h-full min-h-0 overflow-hidden"):
-                ui.label(right_title).classes(
-                    "text-sm font-bold text-white border-b border-slate-800 pb-1.5 w-full shrink-0"
-                )
-                right_builder()
-    return sp
-
-@contextmanager
-def dual_drawer() -> Iterator[tuple[ui.column, ui.column]]:
-    """Bottom dual-terminal drawer layout for CLI and Event Bus logs."""
-    with ui.row().classes("w-full px-3 pb-3 gap-3 no-wrap"):
-        left_col = ui.column().classes("w-1/2 bg-black border border-slate-800 rounded p-2.5 gap-1")
-        right_col = ui.column().classes("w-1/2 bg-black border border-slate-800 rounded p-2.5 gap-1")
-        yield left_col, right_col
 
 class StudioTab(ABC):
     """Base template for domain studio tabs (MCP, LLM Live, FinOps, VCR)."""
@@ -349,6 +62,7 @@ class StudioTab(ABC):
     left_header: str = "Configuration"
     right_header: str = "Telemetry & Proof"
     ratio: int = 42
+    layer: str = "gateway"  # top-level group; a second layer (e.g. "runbook") adds a layer tab bar
 
     @abstractmethod
     def compose_left(self) -> None:
@@ -371,11 +85,13 @@ class StudioTab(ABC):
             ratio=self.ratio,
         )
 
+
 class ModalTemplate(ABC):
     """Base template for modal dialogs (HITL 202 gate, TOTP QR)."""
     width_cls: str = "w-[480px]"
-    border_cls: str = "border border-slate-700"
+    border_cls: str = "border border-[#262b3d]"
     persistent: bool = False
+    title: str = ""  # optional legend title on the top border
 
     @abstractmethod
     def compose(self, dialog: ui.dialog) -> None:
@@ -383,11 +99,15 @@ class ModalTemplate(ABC):
 
     def mount(self) -> ui.dialog:
         props = "persistent" if self.persistent else ""
+        # Transparent shell with top padding keeps the legend inside q-dialog's scroll box.
         with ui.dialog().props(props) as dialog, ui.card().classes(
-            f"bg-slate-900 {self.border_cls} {self.width_cls} p-5"
-        ):
+            f"tui-modal-shell {self.width_cls} p-0 pt-2.5 gap-0"
+        ), ui.column().classes(f"tui-legend-box {self.border_cls} w-full p-5 gap-4"):
+            if self.title:
+                ui.label(f" {strip_emoji(self.title)} ").classes("tui-legend-title")
             self.compose(dialog)
         return dialog
+
 
 class ConsoleTemplate:
     def __init__(
@@ -408,8 +128,8 @@ class ConsoleTemplate:
         self.tick_interval = tick_interval
 
     def build_view(self) -> None:
-        ui.dark_mode().enable()
-        ui.query("body").classes("bg-slate-950 text-slate-100 select-none")
+        apply_webtui_theme()
+        ui.query("body").classes("bg-[#090a0f] text-[#d8dee9] select-none")
         ui.query(".nicegui-content").classes("p-0 gap-0")
 
         for modal in self.modals:
@@ -419,23 +139,52 @@ class ConsoleTemplate:
             self.header_builder()
 
         if self.tabs:
-            with ui.tabs().classes("w-full bg-slate-900 border-b border-slate-800") as tab_bar:
-                tab_handles = [ui.tab(t.title) for t in self.tabs]
-
-            with (
-                ui.tab_panels(tab_bar, value=tab_handles[0], on_change=lambda _: trigger_viewport_resize())
-                .props("keep-alive animated=false")
-                .classes("w-full bg-slate-950 p-3")
-            ):
-                for tab_obj, handle in zip(self.tabs, tab_handles):
-                    with ui.tab_panel(handle).classes("p-0"):
-                        tab_obj.render()
+            layers: dict[str, list[StudioTab]] = {}
+            for t in self.tabs:
+                layers.setdefault(t.layer, []).append(t)
+            if len(layers) == 1:
+                # Single layer: no layer bar, identical to the flat tab bar.
+                self._build_tab_set(self.tabs)
+            else:
+                with (
+                    ui.tabs()
+                    .props("dense no-caps align=left indicator-color=transparent")
+                    .classes("tui-layer-tabs w-full") as layer_bar
+                ):
+                    layer_handles = [ui.tab(name) for name in layers]
+                with (
+                    ui.tab_panels(layer_bar, value=layer_handles[0], on_change=lambda _: trigger_viewport_resize())
+                    .props("keep-alive animated=false")
+                    .classes("w-full p-0")
+                ):
+                    for handle, layer_tabs in zip(layer_handles, layers.values()):
+                        with ui.tab_panel(handle).classes("p-0 gap-0"):
+                            self._build_tab_set(layer_tabs)
 
         if self.drawer_builder:
             self.drawer_builder()
 
         if self.on_tick:
             ui.timer(self.tick_interval, lambda: self.on_tick(self.tabs))
+
+    @staticmethod
+    def _build_tab_set(tabs: Sequence[StudioTab]) -> None:
+        """Tab bar + panels for one layer; numbering restarts per layer ([1], [2], ...)."""
+        with (
+            ui.tabs()
+            .props("dense no-caps align=left indicator-color=transparent")
+            .classes("w-full bg-[#0d0f17] border-b border-[#262b3d]") as tab_bar
+        ):
+            tab_handles = [ui.tab(f"[{idx + 1}] {strip_emoji(t.title)}") for idx, t in enumerate(tabs)]
+
+        with (
+            ui.tab_panels(tab_bar, value=tab_handles[0], on_change=lambda _: trigger_viewport_resize())
+            .props("keep-alive animated=false")
+            .classes("w-full bg-[#090a0f] p-3")
+        ):
+            for tab_obj, handle in zip(tabs, tab_handles):
+                with ui.tab_panel(handle).classes("p-0"):
+                    tab_obj.render()
 
     def mount_page(self, path: str = "/", *, shared: bool = True) -> None:
         if shared:

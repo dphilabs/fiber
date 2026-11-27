@@ -140,17 +140,14 @@ class PipelineActionBridge:
             )
             return
 
-        # [Track 3: Clean Pass 또는 Mask & Pass -> VCR Fixture Stream Replay 구동]
         fixture_label, chunk_cnt, token_cnt = _load_vcr_fixture_stats(target_model)
         refs.push_cli(f"$ fiber xray --vcr replay -m {target_model} -> Replaying {chunk_cnt} chunks from VCR fixture")
-
         for key in ("guardrail", "fuel"):
             if key == "guardrail" and mask_on and matched:
-                continue  # 이미 Amber(Masked) 상태로 표시됨
+                continue
             if c := refs.slot_cards.get(key):
                 c.classes(replace="bg-emerald-900 border-2 border-emerald-400 p-2 w-36 text-center")
 
-        # VCR Fixture 스트림 리플레이 텔레메트리 실시간 연출
         s.active_streams = int(getattr(s, "active_streams", 0)) + 1
         s.plane_bursting = True
         try:
