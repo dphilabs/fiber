@@ -1,4 +1,4 @@
-# fiber.node.mcp.mapper.builtin
+# fiber.gateway.mcp.mapper.builtin
 from __future__ import annotations
 
 import ast

@@ -25,7 +25,7 @@ from fiber.llm.pipeline.channel.breaker import StreamBreaker
 from fiber.llm.pipeline.channel.observer import MeteringObserver
 from fiber.gateway.security import TokenTranslator
 from fiber.node.account.finops.token.gen import FinOpsTokenGenerator
-from fiber.node.mcp.connector import MCPServerConnector
+from fiber.gateway.mcp.connector import MCPServerConnector
 
 from fiber.llm.vcr.manager import (
     VCRPlaybackConfig,

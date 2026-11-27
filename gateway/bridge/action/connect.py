@@ -8,8 +8,8 @@ import orjson
 import typer
 
 from fiber.gateway.bridge.emitter import get_emitter
-from fiber.node.mcp.connector import MCPServerConnector
-from fiber.node.mcp.mapper.spec import (
+from fiber.gateway.mcp.connector import MCPServerConnector
+from fiber.gateway.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     STANDALONE_ATTACHED_TUNNEL_KEY,
     ResolvedTarget,

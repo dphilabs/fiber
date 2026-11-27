@@ -44,10 +44,9 @@ class BlueprintAnalyzer:
         self.indexer = UnitsIndexer(self.loader)
         root = self.loader.local_repo_dir
 
-        scen_file = root / "flow" / "scenarios.json" if root else None
+        scen_file = root / "fixtures" / "scene" / "scenarios.json" if root else None
         self.scenarios = json.loads(scen_file.read_text(encoding="utf-8")) if (scen_file and scen_file.is_file()) else {}
 
-        # 1. 엔진 기본 샘플을 비우고 현재 저장소(스크립트 주석 + flow/*.json)만 로드
         reg = self.vp.registry
         reg.units.clear()
         reg.flows.clear()

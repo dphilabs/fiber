@@ -22,8 +22,6 @@ from fiber.studio.runbook.unit.loader import UnitsLoader
 
 _HEADER_SCAN_BYTES = 8192
 _SKIP_SCAN_DIRS = frozenset({"__pycache__", "fixtures", "docs", "io", "build", "dist"})
-_SKIP_FLOW_JSONS = frozenset({"scenarios.json"})
-
 
 class UnitsIndexer:
     INDEX_FILENAME = "index.json"
@@ -94,7 +92,7 @@ class UnitsIndexer:
         if flow_dir.is_dir():
             for spec_path in sorted(flow_dir.rglob("*.json")):
                 rel_flow_parts = spec_path.relative_to(flow_dir).parts
-                if any(p.startswith(".") for p in rel_flow_parts) or spec_path.name in _SKIP_FLOW_JSONS:
+                if any(p.startswith(".") for p in rel_flow_parts):
                     continue
 
                 rel_spec = spec_path.relative_to(root).as_posix()
@@ -198,7 +196,11 @@ class UnitsIndexer:
             f_meta = (_read_spec(rel_spec).get("flows") or {}).get(f_name)
             if is_flow_meta(f_meta):
                 for key, spec, desc in expand_entries(f_name, f_meta):
-                    registry.register_flow(key, spec, desc)
+                    try:
+                        registry.register_flow(key, spec, desc)
+                    except ValueError:
+                        # skip error flow
+                        continue
         return count
 
     @staticmethod

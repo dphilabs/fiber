@@ -1,4 +1,4 @@
-# fiber.node.mcp.fsm
+# fiber.gateway.mcp.fsm
 from enum import Enum, auto
 from typing import Dict, Any, Optional
 
@@ -8,7 +8,6 @@ from xphi.arch.bound.client.rpc import InternalRpcClient
 from fiber.node.bound.guard.preflight import PreflightGuard
 from fiber.gateway.bridge.emitter import get_emitter
 
-
 class IntentState(Enum):
     PENDING = auto()
     EXECUTING = auto()
@@ -17,7 +16,6 @@ class IntentState(Enum):
     RESOLVED = auto()
     FAULTED = auto()
     ROLLED_BACK = auto()
-
 
 class IntentLifecycleFSM:
     """@transition: PENDING -> EXECUTING -> YIELDED -> RESUMING -> RESOLVED/FAULTED"""

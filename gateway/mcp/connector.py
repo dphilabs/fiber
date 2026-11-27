@@ -1,4 +1,4 @@
-# fiber.node.mcp.connector
+# fiber.gateway.mcp.connector
 from __future__ import annotations
 
 import argparse
@@ -11,8 +11,8 @@ from typing import Any, Dict, Optional, Protocol, Set
 import orjson
 
 from fiber.gateway.bridge.emitter import get_emitter
-from fiber.node.mcp.fsm import IntentLifecycleFSM, IntentState
-from fiber.node.mcp.quarantine import AdapterRegistry
+from fiber.gateway.mcp.fsm import IntentLifecycleFSM, IntentState
+from fiber.gateway.mcp.quarantine import AdapterRegistry
 from fiber.studio.harness.mcp.payload import McpPayloadBuilder
 from xphi.arch.bound.client.rpc import InternalRpcClient
 from xphi.node.space.tunnel.factory import TunnelFactory

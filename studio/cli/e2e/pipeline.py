@@ -14,9 +14,9 @@ from fiber.studio.cli.e2e.config import (
     PipelineRunner,
     TestResult,
 )
-from fiber.node.mcp.mapper.spec import resolve_connector_spec
+from fiber.gateway.mcp.mapper.spec import resolve_connector_spec
 from fiber.gateway.payload import Config, create_app
-from fiber.node.mcp.connector import MCPServerConnector
+from fiber.gateway.mcp.connector import MCPServerConnector
 
 from xphi.arch.bound.client.rpc import InternalRpcClient
 import xphi.node.ops.daemon.rpc as daemon_module

@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fiber.node.mcp.mapper.spec import (
+from fiber.gateway.mcp.mapper.spec import (
     ANCHOR_MCP_PATH,
     ResolvedTarget,
     load_anchor_specs,
