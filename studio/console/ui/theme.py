@@ -197,6 +197,17 @@ _WEB_TUI_CSS = f"""
     box-shadow: inset 0 -2px 0 var(--tui-amber) !important;
   }}
 
+  /* App shell (ConsoleTemplate): the page is exactly the viewport below the q-header and never scrolls.
+     Header, tab bars and the drawer keep their own height; `.tui-fill` tab panels take the rest,
+     growing and shrinking with the window. Overflow scrolls inside the panes only. */
+  .q-page-container.tui-shell-container {{ height: 100vh; }}
+  .q-page.tui-shell {{ height: 100%; overflow: hidden; display: flex; flex-direction: column; }}
+  .q-page.tui-shell > .nicegui-content {{ flex: 1 1 auto; min-height: 0; }}
+  .tui-shell .q-tabs {{ flex-shrink: 0; }}
+  .q-tab-panels.tui-fill,
+  .q-tab-panels.tui-fill > .q-panel,
+  .q-tab-panels.tui-fill > .q-panel > .q-tab-panel {{ flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }}
+
   /* Fields */
   .q-field--outlined .q-field__control:before {{
     border-color: var(--tui-border) !important;

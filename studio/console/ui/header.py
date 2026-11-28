@@ -17,7 +17,7 @@ from fiber.node.account.state import (
 )
 from fiber.node.account.finops.console import finops_manager
 import fiber.studio.console.ui.diag as diag
-from fiber.studio.console.modal.guide import open_guide_modal
+from fiber.studio.console.ui.modal.guide import open_guide_modal
 import fiber.studio.console.ui.kit as kit
 from fiber.studio.console.ui.theme import strip_emoji, tui_tag
 from xphi.node.space.bind.resolver import resolve_path

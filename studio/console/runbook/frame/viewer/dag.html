@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="doc">
+<head>
+<meta charset="utf-8">
+<title>runbook dag viewer</title>
+<!-- fiber.studio.runbook.viewer · DAG viewer: draft wiring ($input -> nodes, slot sources) as a graph.
+     Layout: dagre (dagre.min.js). Edit: slot source dropdown only, sent to the console as an intent.
+     Receives: model | theme. Sends: intent {op: "set_binding", no, key, value}.
+     Scripts: dagre.min.js, dag.js (inlined into the iframe srcdoc by the Python wrapper). -->
+<style>
+  :root, [data-theme="doc"] {
+    --bg: #f1f5f9; --card: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #cbd5e1;
+    --accent: #2563eb; --soft: #eff6ff; --head: #f8fafc;
+    --ok: #16a34a; --fail: #dc2626;
+    --font: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
+    --radius: 6px;
+  }
+  [data-theme="tui"] {
+    --bg: #090a0f; --card: #0d0f17; --ink: #d8dee9; --muted: #6c7689; --line: #262b3d;
+    --accent: #7dcfff; --soft: #050608; --head: #050608;
+    --ok: #50fa7b; --fail: #f7768e;
+    --font: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    --radius: 0;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font); padding: 14px; }
+  .dag { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; overflow: auto; }
+  .empty { color: var(--muted); padding: 20px 0; }
+
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .head h1 { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; word-break: break-all; }
+  .badge { font-size: 11px; border: 1px solid var(--line); padding: 0 6px; flex-shrink: 0; }
+  .badge.ok { color: var(--ok); border-color: var(--ok); }
+  .badge.warn { color: var(--fail); border-color: var(--fail); }
+
+  .canvas { position: relative; }
+  svg.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  .edge { fill: none; stroke: var(--muted); stroke-width: 1.25; opacity: .75; }
+  .edge.hl { stroke: var(--accent); stroke-width: 2; opacity: 1; }
+  .arrow { fill: var(--muted); }
+
+  .card { position: absolute; left: 0; top: 0; min-width: 180px; max-width: 360px;
+          background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); }
+  .card.unbound { border-color: var(--fail); }
+  .card.hl { border-color: var(--accent); }
+  .card-head { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px;
+               background: var(--head); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .card-head .no { color: var(--muted); }
+  .card-head .name { font-weight: 700; }
+  .row { display: flex; align-items: center; gap: 6px; padding: 3px 8px; white-space: nowrap; }
+  .row + .row { border-top: 1px dashed var(--line); }
+  .key { color: var(--muted); }
+  .val { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .slot.unbound .key, .slot.unbound .dot { color: var(--fail); }
+  .dot { color: var(--ok); }
+  select { font: inherit; font-size: 12px; color: var(--ink); background: var(--card);
+           border: 1px solid var(--line); border-radius: var(--radius); padding: 1px 4px; max-width: 220px; }
+  select:focus { outline: 1px solid var(--accent); }
+  select:disabled { opacity: .5; }
+  option { background: var(--card); color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="dag" id="root"><div class="empty">no model</div></div>
+<script id="model-data" type="application/json">/*__MODEL__*/null</script>
+<script src="dagre.min.js"></script>
+<script src="dag.js"></script>
+</body>
+</html>
