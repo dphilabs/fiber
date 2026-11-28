@@ -15,7 +15,7 @@ import fiber.llm.compat.secret.redact as _redact_mod
 
 import fiber.studio.console.ui.kit as kit
 from fiber.studio.console.ui.kit import ModalTemplate, StudioTab
-from fiber.studio.console.modal.guide import GuideModal
+from fiber.studio.console.ui.modal.guide import GuideModal
 from fiber.studio.console.tab.mcp import HitlModal, QrModal, McpGatewayTab
 from fiber.studio.console.tab.vcr import VcrTab
 from fiber.studio.console.tab.metering import MeteringTab

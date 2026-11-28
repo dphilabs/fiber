@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="doc">
+<head>
+<meta charset="utf-8">
+<title>runbook viewer</title>
+<!-- fiber.studio.runbook.viewer · Doc viewer: view model JSON -> HTML. Standalone; console embeds it in an iframe.
+     Script: doc.js (inlined into the iframe srcdoc by the Python wrapper).
+     Entry: window.__VIEWER__ = { render, patch, applyEvent, setTheme, report }.
+     Channel: postMessage({type: "model"|"patch"|"event"|"theme", seq, payload}). -->
+<style>
+  :root, [data-theme="doc"] {
+    --bg: #f1f5f9; --card: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #cbd5e1;
+    --accent: #2563eb; --soft: #eff6ff; --head: #f8fafc;
+    --ok: #16a34a; --fail: #dc2626; --run: #2563eb; --wait: #64748b; --dry: #d97706;
+    --font: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
+    --radius: 6px;
+  }
+  [data-theme="tui"] {
+    --bg: #090a0f; --card: #0d0f17; --ink: #d8dee9; --muted: #6c7689; --line: #262b3d;
+    --accent: #7dcfff; --soft: #050608; --head: #050608;
+    --ok: #50fa7b; --fail: #f7768e; --run: #7dcfff; --wait: #6c7689; --dry: #e0af68;
+    --font: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    --radius: 0;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font); padding: 14px; }
+  .doc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  h1 { font-size: 15px; font-weight: 700; margin-bottom: 8px; word-break: break-all; }
+  .stages { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 11px; margin-bottom: 12px; color: var(--muted); }
+  .stages .done { color: var(--ok); }
+  .stages .cur { color: var(--accent); font-weight: 700; }
+  .stages .sep { opacity: 0.55; font-size: 9px; }
+  .block { margin-top: 12px; break-inside: avoid; }
+  .block-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .para { color: var(--ink); white-space: pre-line; }
+  .callout { padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--soft); font-weight: 600; word-break: break-word; }
+  .callout.t-ok { border-color: var(--ok); color: var(--ok); }
+  .callout.t-fail { border-color: var(--fail); color: var(--fail); }
+  .callout.t-dry { border-color: var(--dry); color: var(--dry); }
+  .callout.t-none, .callout.t-wait { border-color: var(--wait); color: var(--muted); }
+  .table-wrap { width: 100%; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); background: var(--head); border-bottom: 1px solid var(--line); padding: 4px 8px; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--line); padding: 4px 8px; vertical-align: top; word-break: break-word; }
+  td.empty-cell { color: var(--muted); text-align: center; padding: 8px; }
+  ol.flow, ol.timeline { list-style: none; }
+  ol.flow li, ol.timeline li { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .num { color: var(--muted); width: 22px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .label { font-weight: 700; min-width: 150px; flex-shrink: 0; }
+  .detail, .note { color: var(--muted); flex: 1; min-width: 0; word-break: break-word; }
+  .st { font-size: 11px; min-width: 48px; flex-shrink: 0; }
+  .st-ok { color: var(--ok); } .st-fail { color: var(--fail); } .st-run { color: var(--run); }
+  .st-wait, .st-none { color: var(--wait); } .st-dry { color: var(--dry); }
+  .tag { font-size: 11px; border: 1px solid var(--line); padding: 0 5px; color: var(--accent); flex-shrink: 0; }
+  pre.code {
+    background: var(--soft); border: 1px solid var(--line); padding: 8px 10px;
+    font: 12px/1.5 "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .compare > div { border: 1px solid var(--line); background: var(--soft); padding: 8px 10px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+  .compare b { display: block; margin-bottom: 4px; color: var(--accent); }
+  .empty { color: var(--muted); padding: 20px 0; }
+  @page { margin: 12mm; }
+  @media print {
+    :root, [data-theme="tui"], [data-theme="doc"] {
+      --bg: #ffffff; --card: #ffffff; --ink: #0f172a; --muted: #475569; --line: #cbd5e1;
+      --accent: #1d4ed8; --soft: #f8fafc; --head: #f1f5f9;
+      --ok: #15803d; --fail: #b91c1c; --run: #1d4ed8; --wait: #64748b; --dry: #b45309;
+    }
+    body { background: #ffffff; padding: 0; }
+    .doc { border: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="doc" id="root"><div class="empty">no model</div></div>
+<script id="model-data" type="application/json">/*__MODEL__*/null</script>
+<script src="doc.js"></script>
+</body>
+</html>

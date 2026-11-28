@@ -169,13 +169,13 @@ def run_daemon(
 def run_console(
     port: Annotated[int, typer.Option("--port", "-p", help="Port for Control Studio UI")] = CONSOLE_PORT,
     auto_daemon: Annotated[bool, typer.Option("--auto-daemon/--no-auto-daemon", help="Auto-spawn local daemon (:8356) if offline")] = True,
-    reflexor: Annotated[bool, typer.Option("--reflexor", help="Also show Reflexor flow tabs")] = False,
+    runbook: Annotated[bool, typer.Option("--runbook", help="Also show runbook flow tabs")] = False,
     env_file: EnvFileOpt = None,
 ):
     """Launches Fiber Control Studio (:8357) and ensures the local gateway daemon (:8356) is active."""
     _load_env(env_file)
     from fiber.studio.console.app import launch_console
-    launch_console(port=port, auto_daemon=auto_daemon, env_file=env_file, reflexor=reflexor)
+    launch_console(port=port, auto_daemon=auto_daemon, env_file=env_file, runbook=runbook)
 
 
 @app.command("connect")

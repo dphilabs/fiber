@@ -1,19 +1,4 @@
 # fiber.studio.console.ui.kit
-"""Console UI facade: the only module tabs/app import (`import ...ui.kit as kit`).
-
-Layers (import direction is one-way):
-    kit (facade + shell templates) -> component.layout -> component.widget -> theme
-
-Where new code goes:
-    single element .............. component/widget.py
-    container / pane / chart .... component/layout.py
-    tab / modal / page shell .... this file
-    colors / CSS / text glyphs .. theme.py
-    used by one tab only ........ a private _helper inside that tab
-
-The re-export block below is the public API. Add a name here only when it is used
-in 3+ places across 2+ tabs; never import component.* from tabs directly.
-"""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -130,6 +115,9 @@ class ConsoleTemplate:
     def build_view(self) -> None:
         apply_webtui_theme()
         ui.query("body").classes("bg-[#090a0f] text-[#d8dee9] select-none")
+        # Viewport-filling shell: tab panels take the height left by header, tab bars and drawer (theme.py).
+        ui.query(".q-page-container").classes("tui-shell-container")
+        ui.query(".q-page").classes("tui-shell")
         ui.query(".nicegui-content").classes("p-0 gap-0")
 
         for modal in self.modals:
@@ -155,7 +143,7 @@ class ConsoleTemplate:
                 with (
                     ui.tab_panels(layer_bar, value=layer_handles[0], on_change=lambda _: trigger_viewport_resize())
                     .props("keep-alive animated=false")
-                    .classes("w-full p-0")
+                    .classes("w-full p-0 tui-fill")
                 ):
                     for handle, layer_tabs in zip(layer_handles, layers.values()):
                         with ui.tab_panel(handle).classes("p-0 gap-0"):
@@ -180,7 +168,7 @@ class ConsoleTemplate:
         with (
             ui.tab_panels(tab_bar, value=tab_handles[0], on_change=lambda _: trigger_viewport_resize())
             .props("keep-alive animated=false")
-            .classes("w-full bg-[#090a0f] p-3")
+            .classes("w-full bg-[#090a0f] p-3 tui-fill")
         ):
             for tab_obj, handle in zip(tabs, tab_handles):
                 with ui.tab_panel(handle).classes("p-0"):

@@ -28,10 +28,10 @@ from fiber.studio.console.tab.mcp import McpGatewayTab, HitlModal, QrModal
 from fiber.studio.console.tab.guardrail import LLMGuardrailTab
 from fiber.studio.console.tab.metering import MeteringTab
 from fiber.studio.console.tab.vcr import VcrTab
-from fiber.studio.console.modal.hitl import HitlSettingsModal
+from fiber.studio.console.ui.modal.hitl import HitlSettingsModal
 
-from fiber.studio.console.modal.guide import GuideModal
-from fiber.studio.console.modal.sim import HitlSimulatorModal
+from fiber.studio.console.ui.modal.guide import GuideModal
+from fiber.studio.console.ui.modal.sim import HitlSimulatorModal
 import fiber.studio.console.observer.plane as plane
 import fiber.studio.console.ui.diag as diag
 import fiber.studio.console.ui.header as header
@@ -178,28 +178,44 @@ def _on_tick(tabs: Sequence[StudioTab]) -> None:
     except Exception as exc:
         diag.exception("100ms tick flush error", exc=exc)
 
-def _build_reflexor_tabs() -> list[StudioTab]:
-    try:
-        mod = importlib.import_module("fiber.studio.console.tab.reflex")
-    except ImportError as exc:
-        diag.info("Reflexor tabs not available", reason=str(exc))
-        return []
-    return list(mod.build_tabs())
+def build_runbook_tabs() -> list[StudioTab]:
+    from fiber.studio.console.runbook.catalog import RunbookCatalogTab
+    from fiber.studio.console.runbook.draft import RunbookDraftTab
 
+    draft_tab: RunbookDraftTab
+    cat_tab = RunbookCatalogTab(on_edit_draft=lambda f, v: draft_tab.load_external(f, v))
+    draft_tab = RunbookDraftTab(on_state_mutated=cat_tab.refresh_state)
+    return [cat_tab, draft_tab]
 
-def build_tabs(*, reflexor: bool = False) -> list[StudioTab]:
+# def build_runbook_tabs() -> list[StudioTab]:
+#     from fiber.studio.console.runbook.catalog import RunbookCatalogTab
+#     from fiber.studio.console.runbook.draft import RunbookDraftTab
+#     from fiber.studio.console.runbook.trigger import RunbookTriggerTab
+
+#     trig_tab: RunbookTriggerTab
+#     draft_tab: RunbookDraftTab
+#     cat_tab = RunbookCatalogTab(
+#         on_edit_draft=lambda f, v: draft_tab.load_external(f, v),
+#         on_open_trigger=lambda f: trig_tab.focus_flow(f),
+#         on_state_mutated=lambda: trig_tab.refresh_state(),
+#     )
+#     trig_tab = RunbookTriggerTab(on_state_mutated=cat_tab.refresh_state)
+#     draft_tab = RunbookDraftTab(on_state_mutated=lambda: (cat_tab.refresh_state(), trig_tab.refresh_state()))
+#     return [cat_tab, trig_tab, draft_tab]
+
+def build_tabs(*, runbook: bool = False) -> list[StudioTab]:
     tabs: list[StudioTab] = [McpGatewayTab(), LLMGuardrailTab(), VcrTab(), MeteringTab()]
-    if reflexor:
-        tabs += _build_reflexor_tabs()
+    if runbook:
+        tabs += build_runbook_tabs()
     return tabs
 
 def build_modals() -> list[ModalTemplate]:
     # HitlSettingsModal last: its tab reuses dialogs mounted above (refs.hitl_sim_dialog).
     return [HitlModal(), QrModal(), GuideModal(), HitlSimulatorModal(), HitlSettingsModal()]
 
-def build_console_shell(*, reflexor: bool = False) -> ConsoleTemplate:
+def build_console_shell(*, runbook: bool = False) -> ConsoleTemplate:
     shell = ConsoleTemplate(
-        tabs=build_tabs(reflexor=reflexor),
+        tabs=build_tabs(runbook=runbook),
         modals=build_modals(),
         header_builder=header.build_header,
         drawer_builder=_build_drawer,
@@ -243,7 +259,7 @@ def launch_console(
     port: int = 8357,
     auto_daemon: bool = True,
     env_file: Optional[str] = None,
-    reflexor: bool = False,
+    runbook: bool = False,
 ) -> None:
     if os.environ.get("FIBER_CONSOLE_ACTIVE") == "1":
         return
@@ -263,7 +279,7 @@ def launch_console(
     loaded = load_or_init_state()
     diag.info("Console state initialized", path=str(STATE_FILE_PATH), loaded_existing=loaded)
 
-    build_console_shell(reflexor=reflexor)
+    build_console_shell(runbook=runbook)
     app.on_exception(lambda exc: diag.exception("Unhandled NiceGUI server exception", exc=exc))
     app.on_startup(lambda: _on_startup(url))
     app.on_shutdown(_on_shutdown)

@@ -6,7 +6,7 @@ from xphi.arch.contract.registry.asl import default_asl_registry
 from fiber.studio.harness.mcp.worker import E2EWorkerManager
 from fiber.studio.cli.e2e.config import E2EConfig, Phase, TestResult, get_free_port
 from fiber.studio.cli.e2e.pipeline import BasePipeline, log
-from fiber.gateway.bridge.reflex.polyglot import PolyglotExecutionBridge
+from fiber.node.reflex.bridge.polyglot import PolyglotExecutionBridge
 
 from xphi.watcher.reflex.traverser import GraphTraverser, TraversalResult
 from xphi.node.runtime.wasm.broker import WasmBroker

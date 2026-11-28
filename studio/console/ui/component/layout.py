@@ -113,7 +113,7 @@ def split_studio(
     *,
     ratio: int = 42,
 ) -> ui.splitter:
-    """Two-pane split view with legend-bordered panes.
+    """Two-pane split view with legend-bordered panes; fills the tab panel height.
 
     q-splitter panels are `overflow: auto`, so the legend box keeps a top margin and
     never clips; scrolling lives in an inner column whose top padding leaves room for
@@ -121,7 +121,7 @@ def split_studio(
     """
     box_cls = "tui-legend-box mt-2 pt-3 px-3 pb-3 gap-0 w-full min-h-0"
     box_style = "height: calc(100% - 0.5rem)"
-    with ui.splitter(value=ratio).classes("w-full h-[450px] bg-[#090a0f]") as sp:
+    with ui.splitter(value=ratio).classes("w-full flex-1 min-h-0 bg-[#090a0f]") as sp:
         with sp.before:
             with ui.column().classes(box_cls).style(box_style):
                 ui.label(f" {strip_emoji(left_title)} ").classes("tui-legend-title")
@@ -137,7 +137,7 @@ def split_studio(
 @contextmanager
 def dual_drawer() -> Iterator[tuple[ui.column, ui.column]]:
     """Bottom dual-terminal drawer; callers add `.tui-legend-title` / `.tui-legend-actions`."""
-    with ui.row().classes("w-full px-3 pt-2 pb-3 gap-2.5 no-wrap"):
+    with ui.row().classes("w-full px-3 pt-2 pb-3 gap-2.5 no-wrap shrink-0"):
         left_col = ui.column().classes("w-1/2 tui-legend-box tui-legend-box-black pt-4 px-2.5 pb-2 gap-1")
         right_col = ui.column().classes("w-1/2 tui-legend-box tui-legend-box-black pt-4 px-2.5 pb-2 gap-1")
         yield left_col, right_col
