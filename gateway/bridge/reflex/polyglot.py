@@ -6,6 +6,7 @@ import inspect
 import json
 import shlex
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import uuid
 import httpx
 
 from fiber.gateway.bridge.emitter import get_emitter
@@ -22,15 +23,27 @@ from xphi.arch.reflex.fsm import (
 )
 from xphi.watcher.reflex.controller import BranchController, BranchCursor
 
-log = get_emitter("reflex.bridge.polyglot", phase="POLYGLOT_BRIDGE")
+log = get_emitter("reflex.polyglot", phase="REPLEX_POLYGLOT")
 
 LocalCallable = Callable[..., Any]
+
+_INTERNAL_FLOW_KEYS = frozenset({
+    "_hitl_yield",
+    "_hitl_approved",
+    "_hitl_ticket",
+    "_idem_key",
+    "_parked_state",
+    "_stream_id",
+    "_fuel",
+    "_tick",
+})
+
 
 class PolyglotExecutionBridge(FiberExecutionBridge):
     """
     Unified L3 Actuator Bridge supporting two sibling control planes:
-    - Async Ledger/FSM Plane (`BranchController` / `GraphTraverser`) via `await bridge(cursor, node_spec, task_io)`
-    - Sync Workflow Plane (`FlowEngine` / `WorkflowViewport`) via `bridge.dispatch_sync(scheme, target, payload)`
+- Async Ledger/FSM Plane (`BranchController` / `GraphTraverser`) via `await bridge(cursor, node_spec, task_io)`
+- Sync Workflow Plane (`FlowEngine` / `WorkflowViewport`) via `bridge.dispatch_sync(scheme, target, payload)`
     """
     def __init__(
         self,
@@ -86,17 +99,23 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
     # Entrypoint 2: Sync Workflow Control Plane (`FlowEngine` / `Viewport`)
     def dispatch_sync(self, scheme: str, target: str, payload: Dict[str, Any]) -> Dict[str, Any] | None:
         """Synchronous `DispatcherFn` adapter for `FlowEngine`."""
+        clean_params = {k: v for k, v in payload.items() if k not in _INTERNAL_FLOW_KEYS}
+
         # Fast-path: local `pass`, `exec`, and file-backed `py` units go directly through `UnitsLoader`
         if scheme in ("pass", "exec"):
-            return self.loader.dispatch(scheme, target, payload)
+            return self.loader.dispatch(scheme, target, clean_params)
         if scheme == "py":
             mod_part, sep, _ = target.rpartition(":")
             if sep and (mod_part.endswith(".py") or "/" in mod_part or not self._fn_registry):
-                return self.loader.dispatch(scheme, target, payload)
+                return self.loader.dispatch(scheme, target, clean_params)
+
+        stream_id = str(payload.get("_stream_id") or f"flow_{uuid.uuid4().hex[:12]}")
+        hitl_ticket = str(payload.get("_hitl_ticket") or "")
+        hitl_approved = bool(payload.get("_hitl_approved"))
 
         async def _invoke_on_fresh_client() -> Dict[str, Any] | None:
             cursor = BranchCursor(
-                stream_id=str(payload.get("_stream_id", "flow_engine")),
+                stream_id=stream_id,
                 pointer=PtaPointer(tx_hash="flow_sync", output_index=0),
                 active_blob_hash="flow_memory",
                 curr_node=target,
@@ -106,15 +125,22 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
                 tick=int(payload.get("_tick", 1)),
             )
             raw_uri = target if "://" in target else f"{scheme}://{target}"
+            resume_headers: Dict[str, str] = {}
+            if hitl_ticket:
+                resume_headers["X-Fiber-HITL-Ticket"] = hitl_ticket
+            if hitl_approved:
+                resume_headers["X-Fiber-HITL-Approved"] = "1"
+
             task_io: Dict[str, Any] = {
                 "resource_uri": raw_uri,
-                "call_params": dict(payload),
+                "call_params": clean_params,
                 "projection": None,  # `FlowEngine` applies its own projection after dispatch
+                **({"extras": {"headers": resume_headers}} if resume_headers else {}),
             }
 
             # Bind a fresh AsyncClient to the current event loop to prevent closed-loop errors across sync steps
             prev_client = self._http_client
-            self._http_client = httpx.AsyncClient(timeout=self._http_timeout)
+            self._http_client = httpx.AsyncClient(timeout=self._http_timeout, headers=resume_headers)
             try:
                 if scheme == "llm":
                     meta_updates, _, _ = await self._execute_llm_node(cursor, task_io)
@@ -233,8 +259,15 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
                 hitl_data = {"status": 202, "raw": resp.text}
             if not isinstance(hitl_data, dict):
                 hitl_data = {"data": hitl_data}
+            ticket = str(
+                hitl_data.get("_hitl_ticket")
+                or hitl_data.get("ticket_id")
+                or hitl_data.get("handle_id")
+                or resp.headers.get("X-Fiber-HITL-Ticket", "")
+            )
             hitl_data["_hitl_yield"] = True
-            hitl_data.setdefault("ticket_id", resp.headers.get("X-Fiber-HITL-Ticket", ""))
+            hitl_data["_hitl_ticket"] = ticket
+            hitl_data.setdefault("ticket_id", ticket)
             return hitl_data
 
         resp.raise_for_status()
@@ -366,12 +399,11 @@ class PolyglotExecutionBridge(FiberExecutionBridge):
 
         if payload_dict.get("_hitl_yield") is True:
             ticket_id = str(payload_dict.get("_hitl_ticket") or payload_dict.get("ticket_id") or "")
+            ret: Dict[str, Any] = {"_hitl_yield": True, "_hitl_ticket": ticket_id}
+            if "_idem_key" in payload_dict:
+                ret["_idem_key"] = payload_dict["_idem_key"]
             log.info(f"[PolyglotBridge:{cursor.stream_id}] Pre-Flight HITL Yield triggered at '{cursor.curr_node}'.")
-            return (
-                {"_hitl_yield": True, "_hitl_ticket": ticket_id},
-                payload_dict,
-                0,
-            )
+            return ret, payload_dict, 0
 
         meta_updates, offload_payload = apply_projection(
             raw_output=payload_dict,

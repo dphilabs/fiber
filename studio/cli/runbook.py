@@ -1,5 +1,7 @@
 # fiber.studio.cli.runbook
 """
+CLI pipeline for Reflexor repository indexing, static verification, and context export.
+
 Usage:
   python -m fiber.studio.cli.runbook                     # [sync]    index gen + static wiring check
   python -m fiber.studio.cli.runbook check               # [check]   verify index sync & adapter rules (CI)
@@ -19,13 +21,14 @@ import sys
 import tomllib
 from typing import Any
 
+from xphi.arch.contract.registry.flow import parse_flow_dsl, parse_unit_dsl
 from xphi.arch.reflex.script import PEP723_MARKER, has_pep723
 
-from fiber.studio.runbook.unit import loader as unit_loader_mod
-from fiber.studio.runbook.unit.indexer import UnitsIndexer
-from fiber.studio.runbook.unit.loader import UnitLoaderError, UnitsLoader
 from fiber.studio.harness.reflex.blueprint import BlueprintAnalyzer
 from fiber.studio.harness.reflex.context import ContextError, collect_flow_markdown
+from fiber.studio.runbook.unit import loader as unit_loader_mod
+from fiber.studio.runbook.unit.indexer import UnitsIndexer, expand_entries, is_flow_meta
+from fiber.studio.runbook.unit.loader import UnitLoaderError, UnitsLoader
 
 UNIT_TEMPLATE_DIR = Path(unit_loader_mod.__file__).resolve().parent / "templates"
 
@@ -33,33 +36,45 @@ _FORBIDDEN_ADAPTER_ROOTS = frozenset({"reflexor", "theoria"})
 _ALLOWED_ADAPTER_PREFIX = "reflexor.units.adapters"
 _SHARED_ADAPTER_DOMAINS = frozenset({"auth"})
 
-# 모든 CLI 서브커맨드를 단일 스텝 파이프라인으로 통합 정의
 COMMANDS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "sync":    ("인덱스 갱신 + 전체 플로우 정적 와이어링 리포트", ("index_gen", "static_check")),
-    "check":   ("index.json 정합성 및 어댑터 아키텍처 경계 무결성 검사", ("repo_check",)),
-    "verify":  ("인덱스 갱신 + 시나리오 트레이스 (dry-run / --hybrid)", ("index_gen", "trace")),
-    "pack":    ("인덱스 갱신 + 대상 플로우 LLM 컨텍스트(stdout) 출력", ("index_gen", "emit_context")),
-    "inspect": ("플로우 목록 또는 대상 플로우 ASL 바인딩 조회", ("inspect",)),
-    "compass": ("엔진 아키텍처(L1~L5) 및 커버리지 점검 (--suite 지원)", ("arch_compass",)),
-    "init":    ("신규 reflexor 저장소 초기화 및 인덱스 생성", ("repo_init", "index_gen")),
-    "new":     ("신규 유닛/어댑터 스캐폴딩 생성 후 인덱스 갱신", ("scaffold_unit", "index_gen")),
-    "build":   ("인덱스 갱신 후 isolated 유닛 실행 환경 빌드", ("index_gen", "env_build")),
-    "fix":     ("저장소 기본 디렉터리 레이아웃 보정", ("repo_fix",)),
-    "clean":   ("유닛 로더 로컬 실행 캐시 정리", ("repo_clean",)),
+    "sync":    ("Refresh index.json and print static wiring report", ("index_gen", "static_check")),
+    "check":   ("Verify index.json sync and adapter boundary rules", ("repo_check",)),
+    "verify":  ("Refresh index and run scenario trace (dry-run / --hybrid)", ("index_gen", "trace")),
+    "pack":    ("Refresh index and emit flow LLM context to stdout", ("index_gen", "emit_context")),
+    "inspect": ("List flows or inspect compiled ASL node bindings", ("inspect",)),
+    "compass": ("Evaluate L1-L5 engine architecture and suite coverage", ("arch_compass",)),
+    "init":    ("Initialize reflexor repository layout and index", ("repo_init", "index_gen")),
+    "new":     ("Scaffold a unit/adapter template and refresh index", ("scaffold_unit", "index_gen")),
+    "build":   ("Refresh index and build isolated PEP 723 environments", ("index_gen", "env_build")),
+    "fix":     ("Repair repository directory layout", ("repo_fix",)),
+    "clean":   ("Clean local unit loader execution caches", ("repo_clean",)),
 }
 
 
 def _note(msg: str) -> None:
-    """진행 로그 및 경고를 stderr로 출력해 `pack`/`verify`의 stdout 파이프 오염 방지."""
+    """Write status and diagnostics to stderr so stdout stays clean for piping."""
     print(msg, file=sys.stderr)
 
 
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _meta_loc(meta: Any, fallback: str) -> str:
+    if isinstance(meta, dict):
+        return str(meta.get("path") or meta.get("source") or fallback)
+    return fallback
+
+
 # =====================================================================
-# 1. Adapter & Repository Integrity Checks (순수 검증 함수)
+# 1. Adapter, Contract & Repository Integrity Checks
 # =====================================================================
 
 def _check_pyproject_adapters(pyproject: Path) -> str | None:
-    """`pyproject.toml`이 유효한 TOML이며 패키지/wheel 설정이 `reflexor`/`adapters`를 포함하는지 검증."""
+    """Ensure `pyproject.toml` is valid and packages `reflexor.units.adapters`."""
     if not pyproject.is_file():
         return "[PKG-ADAPTER] Missing `pyproject.toml` at repo root (required to import `reflexor.units.adapters.*`)."
     try:
@@ -74,7 +89,7 @@ def _check_pyproject_adapters(pyproject: Path) -> str | None:
 
 
 def _resolve_import_targets(rel_py: str, node: ast.AST) -> list[tuple[int, str]]:
-    """절대 import 및 상대 import(`from .. import x`)를 모두 정규 모듈 경로로 변환."""
+    """Normalize absolute and relative imports into canonical dotted module paths."""
     if isinstance(node, ast.Import):
         return [(node.lineno, alias.name) for alias in node.names]
     if not isinstance(node, ast.ImportFrom):
@@ -104,7 +119,7 @@ def _is_forbidden_adapter_import(
     *,
     strict_cross_domain: bool = False,
 ) -> str | None:
-    """위반 시 사유 문자열을 반환하고, 허용된 import이면 None 반환."""
+    """Return violation reason if `target_mod` breaks adapter isolation rules."""
     if target_mod == "<escaped-repo-root>":
         return "relative import escapes repository root"
 
@@ -128,7 +143,7 @@ def _validate_adapters(
     *,
     strict_cross_domain: bool = False,
 ) -> list[str]:
-    """`units/adapters/` 무결성 검사: 패키징, 문법, PEP 723 금지, @unit 혼입 금지, 아키텍처 경계 검증."""
+    """Audit `units/adapters/`: packaging, syntax, no PEP 723, no @unit/@flow, and import boundaries."""
     errors: list[str] = []
     if not adapters_map:
         return errors
@@ -179,9 +194,54 @@ def _validate_adapters(
     return errors
 
 
+def _partition_valid_contracts(
+    units_map: dict[str, Any],
+    flows_map: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """Parse all unit and flow DSL entries; separate valid entries from `[BAD-UNIT]`/`[BAD-FLOW]` errors."""
+    valid_units: dict[str, Any] = {}
+    valid_flows: dict[str, Any] = {}
+    errors: list[str] = []
+
+    for u_name, u_meta in sorted(units_map.items()):
+        if not is_flow_meta(u_meta):
+            valid_units[u_name] = u_meta
+            continue
+        src_loc = _meta_loc(u_meta, "units")
+        bad = False
+        for key, spec, desc in expand_entries(u_name, u_meta):
+            try:
+                parse_unit_dsl(key, spec, desc)
+            except ValueError as exc:
+                errors.append(f"[BAD-UNIT] '{key}' ({src_loc}): {exc}")
+                bad = True
+        if not bad:
+            valid_units[u_name] = u_meta
+
+    for f_name, f_meta in sorted(flows_map.items()):
+        if not is_flow_meta(f_meta):
+            continue
+        src_loc = _meta_loc(f_meta, "flow/*.json")
+        bad = False
+        for key, spec, desc in expand_entries(f_name, f_meta):
+            try:
+                parse_flow_dsl(key, spec, desc)
+            except ValueError as exc:
+                errors.append(f"[BAD-FLOW] '{key}' ({src_loc}): {exc}")
+                bad = True
+        if not bad:
+            valid_flows[f_name] = f_meta
+
+    return valid_units, valid_flows, errors
+
+
 def _audit_index_sync(repo_root: Path, live_index: dict[str, Any], *, verify_saved_file: bool) -> list[str]:
-    adapters_meta = live_index.get("adapters", {})
-    issues = _validate_adapters(repo_root, adapters_meta)
+    issues = _validate_adapters(repo_root, live_index.get("adapters", {}))
+    _, _, dsl_errors = _partition_valid_contracts(
+        live_index.get("units", {}),
+        live_index.get("flows", {}),
+    )
+    issues.extend(dsl_errors)
 
     if verify_saved_file:
         idx_path = repo_root / UnitsIndexer.INDEX_FILENAME
@@ -196,11 +256,11 @@ def _audit_index_sync(repo_root: Path, live_index: dict[str, Any], *, verify_sav
 
 
 # =====================================================================
-# 2. Unified CLI Execution Session (UnitsManager + Pipeline Runner 통합)
+# 2. Unified CLI Execution Session
 # =====================================================================
 
 class RunbookSession:
-    """저장소 유닛 관리(Loader/Indexer)와 플로우 블루프린트 분석을 조율하는 통합 세션."""
+    """Coordinates repository unit indexing, environment builds, and blueprint analysis."""
 
     def __init__(
         self,
@@ -220,6 +280,7 @@ class RunbookSession:
         self.spec_arg = spec_arg
         self._analyzer: BlueprintAnalyzer | None = None
         self._last_index: dict[str, Any] | None = None
+        self._had_dsl_errors = False
 
     @property
     def analyzer(self) -> BlueprintAnalyzer:
@@ -253,16 +314,28 @@ class RunbookSession:
         return 0
 
     def step_index_gen(self, _args: argparse.Namespace) -> int:
-        data = self.compose_index()
+        raw_data = self.compose_index()
+        valid_units, valid_flows, dsl_errors = _partition_valid_contracts(
+            raw_data.get("units", {}),
+            raw_data.get("flows", {}),
+        )
+        self._had_dsl_errors = bool(dsl_errors)
+
+        # Quarantine invalid DSL entries from index.json to keep console/analyzers bootable
+        clean_data = {**raw_data, "units": valid_units, "flows": valid_flows}
         idx_path = self.root / UnitsIndexer.INDEX_FILENAME
-        idx_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        _atomic_write_json(idx_path, clean_data)
+
+        skipped_note = f", quarantined {len(dsl_errors)} invalid DSL(s)" if dsl_errors else ""
         _note(
             f"[GEN] Wrote catalog index -> {idx_path} "
-            f"({len(data.get('units', {}))} units, {len(data.get('adapters', {}))} adapters, {len(data.get('flows', {}))} flows)"
+            f"({len(valid_units)} units, {len(clean_data.get('adapters', {}))} adapters, "
+            f"{len(valid_flows)} flows{skipped_note})"
         )
-        for warn in _audit_index_sync(self.root, data, verify_saved_file=False):
-            _note(f"  {warn}")
-        self._analyzer = None  # 갱신된 인덱스를 후속 스텝이 다시 읽도록 캐시 초기화
+        for err in [*_validate_adapters(self.root, clean_data.get("adapters", {})), *dsl_errors]:
+            _note(f"  {err}")
+
+        self._analyzer = None  # Reset analyzer cache so downstream steps read the updated index
         return 0
 
     def step_repo_check(self, _args: argparse.Namespace) -> int:
@@ -291,7 +364,7 @@ class RunbookSession:
 
     def step_static_check(self, _args: argparse.Namespace) -> int:
         print(self.analyzer.evaluate_readiness())
-        return 0
+        return 1 if self._had_dsl_errors else 0
 
     def step_trace(self, args: argparse.Namespace) -> int:
         targets = self.analyzer.resolve_targets(args.target)
@@ -332,7 +405,7 @@ class RunbookSession:
             rc = handler(args)
             if rc != 0:
                 return rc
-        return 0
+        return 1 if self._had_dsl_errors else 0
 
 
 # =====================================================================
@@ -378,6 +451,7 @@ def main(argv: list[str] | None = None) -> int:
     except (ContextError, UnitLoaderError, KeyError, ValueError, RuntimeError) as exc:
         _note(f"[FLOW:ERR] {exc}")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

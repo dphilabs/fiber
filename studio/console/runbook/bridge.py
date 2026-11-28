@@ -3,27 +3,44 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import inspect
 import json
 from pathlib import Path
 import time
 from typing import Any
 
-from xphi.arch.reflex.flow import FlowContract, Shape
+from xphi.arch.reflex.flow import FlowContract, Shape, split_unit_ref
 from xphi.node.space.bind.resolver import resolve_path
 
-from fiber.studio.console.runbook import view
 from fiber.studio.console.runbook.ops import LiveTriggerOps, atomic_write_json, load_json
+from fiber.studio.console.runbook.view import (
+     build_draft_maps,
+    compile_diagnostics,
+    render_draft_model,
+    render_pinned_model,
+    render_run_model,
+    render_template_model,
+    short_val,
+    step_status,
+    strip_ui_prefix,
+    trace_to_events,
+)
 from fiber.studio.harness.reflex.context import FlowCatalog
 from fiber.studio.runbook.runtime.viewport import ViewportRuntime
+from fiber.studio.runbook.spec import (
+    PinnedRelease,
+    UNBOUND_TOKEN,
+    coerce_value_for_shape,
+    summarize_value_brief,
+)
 from fiber.studio.runbook.stepper import emit_flow_dsl
-from fiber.studio.runbook.store import PinnedRelease, ReleaseStudio
-
+from fiber.studio.runbook.store import ReleaseStudio
 
 class RunbookBridge:
     """Console Runbook Facade coordinating `FlowCatalog`, `ReleaseStudio` (Draft/Pin), and `LiveTriggerOps`."""
 
     def __init__(self, root_dir: Path | None = None) -> None:
-        base = (root_dir or (resolve_path("anchor") / "console_runbook")).resolve()
+        base = (root_dir or (resolve_path("anchor") / "runbook")).resolve()
         base.mkdir(parents=True, exist_ok=True)
         self._draft_file = base / "draft_work.json"
 
@@ -77,7 +94,7 @@ class RunbookBridge:
             return ""
         raw = json.dumps(
             {"flow": self._draft_flow, "dsl": emit_flow_dsl(fc), "cfg": fc.cfg_values, "modes": self._input_modes},
-            sort_keys=True, ensure_ascii=False, default=str,
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str,
         )
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -94,7 +111,7 @@ class RunbookBridge:
         fc = self._draft_contract()
         if fc is None:
             return {"flow": "", "version": 1, "nodes": [], "inputs": {}, "outputs": {}}
-        d, _ = view.build_draft_maps(self.studio.viewport.registry, fc, self._draft_ver, self._input_modes)
+        d, _ = build_draft_maps(self.studio.viewport.registry, fc, self._draft_ver, self._input_modes)
         return d
 
     # --- 1. Queries & Viewer Models --------------------------------------------
@@ -120,7 +137,11 @@ class RunbookBridge:
         return rows
 
     def list_catalog(self) -> list[dict[str, Any]]:
-        repo_map = {n: desc for n, _, desc in self.repo.flows()} if self.repo.enabled else {}
+        repo_map = (
+            {n: desc for n, _, desc in self.repo.flows()}
+            if self.repo.enabled
+            else {n: f.desc for n, f in self.studio.viewport.registry.flows.items()}
+        )
         active_map = {r["flow"]: r for r in self.list_active()}
         return [
             {
@@ -135,8 +156,8 @@ class RunbookBridge:
         ]
 
     def list_templates(self) -> list[dict[str, Any]]:
-        if self.repo.enabled:
-            return [{"name": n, "desc": desc} for n, _, desc in self.repo.flows()]
+        if self.repo.enabled and (tpls := self.repo.flows()):
+            return [{"name": n, "desc": desc} for n, _, desc in tpls]
         return [{"name": n, "desc": f.desc} for n, f in sorted(self.studio.viewport.registry.flows.items())]
 
     def list_samples(self, flow: str) -> list[str]:
@@ -152,7 +173,7 @@ class RunbookBridge:
         fc = self._draft_contract()
         if fc is None:
             return []
-        _, avail = view.build_draft_maps(self.studio.viewport.registry, fc, self._draft_ver, self._input_modes)
+        _, avail = build_draft_maps(self.studio.viewport.registry, fc, self._draft_ver, self._input_modes)
         return avail.get(step_no, [])
 
     def template_model(self, name: str) -> dict[str, Any]:
@@ -160,7 +181,7 @@ class RunbookBridge:
         if tpl is None and name in self.studio.viewport.registry.flows:
             fc = self.studio.viewport.registry.flows[name]
             tpl = (name, emit_flow_dsl(fc), fc.desc)
-        return view.render_template_model(name, tpl, self.repo)
+        return render_template_model(name, tpl, self.repo)
 
     def project(self, flow: str, version: int | None = None) -> dict[str, Any]:
         pinned_vers = self.list_versions(flow)
@@ -170,23 +191,21 @@ class RunbookBridge:
             shadow = self.studio.viewport._clone_registry()
             shadow.register_flow(rel.flow_name, rel.flow_dsl)
             runs = self.ops.list_runs(flow)
-            return view.render_pinned_model(
+            return render_pinned_model(
                 rel, shadow.flows[rel.flow_name],
                 stale=not self.studio.verify_pin_shas(rel),
                 published=flow in self.ops.live.session.published_flows,
                 last_events=runs[0].get("events") if runs else None,
             )
         d = self.draft
-        comp = view.compile_diagnostics(self.studio.viewport.registry, self._draft_flow, d)
+        comp = compile_diagnostics(self.studio.viewport.registry, self._draft_flow, d)
         orig = self.repo.flow(self.origin) if (self.origin and self.origin == flow) else None
-        return view.render_draft_model(d, comp, dirty=self.dirty, origin_tpl=orig)
+        return render_draft_model(d, comp, dirty=self.dirty, origin_tpl=orig)
 
     def run_model(self, flow: str, *, version: int | None = None, run_no: int | None = None) -> dict[str, Any]:
         vers = self.list_versions(flow)
         ver = version or (vers[-1] if vers else 1)
-        return view.render_run_model(flow, ver, self.ops.list_runs(flow), run_no=run_no)
-
-    # --- 2. Draft Editing, Dry-Run, Two-Phase Pin & Export ---------------------
+        return render_run_model(flow, ver, self.ops.list_runs(flow), run_no=run_no)
 
     def new_draft(self, *, from_template: str | None = None, from_version: int | None = None) -> dict[str, Any]:
         if from_template is not None:
@@ -237,10 +256,10 @@ class RunbookBridge:
         if fc is None or not (0 <= idx < len(fc.steps)):
             return
         step = fc.steps[idx]
-        pure = view.strip_ui_prefix(source)
+        pure = strip_ui_prefix(source)
         new_bind = dict(step.bindings)
         if not pure:
-            new_bind[key] = view.UNBOUND_TOKEN
+            new_bind[key] = UNBOUND_TOKEN
         elif pure == key:
             new_bind.pop(key, None)
         else:
@@ -252,57 +271,83 @@ class RunbookBridge:
     def patch(self, step_no: str, *, cfg: dict[str, Any]) -> None:
         fc = self._draft_contract()
         idx = int(step_no) - 1
-        if fc is not None and (0 <= idx < len(fc.steps)):
-            self.studio.viewport.patch_slot(self._draft_flow, fc.steps[idx].name, new_cfg=cfg, commit=True)
+        if fc is None or not (0 <= idx < len(fc.steps)):
+            return
+        sname = fc.steps[idx].name
+        reg = self.studio.viewport.registry
+        u_obj = reg.units.get(sname) or reg.units.get(split_unit_ref(sname)[0])
+        coerced = (
+            {k: coerce_value_for_shape(v, u_obj.cfg_shapes[k]) if k in u_obj.cfg_shapes else v for k, v in cfg.items()}
+            if u_obj is not None else dict(cfg)
+        )
+        self.studio.viewport.patch_slot(self._draft_flow, sname, new_cfg=coerced, commit=True)
 
     def configure_manifest(self, key: str, mode: str) -> None:
         self._input_modes[key] = mode
-        if self._draft_flow:
+        fc = self._draft_contract()
+        if self._draft_flow and fc is not None:
+            slot_cfg: dict[str, Any] = {"mode": mode}
+            if mode == "fixed":
+                slot_cfg["fixed_value"] = fc.in_defaults.get(key, "")
             try:
-                self.studio.configure_manifest(self._draft_flow, {"slots": {key: {"mode": mode}}})
+                self.studio.configure_manifest(self._draft_flow, {"slots": {key: slot_cfg}})
             except Exception:
                 pass
 
     def dryrun(self, sample: str, sources: dict[str, str]) -> dict[str, Any]:
         d = self.draft
-        comp = view.compile_diagnostics(self.studio.viewport.registry, self._draft_flow, d)
+        comp = compile_diagnostics(self.studio.viewport.registry, self._draft_flow, d)
         fc = self._draft_contract()
         seed_ctx = {**(fc.in_defaults if fc else {}), **dict(self.repo.samples(d["flow"]).get(sample) or {})}
+        final_ctx: dict[str, Any] = {}
+        step_inputs: dict[str, dict[str, str]] = {}
 
         if comp["ok"] and fc is not None:
             mode = "fixture" if (sources and all(m == "FIXTURE" for m in sources.values())) else "hybrid"
             try:
-                snap, final_ctx, _ = self.studio.simulator.simulate(self.studio.viewport, d["flow"], seed_ctx, mode=mode)
-                events = view.trace_to_events(d["nodes"], snap.trace, self.studio.simulator.last_step_summaries, sources)
-                out_rows = [[k, view.short_val(final_ctx.get(k, "-"))] for k in fc.out_keys]
+                snap, final_ctx, _ = self.studio.simulator.simulate(
+                    self.studio.viewport, d["flow"], seed_ctx, mode=mode, node_sources=sources or None
+                )
+                step_inputs = getattr(self.studio.simulator, "last_step_inputs", {})
+                events = trace_to_events(d["nodes"], snap.trace, self.studio.simulator.last_step_summaries, sources)
+                out_rows = [[k, short_val(final_ctx.get(k, "-"))] for k in fc.out_keys]
             except Exception as exc:
                 events = [{"node": "runtime", "status": "fail", "tag": "ERR", "dur": "", "note": str(exc)}]
                 out_rows = [[k, "-"] for k in d["outputs"]]
         else:
             events = [
-                {"node": f"{n['no']} {n['name']}", "status": view.step_status(n, comp),
+                {"node": f"{n['no']} {n['name']}", "status": step_status(n, comp),
                  "tag": sources.get(n["no"], "LIVE"), "dur": "", "note": "compile check"}
                 for n in d["nodes"]
             ]
             out_rows = [[k, "-"] for k in d["outputs"]]
 
-        last_n = d["nodes"][-1] if d["nodes"] else {"no": "00", "in": {}}
+        last_n = d["nodes"][-1] if d["nodes"] else {"no": "00", "step_name": "", "in": {}}
+        last_in_snap = step_inputs.get(last_n.get("step_name", ""), {})
+        bind_rows = [
+            [
+                k,
+                v or "(unbound)",
+                last_in_snap.get(k) or (summarize_value_brief(final_ctx[strip_ui_prefix(v)]) if strip_ui_prefix(v) in final_ctx else "-"),
+            ]
+            for k, v in last_n["in"].items()
+        ]
         blocks: list[dict[str, Any]] = [
             {"kind": "callout", "tone": "ok" if comp["ok"] else "fail",
              "text": "COMPILE OK · dry run finished" if comp["ok"] else "COMPILE FAIL · fix bindings before dry run"},
             {"kind": "timeline", "events": events},
             {"kind": "table", "title": f"node {last_n['no']} · binding resolution",
-             "headers": ["in", "source"], "rows": [[k, v or "(unbound)"] for k, v in last_n["in"].items()]},
+             "headers": ["in", "source", "value"], "rows": bind_rows},
             {"kind": "table", "title": "$out", "headers": ["key", "value"], "rows": out_rows},
         ]
         if seed_ctx:
             blocks.append({"kind": "table", "title": f"seed · {sample}", "headers": ["key", "value"],
-                           "rows": [[k, view.short_val(v)] for k, v in seed_ctx.items()]})
+                           "rows": [[k, short_val(v)] for k, v in seed_ctx.items()]})
         return {"flow": d["flow"], "version": d["version"], "stage": "dryrun",
                 "title": f"{d['flow']} · Draft v{d['version']} · dry run · {sample}", "blocks": blocks}
 
     def pin(self) -> dict[str, Any]:
-        comp = view.compile_diagnostics(self.studio.viewport.registry, self._draft_flow, self.draft)
+        comp = compile_diagnostics(self.studio.viewport.registry, self._draft_flow, self.draft)
         if not comp["ok"]:
             raise ValueError("; ".join(comp["errors"] or comp["unbound"] or comp["mismatch"]))
         snap = self.studio.viewport.project(self._draft_flow)
@@ -327,8 +372,8 @@ class RunbookBridge:
         step_names = tuple(n for s in fc.steps for n in (s.name, s.heal_target) if n)
         _, slots_ok, mile_ok = self.studio.manifests.inspect(fname, fc.in_reqs, valid_step_names=step_names)
         if not (slots_ok and mile_ok) and step_names:
-            slots = {k: {"shape": str(fc.in_shapes.get(k, Shape()))} for k in fc.in_reqs}
-            self.studio.configure_manifest(fname, {"slots": slots, "milestone_step": step_names[-1]})
+            slots = {k: {"mode": self._input_modes.get(k, "runtime")} for k in fc.in_reqs}
+            self.studio.configure_manifest(fname, {"slots": slots, "milestones": [step_names[-1]]})
 
         rel = self.studio.pin(fname).release
         self.ops.promote_release(rel, desc=fc.desc)
@@ -342,8 +387,6 @@ class RunbookBridge:
         pkg["auth_refs"] = sorted(self.studio.viewport.project(flow).required_auth) if flow in self.studio.viewport.registry.flows else []
         return (json.dumps(pkg, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
-    # --- 3. Live Operations Delegation -----------------------------------------
-
     def configure_trigger(self, flow: str, **spec: Any) -> None:
         self.ops.configure_trigger(flow, **spec)
 
@@ -353,12 +396,17 @@ class RunbookBridge:
     def list_runs(self, flow: str) -> list[dict[str, Any]]:
         return self.ops.list_runs(flow)
 
-    def fire(self, flow: str) -> int:
+    def fire(self, flow: str, payload: dict[str, Any] | None = None) -> int:
+        if payload is not None and "payload" in inspect.signature(self.ops.fire).parameters:
+            return self.ops.fire(flow, payload=payload)  # type: ignore[call-arg]
         return self.ops.fire(flow)
 
     def resume(self, flow: str, run_no: int) -> None:
+        if self.list_versions(flow):
+            rel = self.studio.load_active(flow)
+            if not self.studio.verify_pin_shas(rel):
+                raise RuntimeError(f"[RECOMPILE] unit SHA changed since pinned v{rel.version}; cannot resume run #{run_no}.")
         self.ops.resume(flow, run_no)
-
 
 class _LazyRunbookBridge:
     _instance: RunbookBridge | None = None
@@ -368,5 +416,4 @@ class _LazyRunbookBridge:
             self._instance = RunbookBridge()
         return getattr(self._instance, name)
 
-
-runbook: RunbookBridge = _LazyRunbookBridge()  # type: ignore[assignment]
+runbook: RunbookBridge = _LazyRunbookBridge()

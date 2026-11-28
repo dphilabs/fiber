@@ -1,4 +1,4 @@
-# fiber.node.mcp.quarantine
+# fiber.gateway.mcp.quarantine
 from __future__ import annotations
 
 import base64

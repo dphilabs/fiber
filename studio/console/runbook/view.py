@@ -9,10 +9,8 @@ from xphi.arch.reflex.flow import FlowContract, Shape
 
 from fiber.studio.harness.reflex.context import FlowCatalog
 from fiber.studio.runbook.runtime.projector import TelemetryEvent
+from fiber.studio.runbook.spec import PinnedRelease, UNBOUND_TOKEN
 from fiber.studio.runbook.stepper import emit_flow_dsl, inspect_flow
-from fiber.studio.runbook.store import PinnedRelease
-
-UNBOUND_TOKEN = "__unbound__"
 
 
 def short_val(value: Any, limit: int = 80) -> str:
@@ -36,12 +34,13 @@ def build_draft_maps(
     version: int,
     input_modes: dict[str, str],
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
-    """Builds UI `draft` dict and per-step `available_keys` from `FlowContract`."""
+    """Builds UI `draft` dict, per-step `available_keys`, and output-key collision warnings."""
     producers: dict[str, str] = {
         k: f"$input.{k}" for k in (*flow.in_reqs, *flow.in_defaults, *flow.in_optional)
     }
     avail_by_no: dict[str, list[str]] = {}
     nodes: list[dict[str, Any]] = []
+    shadow_warnings: list[str] = []
 
     for idx, step in enumerate(flow.steps, 1):
         no = f"{idx:02d}"
@@ -94,6 +93,10 @@ def build_draft_maps(
             "in": in_dict, "want": want_dict, "cfg": cfg_merged, "out": eff_outs,
         })
         for out_k in eff_outs:
+            if out_k in producers:
+                shadow_warnings.append(
+                    f"{no} {step.name}: output '{out_k}' overwrites '{producers[out_k]}' in flat context (use '=>' remap)"
+                )
             producers[out_k] = f"{no}.{out_k}"
 
     inputs = {
@@ -105,13 +108,16 @@ def build_draft_maps(
         for k in (*flow.in_reqs, *flow.in_defaults, *flow.in_optional)
     }
     outputs = {k: producers.get(k, k) for k in flow.out_keys}
-    draft_dict = {"flow": flow.name, "version": version, "nodes": nodes, "inputs": inputs, "outputs": outputs}
+    draft_dict = {
+        "flow": flow.name, "version": version, "nodes": nodes,
+        "inputs": inputs, "outputs": outputs, "warnings": shadow_warnings,
+    }
     return draft_dict, avail_by_no
 
 
 def compile_diagnostics(reg: FlowRegistry, flow_name: str, draft_dict: dict[str, Any]) -> dict[str, Any]:
     if not flow_name or flow_name not in reg.flows:
-        return {"ok": False, "unbound": [], "mismatch": [], "errors": ["No active draft flow."]}
+        return {"ok": False, "unbound": [], "mismatch": [], "warnings": [], "errors": ["No active draft flow."]}
 
     rep = inspect_flow(reg, flow_name)
     unbound: list[str] = []
@@ -137,7 +143,14 @@ def compile_diagnostics(reg: FlowRegistry, flow_name: str, draft_dict: dict[str,
                 if not already:
                     unbound.append(f"{n['no']}.{k}")
 
-    return {"ok": not (rep.errors or unbound or mismatch), "unbound": unbound, "mismatch": mismatch, "errors": rep.errors}
+    warnings = [*list(rep.warnings), *list(draft_dict.get("warnings") or ())]
+    return {
+        "ok": not (rep.errors or unbound or mismatch),
+        "unbound": unbound,
+        "mismatch": mismatch,
+        "warnings": warnings,
+        "errors": rep.errors,
+    }
 
 
 def step_status(node: dict[str, Any], comp: dict[str, Any]) -> str:
@@ -163,7 +176,13 @@ def trace_to_events(
         no = no_by_name.get(ev.state, "")
         dur = f"{max(0.0, ev.timestamp - prev_ts):.1f}s" if prev_ts is not None else ""
         prev_ts = ev.timestamp
-        tag = (sources or {}).get(no, "DRY" if ev.event == "dry_run_skip" else "LIVE")
+        req_src = (sources or {}).get(no, "LIVE").upper()
+        if ev.event == "dry_run_skip":
+            tag = req_src if req_src in ("FIXTURE", "REPLAY") else "DRY-SKIP"
+        elif ev.event == "gate_eval":
+            tag = "GATE"
+        else:
+            tag = "LIVE"
         events.append({
             "node": f"{no} {ev.state}".strip(),
             "status": status_map.get(ev.event, "ok"),
@@ -178,19 +197,21 @@ def render_template_model(name: str, tpl: tuple[str, str, str] | None, repo: Flo
     if tpl is None:
         return {
             "flow": name, "stage": "template", "title": f"{name} · template",
-            "blocks": [{"kind": "callout", "tone": "fail", "text": "template not found in reflexor index"}],
+            "blocks": [{"kind": "callout", "tone": "fail", "text": f"Template '{name}' not found in catalog or registry."}],
         }
     _, spec, desc = tpl
+    from_repo = repo.enabled and repo.flow(name) is not None
+    src_badge = f"TEMPLATE · reflexor repo ({repo.commit[:8] or 'index'})" if from_repo else "BUILT-IN SAMPLE · local studio registry"
     blocks: list[dict[str, Any]] = [
-        {"kind": "callout", "tone": "ok", "text": "TEMPLATE · reflexor"},
+        {"kind": "callout", "tone": "ok" if from_repo else "dry", "text": src_badge},
         *([{"kind": "paragraph", "text": desc}] if desc else []),
-        {"kind": "code", "title": "flow", "lang": "reflex", "text": spec},
+        {"kind": "code", "title": "flow_dsl", "lang": "reflex", "text": spec},
     ]
     if repo.notes:
-        blocks.append({"kind": "table", "title": "notes", "headers": ["note"], "rows": [[n] for n in repo.notes]})
+        blocks.append({"kind": "table", "title": "catalog notes", "headers": ["note"], "rows": [[n] for n in repo.notes]})
     if seeds := repo.samples(name):
         blocks.append({
-            "kind": "table", "title": "seed", "headers": ["sample", "key", "value"],
+            "kind": "table", "title": "seed samples", "headers": ["sample", "key", "value"],
             "rows": [[s, k, short_val(v)] for s, kv in seeds.items() for k, v in kv.items()],
         })
     return {"flow": name, "version": None, "stage": "template", "title": f"{name} · template", "blocks": blocks}
@@ -203,8 +224,10 @@ def render_draft_model(
     dirty: bool,
     origin_tpl: tuple[str, str, str] | None = None,
 ) -> dict[str, Any]:
+    warns = comp.get("warnings") or []
+    warn_suffix = f" · {len(warns)} warning(s)" if warns else ""
     compile_text = (
-        f"COMPILE OK · {len(draft_dict['nodes'])} steps verified"
+        f"COMPILE OK · {len(draft_dict['nodes'])} steps verified{warn_suffix}"
         if comp["ok"]
         else f"COMPILE FAIL · {len(comp['unbound'])} unbound/err · {len(comp['mismatch'])} type mismatch"
     )
@@ -218,18 +241,20 @@ def render_draft_model(
     ]
     origin_blocks = (
         [*([{"kind": "paragraph", "text": origin_tpl[2]}] if origin_tpl[2] else []),
-         {"kind": "code", "title": "flow", "lang": "reflex", "text": origin_tpl[1]}]
+         {"kind": "code", "title": "origin template", "lang": "reflex", "text": origin_tpl[1]}]
         if origin_tpl else []
     )
     blocks: list[dict[str, Any]] = [
-        {"kind": "callout", "tone": "ok" if comp["ok"] else "fail", "text": compile_text},
+        {"kind": "callout", "tone": ("dry" if warns else "ok") if comp["ok"] else "fail", "text": compile_text},
         *origin_blocks,
-        {"kind": "flow", "title": "", "steps": steps},
+        {"kind": "flow", "title": "draft wiring", "steps": steps},
         {"kind": "table", "title": "$input", "headers": ["key", "shape", "mode"],
          "rows": [[k, v["shape"], v["mode"]] for k, v in draft_dict["inputs"].items()]},
         {"kind": "table", "title": "$out", "headers": ["key", "from", "show"],
          "rows": [[k, v, "show"] for k, v in draft_dict["outputs"].items()]},
     ]
+    if warns:
+        blocks.append({"kind": "table", "title": "warnings", "headers": ["warning"], "rows": [[w] for w in warns]})
     if comp["errors"]:
         blocks.append({"kind": "table", "title": "diagnostics", "headers": ["error"], "rows": [[e] for e in comp["errors"]]})
     return {
@@ -255,9 +280,11 @@ def render_pinned_model(
         }
         for idx, s in enumerate(fc.steps, 1)
     ]
+    trig_state = "LIVE TRIGGER ON" if published else "TRIGGER OFF (pinned snapshot)"
+    status_note = "[RECOMPILE] unit SHA changed" if stale else trig_state
     blocks: list[dict[str, Any]] = [
-        {"kind": "callout", "tone": "dry" if stale else "ok",
-         "text": f"PINNED v{rel.version}" + (" · [RECOMPILE] unit SHA changed" if stale else " · verified")},
+        {"kind": "callout", "tone": "dry" if (stale or not published) else "ok",
+         "text": f"PINNED v{rel.version} · {status_note}"},
         {"kind": "code", "title": "flow_dsl", "lang": "reflex", "text": rel.flow_dsl or emit_flow_dsl(fc)},
         {"kind": "flow", "title": "compiled pipeline", "steps": steps},
         {"kind": "table", "title": "$input", "headers": ["key", "shape", "mode"],
@@ -267,10 +294,10 @@ def render_pinned_model(
          "rows": [[k, pol.widget] for k, pol in rel.manifest.outputs.items()]},
     ]
     if last_events:
-        blocks.append({"kind": "timeline", "events": last_events})
+        blocks.append({"kind": "timeline", "title": "latest run trace", "events": last_events})
     return {
         "flow": rel.flow_name, "version": rel.version,
-        "stage": "run" if published else "pin",
+        "stage": "run" if published else "pinned",
         "title": f"{rel.flow_name} · v{rel.version}", "blocks": blocks,
     }
 
@@ -279,14 +306,15 @@ def render_run_model(flow: str, ver: int, runs: list[dict[str, Any]], run_no: in
     run = next((r for r in runs if r["no"] == run_no), runs[0] if runs else None)
     blocks: list[dict[str, Any]] = []
     if run is None:
-        blocks.append({"kind": "callout", "tone": "none", "text": "No runs yet. Press [▶ RUN NOW]."})
+        blocks.append({"kind": "callout", "tone": "none", "text": "No runs recorded yet. Press [▶ RUN NOW] in [3] Trigger."})
     else:
-        tone = {"paused": "dry", "ok": "ok", "fail": "fail"}.get(run["status"], "run")
-        blocks.append({"kind": "callout", "tone": tone, "text": f"{run['status'].upper()} · {run['note']}"})
+        tone = {"paused": "dry", "dry": "dry", "ok": "ok", "fail": "fail"}.get(run["status"], "run")
+        prefix = "DRY-RUN PREVIEW (trigger OFF)" if run["status"] == "dry" else f"LIVE {run['status'].upper()}"
+        blocks.append({"kind": "callout", "tone": tone, "text": f"{prefix} · {run['note']}"})
         if run.get("events"):
-            blocks.append({"kind": "timeline", "events": run["events"]})
+            blocks.append({"kind": "timeline", "title": f"run #{run['no']} trace", "events": run["events"]})
     blocks.append({
-        "kind": "table", "title": "runs", "headers": ["#", "at", "by", "status", "note"],
+        "kind": "table", "title": "run history", "headers": ["#", "at", "by", "status", "note"],
         "rows": [[f"#{r['no']}", r["at"], r["by"], r["status"].upper(), r["note"]] for r in runs],
     })
     title = f"{flow} · v{ver}" + (f" · Run #{run['no']} · {run['by']} · {run['at']}" if run else "")

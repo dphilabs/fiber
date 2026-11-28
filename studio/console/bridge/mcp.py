@@ -74,9 +74,9 @@ def _inspect_and_sanitize_config_candidates(
 async def scan_mcp_topology_and_health(gateway_url: str, *, force_parse: bool = False) -> McpTopologyScanResult:
     global _last_config_stat_sig, _cached_anchor_specs
     import httpx
-    from fiber.node.mcp.mapper.builtin import classify_builtin_source, get_builtin_entry
-    from fiber.node.mcp.mapper.config import McpConfigMapper
-    from fiber.node.mcp.mapper.spec import ACTIVE_TARGETS_TUNNEL_KEY, load_anchor_specs
+    from fiber.gateway.mcp.mapper.builtin import classify_builtin_source, get_builtin_entry
+    from fiber.gateway.mcp.mapper.config import McpConfigMapper
+    from fiber.gateway.mcp.mapper.spec import ACTIVE_TARGETS_TUNNEL_KEY, load_anchor_specs
     from xphi.node.space.tunnel.factory import TunnelFactory
 
     candidate_map = McpConfigMapper._resolve_candidate_paths()

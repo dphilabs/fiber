@@ -10,8 +10,8 @@ import orjson
 from fiber.gateway.bridge.action.connect import run_connect_copy
 from fiber.gateway.bridge.console import run_fiber_cli
 from fiber.node.account.state import refs, state
-from fiber.node.mcp.mapper.builtin import list_builtin_entries
-from fiber.node.mcp.mapper.spec import ANCHOR_MCP_PATH
+from fiber.gateway.mcp.mapper.builtin import list_builtin_entries
+from fiber.gateway.mcp.mapper.spec import ANCHOR_MCP_PATH
 from fiber.studio.console.bridge.mcp import mcp
 from fiber.studio.console.bridge.sign import oob
 import fiber.studio.console.ui.kit as kit

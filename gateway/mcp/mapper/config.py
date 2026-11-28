@@ -1,4 +1,4 @@
-# fiber.node.mcp.mapper.config
+# fiber.gateway.mcp.mapper.config
 import os
 import re
 import sys

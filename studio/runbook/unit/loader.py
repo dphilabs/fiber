@@ -23,6 +23,9 @@ from xphi.arch.reflex.script import (
 
 log = logging.getLogger("ops.units")
 
+ENV_REPO_DIR = "REFLEXOR_DIR"
+ENV_REMOTE_REPO = "FIBER_UNITS_REPO"
+
 BASELINE_DIRS: tuple[str, ...] = (
     "units/adapters",
     "units/http",
@@ -34,15 +37,55 @@ BASELINE_DIRS: tuple[str, ...] = (
 )
 PACKAGE_ROOTS: tuple[str, ...] = ("units",)
 
+
 class UnitLoaderError(RuntimeError):
     """Raised when a unit artifact cannot be fetched, verified, or executed."""
+
+
+def resolve_repo_dir(
+    explicit: str | Path | None = None,
+    *,
+    allow_create: bool = False,
+) -> Path | None:
+    """Single source of truth for resolving the local `reflexor` repository root."""
+    if explicit is not None and str(explicit).strip():
+        root = Path(explicit).expanduser().resolve()
+        if not root.is_dir():
+            if allow_create:
+                root.mkdir(parents=True, exist_ok=True)
+            else:
+                raise NotADirectoryError(f"Repository root not found: {root}")
+        return root
+
+    if env_raw := os.environ.get(ENV_REPO_DIR, "").strip():
+        root = Path(env_raw).expanduser().resolve()
+        if root.is_dir():
+            return root
+        if allow_create:
+            root.mkdir(parents=True, exist_ok=True)
+            return root
+        return None
+
+    cwd_cand = (Path.cwd() / "reflexor").resolve()
+    if (cwd_cand / "index.json").is_file() or (cwd_cand / "units").is_dir():
+        return cwd_cand
+    return None
+
+
+def _safe_subpath(base: Path, rel_path: str) -> Path:
+    base_resolved = base.resolve()
+    candidate = (base_resolved / rel_path).resolve()
+    if candidate != base_resolved and not candidate.is_relative_to(base_resolved):
+        raise UnitLoaderError(f"Path '{rel_path}' escapes root '{base_resolved}'.")
+    return candidate
+
 
 class UnitsLoader:
     """Manages local/remote unit repositories, SHA256 verification, scaffolding, and execution."""
 
     def __init__(
         self,
-        repo: str = "dphilabs/reflexor",
+        repo: str = "",
         default_ref: str = "main",
         cache_dir: str | Path | None = None,
         local_repo_dir: str | Path | None = None,
@@ -50,28 +93,17 @@ class UnitsLoader:
         template_dir: str | Path | None = None,
         allow_create: bool = False,
     ) -> None:
-        self.repo = repo
+        self.repo = (repo or os.environ.get(ENV_REMOTE_REPO, "reflexor")).strip()
         self.default_ref = default_ref
-        self.cache_dir = Path(cache_dir or Path.home() / ".cache" / "reflexor")
-        self.template_dir = Path(template_dir).resolve() if template_dir else None
+        self.cache_dir = Path(cache_dir or Path.home() / ".cache" / "reflexor").expanduser().resolve()
+        self.template_dir = Path(template_dir).expanduser().resolve() if template_dir else None
         self._hash_lock: dict[str, str] = {}
-
-        raw_local = local_repo_dir or os.environ.get("REFLEXOR_DIR")
-        if raw_local:
-            root = Path(raw_local).resolve()
-            if not root.is_dir():
-                if allow_create:
-                    root.mkdir(parents=True, exist_ok=True)
-                elif local_repo_dir is not None:
-                    raise NotADirectoryError(f"Repository root not found: {root}")
-            self.local_repo_dir: Path | None = root if root.is_dir() else None
-        else:
-            self.local_repo_dir = None
+        self.local_repo_dir: Path | None = resolve_repo_dir(local_repo_dir, allow_create=allow_create)
 
     @property
     def root(self) -> Path:
         if not self.local_repo_dir:
-            raise UnitLoaderError("Local repository directory is not configured.")
+            raise UnitLoaderError("Local repository directory is not configured (set REFLEXOR_DIR).")
         return self.local_repo_dir
 
     def update_hash_locks(self, locks: dict[str, str]) -> None:
@@ -86,6 +118,11 @@ class UnitsLoader:
         return default_ref, raw_target.strip().lstrip("/")
 
     def fetch_raw_file(self, ref: str, rel_path: str) -> bytes:
+        if "/" not in self.repo:
+            raise UnitLoaderError(
+                f"Local file '{rel_path}' not found in '{self.local_repo_dir}', and remote repo "
+                f"'{self.repo}' is not in '<owner>/<repo>' format."
+            )
         api_endpoint = f"repos/{self.repo}/contents/{rel_path}?ref={ref}"
         token = os.environ.get("FIBER_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
@@ -127,13 +164,15 @@ class UnitsLoader:
     def resolve_file(self, target_expr: str, expected_sha256: str | None = None) -> Path:
         ref, rel_path = self._parse_ref_and_path(target_expr, self.default_ref)
 
-        if self.local_repo_dir and (local_candidate := self.local_repo_dir / rel_path).is_file():
-            if expected_sha256:
-                self._verify_hash(local_candidate.read_bytes(), expected_sha256, rel_path)
-            return local_candidate
+        if self.local_repo_dir:
+            local_candidate = _safe_subpath(self.local_repo_dir, rel_path)
+            if local_candidate.is_file():
+                if expected_sha256:
+                    self._verify_hash(local_candidate.read_bytes(), expected_sha256, rel_path)
+                return local_candidate
 
         locked_sha = expected_sha256 or self._hash_lock.get(rel_path)
-        cached_file = self.cache_dir / ref / rel_path
+        cached_file = _safe_subpath(self.cache_dir / ref, rel_path)
         if cached_file.is_file():
             try:
                 self._verify_hash(cached_file.read_bytes(), locked_sha, rel_path)
@@ -185,8 +224,12 @@ class UnitsLoader:
             capture_output=True,
             text=True,
             timeout=60,
-            check=True,
+            check=False,
         )
+        if proc.returncode != 0:
+            err_detail = proc.stderr.strip() or proc.stdout.strip() or f"exit code {proc.returncode}"
+            raise UnitLoaderError(f"Exec target '{target}' failed: {err_detail}")
+
         stdout = proc.stdout.strip()
         try:
             if isinstance(parsed := json.loads(stdout), dict):
@@ -204,7 +247,7 @@ class UnitsLoader:
             return self.run_exec(target, payload)
         raise UnitLoaderError(f"Unsupported scheme '{scheme}://' in UnitsLoader.")
 
-    # Local Workspace & Repository Operations (Merged from UnitsRepo)
+    # Local Workspace & Repository Operations
     def ensure_layout(self) -> int:
         created = 0
         for rel in BASELINE_DIRS:
@@ -255,7 +298,11 @@ class UnitsLoader:
         for sub in sorted(adapters_dir.iterdir()):
             if not sub.is_dir() or sub.name.startswith(("_", ".")):
                 continue
-            mods = [p.relative_to(self.local_repo_dir).as_posix() for p in sorted(sub.rglob("*.py")) if p.name != "__init__.py"]
+            mods = [
+                p.relative_to(self.local_repo_dir).as_posix()
+                for p in sorted(sub.rglob("*.py"))
+                if p.name != "__init__.py"
+            ]
             if mods:
                 found[sub.name] = mods
         return found
@@ -271,12 +318,22 @@ class UnitsLoader:
         template_dir: str | Path | None = None,
     ) -> Path:
         rel_clean = rel_path.strip().lstrip("/")
-        if kind == "adapter" or (kind == "auto" and rel_clean.startswith("adapters/") and not rel_clean.endswith(".py")):
-            pkg_dir = self.root / (rel_clean if rel_clean.startswith("adapters/") else f"adapters/{rel_clean}")
+        is_adapter_target = kind == "adapter" or (
+            kind == "auto"
+            and (rel_clean.startswith(("adapters/", "units/adapters/")))
+            and not rel_clean.endswith(".py")
+        )
+        if is_adapter_target:
+            domain_rel = rel_clean.removeprefix("units/").removeprefix("adapters/").strip("/")
+            if not domain_rel:
+                raise UnitLoaderError("Adapter scaffold requires a domain name (e.g. 'units/adapters/slack').")
+            adapters_base = _safe_subpath(self.root, "units/adapters")
+            pkg_dir = _safe_subpath(adapters_base, domain_rel)
             if pkg_dir.exists() and any(pkg_dir.iterdir()) and not overwrite:
                 raise FileExistsError(f"Adapter package directory is not empty: {pkg_dir}")
             pkg_dir.mkdir(parents=True, exist_ok=True)
-            (self.root / "adapters" / "__init__.py").touch(exist_ok=True)
+            (self.root / "units" / "__init__.py").touch(exist_ok=True)
+            (adapters_base / "__init__.py").touch(exist_ok=True)
             (pkg_dir / "__init__.py").touch(exist_ok=True)
             mod_name = pkg_dir.name
             stub = pkg_dir / "client.py"
@@ -288,7 +345,7 @@ class UnitsLoader:
             log.info(f"[NEW] Initialized adapter package 'reflexor.units.adapters.{mod_name}' -> {pkg_dir}")
             return pkg_dir
 
-        target = self.root / rel_clean
+        target = _safe_subpath(self.root, rel_clean)
         if target.exists() and not overwrite:
             raise FileExistsError(f"Unit script already exists: {target}")
 
@@ -334,7 +391,7 @@ class UnitsLoader:
         log.info(f"[BUILD] Pre-warming {len(isolated_rel_paths)} isolated unit environment(s) via uv ...")
         for rel_path in sorted(isolated_rel_paths):
             try:
-                sync_script_env(self.root / rel_path)
+                sync_script_env(_safe_subpath(self.root, rel_path))
                 log.info(f"  [WARM] {rel_path} -> OK")
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
                 err_msg = exc.stderr.decode("utf-8", errors="replace").strip() if getattr(exc, "stderr", None) else str(exc)

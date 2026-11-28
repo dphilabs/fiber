@@ -179,10 +179,6 @@ def _on_tick(tabs: Sequence[StudioTab]) -> None:
         diag.exception("100ms tick flush error", exc=exc)
 
 def _build_reflexor_tabs() -> list[StudioTab]:
-    """Opt-in Reflexor tabs (`fiber console --reflexor`), imported lazily from tab/reflex.py.
-
-    The module only needs `build_tabs() -> list[StudioTab]`; until it exists the console runs without it.
-    """
     try:
         mod = importlib.import_module("fiber.studio.console.tab.reflex")
     except ImportError as exc:

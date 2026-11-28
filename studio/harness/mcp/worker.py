@@ -13,13 +13,13 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Uni
 import orjson
 
 from fiber.node.bound.guard.preflight import PreflightGuard
-from fiber.node.mcp.connector import MCPServerConnector
-from fiber.node.mcp.mapper.builtin import (
+from fiber.gateway.mcp.connector import MCPServerConnector
+from fiber.gateway.mcp.mapper.builtin import (
     BUILTIN_ALIASES,
     DEFAULT_WORKER_PACKAGE,
     discover_builtin_workers,
 )
-from fiber.node.mcp.mapper.spec import (
+from fiber.gateway.mcp.mapper.spec import (
     ACTIVE_TARGETS_TUNNEL_KEY,
     ANCHOR_MCP_PATH,
     ResolvedTarget,

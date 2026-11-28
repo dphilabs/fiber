@@ -25,9 +25,6 @@ from fiber.studio.runbook.spec import (
 )
 from fiber.studio.runbook.stepper import emit_flow_dsl, inspect_flow
 
-__all__ = ["PinReceipt", "PinnedRelease", "ReleaseStudio"]
-
-
 class ReleaseStudio:
     """Studio 진입점(Draft 편집 · Dry-Run · Pin) 겸 디스크 영속 Pinned vN 저장소."""
 

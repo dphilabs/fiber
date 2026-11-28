@@ -8,13 +8,19 @@ import time
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from xphi.node.runtime.reflex.engine import FlowEngine
 from xphi.node.runtime.trigger.cron import compile_cron
 from xphi.node.runtime.trigger.spec import DEFAULT_TRIGGERS, TriggerSpec
 
 from fiber.studio.console.runbook.view import short_val
 from fiber.studio.harness.reflex.context import FlowCatalog
 from fiber.studio.runbook.runtime.workspace import ViewportRunbook
-from fiber.studio.runbook.store import PinnedRelease
+from fiber.studio.runbook.spec import (
+    DRY_SKIP_FLAG,
+    HITL_APPROVED_KEY,
+    HITL_YIELD_KEY,
+    PinnedRelease,
+)
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -145,41 +151,60 @@ class LiveTriggerOps:
     def list_runs(self, flow: str) -> list[dict[str, Any]]:
         return list(self.runs.get(flow, []))
 
-    def fire(self, flow: str) -> int:
+    def fire(self, flow: str, payload: dict[str, Any] | None = None) -> int:
         runs = self.runs.setdefault(flow, [])
         run_no = (runs[0]["no"] + 1) if runs else 1
         now_str = time.strftime("%m-%d %H:%M")
         samples = self.repo.samples(flow)
-        init_ctx = dict(next(iter(samples.values()), {})) if samples else {}
+        seed_ctx = dict(next(iter(samples.values()), {})) if samples else {}
+        init_ctx = {**seed_ctx, **dict(payload)} if payload is not None else seed_ctx
+        is_live = flow in self.live.session.published_flows
 
         try:
-            if flow in self.live.session.published_flows:
+            if is_live:
                 specs = self.live.session.flow_triggers.get(flow, ())
                 if not any(s.kind == "manual" for s in specs):
                     self.live.set_triggers(flow, [*specs, TriggerSpec(kind="manual")])
                 res = self.live.fire_trigger(flow, kind="manual", payload=init_ctx, require_published=False)
                 assert res is not None
                 snap, final_ctx = res
+                status = "paused" if snap.status == "parked" else ("ok" if snap.status == "succeeded" else "fail")
+                by_label = "manual"
             else:
+                # Trigger is OFF: run safe preview (`test_dry_run`) and explicitly label status as `dry` (R-13)
                 snap, final_ctx = self.live.test_dry_run(flow, initial_context=init_ctx)
+                status = "paused" if snap.status == "parked" else ("dry" if snap.status == "succeeded" else "fail")
+                by_label = "manual (dry)"
 
-            status = "paused" if snap.status == "parked" else ("ok" if snap.status == "succeeded" else "fail")
             preview = ", ".join(f"{k}={short_val(final_ctx[k], 24)}" for k in snap.exit_keys if k in final_ctx)
-            note = f"{snap.active_state} · approval pending" if status == "paused" else (preview or f"{len(snap.trace)} steps ok")
-            ev_map = {"step_ok": "ok", "dry_run_skip": "dry", "hitl_parked": "wait"}
+            if status == "paused":
+                note = f"{snap.active_state} · approval pending"
+            elif status == "dry":
+                note = f"trigger OFF · dry preview ({preview or f'{len(snap.trace)} steps'})"
+            else:
+                note = preview or f"{len(snap.trace)} steps ok"
+
+            ev_map = {"step_ok": "ok", "dry_run_skip": "dry", "hitl_parked": "wait", "gate_eval": "ok"}
             events = [
-                {"node": ev.state, "status": ev_map.get(ev.event, "fail"), "dur": "", "note": ev.error or ""}
+                {
+                    "node": ev.state,
+                    "status": ev_map.get(ev.event, "fail"),
+                    "tag": "DRY-SKIP" if ev.event == "dry_run_skip" else ("LIVE" if is_live else "DRY"),
+                    "dur": "",
+                    "note": ev.error or ("write skipped (trigger OFF)" if ev.event == "dry_run_skip" else ""),
+                }
                 for ev in snap.trace
             ]
             rec: dict[str, Any] = {
-                "no": run_no, "at": now_str, "by": "manual", "status": status, "note": note,
+                "no": run_no, "at": now_str, "by": by_label, "status": status, "note": note,
                 "active_state": snap.active_state, "saved_ctx": final_ctx if status == "paused" else None,
                 "events": events,
             }
         except BaseException as exc:
             rec = {
-                "no": run_no, "at": now_str, "by": "manual", "status": "fail", "note": str(exc),
-                "events": [{"node": "engine", "status": "fail", "dur": "", "note": str(exc)}],
+                "no": run_no, "at": now_str, "by": "manual" if is_live else "manual (dry)",
+                "status": "fail", "note": str(exc),
+                "events": [{"node": "engine", "status": "fail", "tag": "ERR", "dur": "", "note": str(exc)}],
             }
 
         runs.insert(0, rec)
@@ -192,18 +217,44 @@ class LiveTriggerOps:
             return
 
         saved_ctx = dict(target.get("saved_ctx") or {})
-        saved_ctx.pop("_hitl_yield", None)
-        saved_ctx["_hitl_approved"] = True
+        saved_ctx.pop(HITL_YIELD_KEY, None)
+        parked_state = target.get("active_state") or None
+        vp = self.live.session
+        fc = vp.registry.flows.get(flow)
+        exit_keys = fc.out_keys if fc is not None else ()
+        resumed_events: list[dict[str, Any]] = []
+
+        def _resume_dispatch(scheme: str, unit_target: str, bound_payload: dict[str, Any]) -> dict[str, Any] | None:
+            eff = {**bound_payload, HITL_APPROVED_KEY: True} if engine.state == parked_state else bound_payload
+            out = vp._default_dispatch(scheme, unit_target, eff) or {}
+            still_yield = bool(isinstance(out, dict) and out.get(HITL_YIELD_KEY) is True)
+            skipped = bool(isinstance(out, dict) and out.get(DRY_SKIP_FLAG))
+            resumed_events.append({
+                "node": engine.state,
+                "status": "wait" if still_yield else ("dry" if skipped else "ok"),
+                "tag": "APPROVED" if engine.state == parked_state and not still_yield else "LIVE",
+                "dur": "",
+                "note": "approval pending" if still_yield else ("approved" if engine.state == parked_state else ""),
+            })
+            return out
 
         try:
-            snap, final_ctx = self.live.session.execute_with_trace(flow, initial_context=saved_ctx, allow_incomplete_auth=True)
-            preview = ", ".join(f"{k}={short_val(final_ctx[k], 24)}" for k in snap.exit_keys if k in final_ctx)
-            target["status"] = "ok"
-            target["note"] = f"approved · {preview or 'completed'}"
-            target["saved_ctx"] = None
-            for ev in target.get("events", []):
-                if ev.get("status") == "wait":
-                    ev["status"], ev["note"] = "ok", "approved"
+            engine = FlowEngine.from_contract(flow, dispatcher=_resume_dispatch, registry=vp.registry)
+            start_node = parked_state if (parked_state and parked_state in engine.states) else None
+            final_ctx = engine.invoke(saved_ctx, start_at=start_node)
+
+            if final_ctx.get(HITL_YIELD_KEY) is True:
+                target["active_state"] = engine.state
+                target["saved_ctx"] = final_ctx
+                target["note"] = f"{engine.state} · approval pending"
+            else:
+                preview = ", ".join(f"{k}={short_val(final_ctx[k], 24)}" for k in exit_keys if k in final_ctx)
+                target["status"] = "ok"
+                target["note"] = f"approved · {preview or 'completed'}"
+                target["saved_ctx"] = None
+
+            prior = [ev for ev in target.get("events", []) if ev.get("status") != "wait"]
+            target["events"] = [*prior, *resumed_events]
         except BaseException as exc:
             target["status"], target["note"] = "fail", f"resume failed: {exc}"
 

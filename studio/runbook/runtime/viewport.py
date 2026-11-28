@@ -5,7 +5,7 @@ from dataclasses import replace
 import time
 from typing import Any
 
-from xphi.arch.contract.registry.flow import FlowRegistry, load_sample_registry, parse_unit_dsl
+from xphi.arch.contract.registry.flow import FlowRegistry, parse_unit_dsl
 from xphi.arch.reflex.auth import missing_credentials, unit_auth
 from xphi.arch.reflex.compiler import compile_to_asl
 from xphi.arch.reflex.flow import StepSpec, UnitContract, split_unit_ref
@@ -53,7 +53,7 @@ class ViewportRuntime:
         connected_accounts: dict[str, list[str]] | None = None,
         auto_sync_catalog: bool = False,
     ) -> None:
-        self.registry = registry or load_sample_registry()
+        self.registry = registry if registry is not None else FlowRegistry()
         self.loader = loader or UnitsLoader()
         self.indexer = UnitsIndexer(self.loader)
         self.available_credentials = set(available_credentials) if available_credentials is not None else None
